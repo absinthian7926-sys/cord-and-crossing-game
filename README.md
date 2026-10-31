@@ -8,6 +8,7 @@ Requires Node 20 LTS or 22 LTS and npm.
 
 ```sh
 npm install
+npx playwright install chromium
 npm run dev
 ```
 
