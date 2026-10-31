@@ -10,15 +10,16 @@ import { useEffect, useRef } from 'react'
 import { Group, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
 import { consumeInput, inputHeld } from './input'
-import { usePlayerStore } from './playerStore'
-import { spendDodgeStamina, updateVitals } from './vitals'
+import { playerStore } from './playerStore'
+import { canRun, spendDodgeStamina, updateVitals } from './vitals'
 
 const input = new Vector3(),
   forward = new Vector3(),
   right = new Vector3(),
   up = new Vector3(0, 1, 0),
   move = new Vector3(),
-  dodge = new Vector3()
+  dodge = new Vector3(),
+  translation = { x: 0, y: 0, z: 0 }
 
 export function PlayerController() {
   const body = useRef<RapierRigidBody>(null),
@@ -59,12 +60,14 @@ export function PlayerController() {
     move.copy(right).multiplyScalar(input.x).addScaledVector(forward, -input.z)
     if (move.lengthSq() > 1) move.normalize()
 
-    const store = usePlayerStore.getState()
-    if (consumeInput('dodge') && cooldown.current <= 0 && move.lengthSq() > 0) {
-      const spent = spendDodgeStamina(store.vitals)
-      if (spent) {
-        store.setVitals(spent)
-        dodge.copy(move).normalize()
+    const store = playerStore.getState()
+    if (consumeInput('dodge') && cooldown.current <= 0) {
+      if (spendDodgeStamina(store.vitals)) {
+        if (move.lengthSq() > 0) {
+          dodge.copy(move).normalize()
+        } else {
+          dodge.copy(forward).negate().normalize()
+        }
         dodgeLeft.current = PLAYER.movement.dodgeDurationSeconds
         cooldown.current = PLAYER.movement.dodgeCooldownSeconds
         invulnerableLeft.current = PLAYER.movement.dodgeInvulnerabilitySeconds
@@ -77,35 +80,30 @@ export function PlayerController() {
     vertical.current -= PLAYER.movement.gravity * delta
     const dodging = dodgeLeft.current > 0
     const running =
-      inputHeld('run') && move.lengthSq() > 0 && store.vitals.stamina > 0
+      inputHeld('run') && move.lengthSq() > 0 && canRun(store.vitals)
     const speed = dodging
       ? PLAYER.movement.dodgeDistance / PLAYER.movement.dodgeDurationSeconds
       : running
         ? PLAYER.movement.runSpeed
         : PLAYER.movement.walkSpeed
     const direction = dodging ? dodge : move
-    character.current.computeColliderMovement(collider.current, {
-      x: direction.x * speed * delta,
-      y: vertical.current * delta,
-      z: direction.z * speed * delta,
-    })
+    translation.x = direction.x * speed * delta
+    translation.y = vertical.current * delta
+    translation.z = direction.z * speed * delta
+    character.current.computeColliderMovement(collider.current, translation)
     const corrected = character.current.computedMovement(),
       current = body.current.translation()
-    const position = {
-      x: current.x + corrected.x,
-      y: current.y + corrected.y,
-      z: current.z + corrected.z,
-    }
+    const position = store.position
+    position.x = current.x + corrected.x
+    position.y = current.y + corrected.y
+    position.z = current.z + corrected.z
     body.current.setNextKinematicTranslation(position)
     if (character.current.computedGrounded() && vertical.current < 0)
       vertical.current = 0
     if (direction.lengthSq() > 0.001 && visual.current)
       visual.current.rotation.y = Math.atan2(direction.x, direction.z)
-    store.setPosition(position)
-    store.setVitals(
-      updateVitals(usePlayerStore.getState().vitals, delta, running),
-    )
-    store.setInvulnerable(invulnerableLeft.current > 0)
+    updateVitals(store.vitals, delta, running)
+    store.invulnerable = invulnerableLeft.current > 0
   })
 
   return (

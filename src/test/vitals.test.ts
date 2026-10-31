@@ -2,34 +2,70 @@ import { describe, expect, it } from 'vitest'
 import { PLAYER } from '../data/player'
 import {
   applyDamage,
+  canRun,
   initialVitals,
   spendDodgeStamina,
   updateVitals,
 } from '../game/player/vitals'
+
 describe('player vitals', () => {
-  it('drains run stamina at eight points per second', () =>
-    expect(updateVitals(initialVitals(), 2, true).stamina).toBe(84))
+  it('drains run stamina at eight points per second', () => {
+    const vitals = initialVitals()
+    updateVitals(vitals, 2, true)
+    expect(vitals.stamina).toBe(84)
+  })
+
   it('waits one second before regenerating stamina', () => {
-    const spent = { ...initialVitals(), stamina: 50, secondsSinceStaminaUse: 0 }
-    const waiting = updateVitals(spent, 0.75, false)
-    expect(waiting.stamina).toBe(50)
-    expect(updateVitals(waiting, 0.25, false).stamina).toBe(55)
+    const vitals = {
+      ...initialVitals(),
+      stamina: 50,
+      secondsSinceStaminaUse: 0,
+    }
+    updateVitals(vitals, 0.75, false)
+    expect(vitals.stamina).toBe(50)
+    updateVitals(vitals, 0.25, false)
+    expect(vitals.stamina).toBe(55)
   })
-  it('regenerates stamina without exceeding max', () =>
-    expect(
-      updateVitals(
-        { ...initialVitals(), stamina: 95, secondsSinceStaminaUse: 1 },
-        1,
-        false,
-      ).stamina,
-    ).toBe(PLAYER.stamina.max))
+
+  it('regenerates stamina without exceeding max', () => {
+    const vitals = {
+      ...initialVitals(),
+      stamina: 95,
+      secondsSinceStaminaUse: 1,
+    }
+    updateVitals(vitals, 1, false)
+    expect(vitals.stamina).toBe(PLAYER.stamina.max)
+  })
+
+  it('requires 10 stamina before run re-engages after depletion', () => {
+    const vitals = { ...initialVitals(), stamina: 4 }
+    updateVitals(vitals, 1, true)
+    expect(vitals.stamina).toBe(0)
+    expect(canRun(vitals)).toBe(false)
+
+    vitals.secondsSinceStaminaUse = 1
+    updateVitals(vitals, 0.49, false)
+    expect(vitals.stamina).toBeCloseTo(9.8)
+    expect(canRun(vitals)).toBe(false)
+
+    updateVitals(vitals, 0.01, false)
+    expect(vitals.stamina).toBe(10)
+    expect(canRun(vitals)).toBe(true)
+  })
+
   it('spends 25 stamina on dodge and rejects an unaffordable dodge', () => {
-    expect(spendDodgeStamina(initialVitals())?.stamina).toBe(75)
-    expect(spendDodgeStamina({ ...initialVitals(), stamina: 24 })).toBeNull()
+    const affordable = initialVitals()
+    expect(spendDodgeStamina(affordable)).toBe(true)
+    expect(affordable.stamina).toBe(75)
+    expect(spendDodgeStamina({ ...initialVitals(), stamina: 24 })).toBe(false)
   })
+
   it('waits six seconds after damage, then regenerates health', () => {
-    const waiting = updateVitals(applyDamage(initialVitals(), 40), 5.5, false)
-    expect(waiting.health).toBe(60)
-    expect(updateVitals(waiting, 0.5, false).health).toBe(62)
+    const vitals = initialVitals()
+    applyDamage(vitals, 40)
+    updateVitals(vitals, 5.5, false)
+    expect(vitals.health).toBe(60)
+    updateVitals(vitals, 0.5, false)
+    expect(vitals.health).toBe(62)
   })
 })

@@ -3,7 +3,7 @@ import { Physics } from '@react-three/rapier'
 import { Suspense, useEffect } from 'react'
 import { PLAYER } from './data/player'
 import { attachInput, detachInput } from './game/player/input'
-import { usePlayerStore } from './game/player/playerStore'
+import { playerStore } from './game/player/playerStore'
 import { SceneManager } from './game/scenes/SceneManager'
 import { Hud } from './ui/Hud'
 declare global {
@@ -18,7 +18,7 @@ export default function App() {
     attachInput()
     if (import.meta.env.DEV)
       window.__CORD_AND_CROSSING_DEBUG__ = {
-        getPlayerPosition: () => ({ ...usePlayerStore.getState().position }),
+        getPlayerPosition: () => ({ ...playerStore.getState().position }),
       }
     return () => {
       detachInput()

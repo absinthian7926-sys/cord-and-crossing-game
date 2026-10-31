@@ -15,4 +15,13 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition(),
   )
   expect(Math.hypot(end.x - start.x, end.z - start.z)).toBeGreaterThan(0.5)
+
+  await page.keyboard.down('KeyC')
+  await page.waitForTimeout(50)
+  await page.keyboard.up('KeyC')
+  await page.waitForTimeout(500)
+  const afterBackwardDodge = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition(),
+  )
+  expect(afterBackwardDodge.z - end.z).toBeGreaterThan(3)
 })

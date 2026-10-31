@@ -69,6 +69,14 @@ canvas {
   height: 100%;
   transition: width 80ms linear;
 }
+.health-fill {
+  width: 100%;
+  background: #9f3f37;
+}
+.stamina-fill {
+  width: 100%;
+  background: #c8a85a;
+}
 .reticle {
   position: absolute;
   top: 50%;
@@ -80,6 +88,7 @@ canvas {
   transform: translate(-50%, -50%);
 }
 .dodge-state {
+  display: none;
   position: absolute;
   right: 0.75rem;
   bottom: 100%;

@@ -3,6 +3,7 @@ export const PLAYER = {
   stamina: {
     max: 100,
     runCostPerSecond: 8,
+    runReengageThreshold: 10,
     dodgeCost: 25,
     regenerationPerSecond: 20,
     regenerationDelaySeconds: 1,
