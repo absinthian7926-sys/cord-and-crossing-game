@@ -1,3 +1,25 @@
 # Cord and Crossing Game
 
-This is a browser 3D open-world slice based on the Cord and Crossing series (world guide https://cord-and-crossing.vercel.app), built milestone by milestone with Codex using GDD.md, AGENTS.md and CODEX-PROMPTS.md. Start with Prompt 1 in CODEX-PROMPTS.md.
+Milestone 1 of the browser-based third-person game described in `GDD.md`.
+
+## Run locally
+
+Requires Node 20 LTS or 22 LTS and npm.
+
+```sh
+npm install
+npm run dev
+```
+
+Controls: WASD to move, Shift to run, Space to jump, Ctrl or C to dodge, drag to orbit the camera, and scroll to zoom.
+
+## Checks
+
+```sh
+npm run build
+npm test
+npm run test:e2e
+npm run lint
+```
+
+The Vite build writes the static deployment to `dist/` for Vercel.
