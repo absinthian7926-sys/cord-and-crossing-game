@@ -5,6 +5,7 @@ import {
   canRun,
   initialVitals,
   spendDodgeStamina,
+  spendStamina,
   updateVitals,
 } from '../game/player/vitals'
 
@@ -58,6 +59,15 @@ describe('player vitals', () => {
     expect(spendDodgeStamina(affordable)).toBe(true)
     expect(affordable.stamina).toBe(75)
     expect(spendDodgeStamina({ ...initialVitals(), stamina: 24 })).toBe(false)
+  })
+
+  it('spends a generic stamina cost without going below zero', () => {
+    const vitals = { ...initialVitals(), stamina: 15 }
+    expect(spendStamina(vitals, 15)).toBe(true)
+    expect(vitals.stamina).toBe(0)
+    expect(spendStamina(vitals, 1)).toBe(false)
+    expect(spendStamina(vitals, -5)).toBe(true)
+    expect(vitals.stamina).toBe(0)
   })
 
   it('waits six seconds after damage, then regenerates health', () => {

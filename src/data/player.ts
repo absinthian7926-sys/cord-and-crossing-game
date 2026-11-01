@@ -25,6 +25,7 @@ export const PLAYER = {
     minimumDistance: 2.5,
     maximumDistance: 7,
     collisionPadding: 0.2,
+    collisionMinimumDistance: 0.3,
     collisionReturnDamping: 12,
   },
 } as const

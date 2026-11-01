@@ -22,8 +22,16 @@ export function resolveCameraDistance(
   collisionDistance: number | null,
   deltaSeconds: number,
   returnDamping: number,
+  collisionMinimumDistance = 0,
 ): number {
-  const targetDistance = collisionDistance ?? unobstructedDistance
+  const targetDistance =
+    collisionDistance === null
+      ? unobstructedDistance
+      : MathUtils.clamp(
+          collisionDistance,
+          collisionMinimumDistance,
+          unobstructedDistance,
+        )
   if (targetDistance <= currentDistance) return targetDistance
   return MathUtils.damp(
     currentDistance,

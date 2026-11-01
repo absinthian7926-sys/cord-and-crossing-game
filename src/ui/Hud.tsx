@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { PLAYER } from '../data/player'
 import { playerStore } from '../game/player/playerStore'
+import { weaponRuntime } from '../game/weapons/weaponRuntime'
 
 export function Hud() {
   const healthFill = useRef<HTMLDivElement>(null)
@@ -8,10 +9,13 @@ export function Hud() {
   const staminaFill = useRef<HTMLDivElement>(null)
   const staminaValue = useRef<HTMLSpanElement>(null)
   const dodgeState = useRef<HTMLDivElement>(null)
+  const cordState = useRef<HTMLDivElement>(null)
   const lastDisplayed = useRef({
     health: -1,
     stamina: -1,
     invulnerable: false,
+    cord: '',
+    retie: -1,
   })
 
   useEffect(() => {
@@ -47,6 +51,22 @@ export function Hud() {
             : 'none'
         lastDisplayed.current.invulnerable = state.invulnerable
       }
+      const cord = weaponRuntime.cord
+      const retie = Math.max(0, Math.ceil(cord.retieRemaining * 10) / 10)
+      if (
+        cord.mode !== lastDisplayed.current.cord ||
+        retie !== lastDisplayed.current.retie
+      ) {
+        if (cordState.current) {
+          const label = cord.mode === 'InHand' ? 'In Hand' : cord.mode
+          cordState.current.textContent =
+            cord.mode === 'Cut'
+              ? `${label} · re-tie ${retie.toFixed(1)}s`
+              : label
+        }
+        lastDisplayed.current.cord = cord.mode
+        lastDisplayed.current.retie = retie
+      }
     }
     refresh()
     const interval = window.setInterval(refresh, 100)
@@ -56,7 +76,7 @@ export function Hud() {
   return (
     <div className="hud" aria-label="Player status">
       <div className="controls-hint">
-        WASD move · Shift run · Space jump · Ctrl or C dodge · Drag to look
+        Click to look · LMB strike · RMB aim/cast · Q recall/stop
       </div>
       <div className="vitals">
         <div className="hud-bar-wrap">
@@ -82,6 +102,9 @@ export function Hud() {
         </div>
       </div>
       <div className="reticle" />
+      <div ref={cordState} className="cord-state">
+        In Hand
+      </div>
     </div>
   )
 }

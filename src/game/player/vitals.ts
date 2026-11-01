@@ -56,8 +56,12 @@ export function canRun(current: Vitals): boolean {
   return !current.runLocked && current.stamina > 0
 }
 export function spendDodgeStamina(current: Vitals): boolean {
-  if (current.stamina < PLAYER.stamina.dodgeCost) return false
-  current.stamina -= PLAYER.stamina.dodgeCost
+  return spendStamina(current, PLAYER.stamina.dodgeCost)
+}
+export function spendStamina(current: Vitals, cost: number): boolean {
+  const safeCost = Math.max(0, cost)
+  if (current.stamina < safeCost) return false
+  current.stamina -= safeCost
   current.secondsSinceStaminaUse = 0
   return true
 }

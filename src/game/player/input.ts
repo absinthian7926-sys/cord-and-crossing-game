@@ -1,8 +1,19 @@
-type KeyName =
-  'forward' | 'backward' | 'left' | 'right' | 'run' | 'jump' | 'dodge'
+export type KeyName =
+  | 'forward'
+  | 'backward'
+  | 'left'
+  | 'right'
+  | 'run'
+  | 'jump'
+  | 'dodge'
+  | 'recall'
+  | 'closeStrike'
+  | 'aim'
+
 const pressed = new Set<string>()
 const consumed = new Set<KeyName>()
-const bindings: Record<KeyName, string[]> = {
+const released = new Set<KeyName>()
+const bindings: Record<KeyName, readonly string[]> = {
   forward: ['KeyW'],
   backward: ['KeyS'],
   left: ['KeyA'],
@@ -10,39 +21,104 @@ const bindings: Record<KeyName, string[]> = {
   run: ['ShiftLeft', 'ShiftRight'],
   jump: ['Space'],
   dodge: ['ControlLeft', 'ControlRight', 'KeyC'],
+  recall: ['KeyQ'],
+  closeStrike: ['Mouse0'],
+  aim: ['Mouse2'],
 }
+const boundCodes = new Set(Object.values(bindings).flat())
+
 const held = (name: KeyName) => bindings[name].some((code) => pressed.has(code))
-function keyDown(event: KeyboardEvent) {
-  if (Object.values(bindings).flat().includes(event.code)) {
-    event.preventDefault()
-    pressed.add(event.code)
+
+function pressCode(code: string): void {
+  if (boundCodes.has(code)) pressed.add(code)
+}
+
+function releaseCode(code: string): void {
+  pressed.delete(code)
+  for (const [name, codes] of Object.entries(bindings)) {
+    if (codes.includes(code)) {
+      const keyName = name as KeyName
+      consumed.delete(keyName)
+      released.add(keyName)
+    }
   }
 }
-function keyUp(event: KeyboardEvent) {
-  pressed.delete(event.code)
-  for (const [name, codes] of Object.entries(bindings))
-    if (codes.includes(event.code)) consumed.delete(name as KeyName)
+
+function keyDown(event: KeyboardEvent) {
+  if (!boundCodes.has(event.code)) return
+  event.preventDefault()
+  pressCode(event.code)
 }
+
+function keyUp(event: KeyboardEvent) {
+  releaseCode(event.code)
+}
+
+function mouseDown(event: MouseEvent) {
+  const code = `Mouse${event.button}`
+  if (!boundCodes.has(code)) return
+  event.preventDefault()
+  pressCode(code)
+}
+
+function mouseUp(event: MouseEvent) {
+  releaseCode(`Mouse${event.button}`)
+}
+
+function preventContextMenu(event: MouseEvent) {
+  event.preventDefault()
+}
+
 export function clearInput() {
   pressed.clear()
   consumed.clear()
+  released.clear()
 }
+
 export function attachInput() {
   window.addEventListener('keydown', keyDown)
   window.addEventListener('keyup', keyUp)
+  window.addEventListener('mousedown', mouseDown)
+  window.addEventListener('mouseup', mouseUp)
+  window.addEventListener('contextmenu', preventContextMenu)
   window.addEventListener('blur', clearInput)
 }
+
 export function detachInput() {
   window.removeEventListener('keydown', keyDown)
   window.removeEventListener('keyup', keyUp)
+  window.removeEventListener('mousedown', mouseDown)
+  window.removeEventListener('mouseup', mouseUp)
+  window.removeEventListener('contextmenu', preventContextMenu)
   window.removeEventListener('blur', clearInput)
   clearInput()
 }
+
 export function inputHeld(name: KeyName) {
   return held(name)
 }
+
 export function consumeInput(name: KeyName) {
   if (!held(name) || consumed.has(name)) return false
   consumed.add(name)
   return true
+}
+
+export function consumeReleased(name: KeyName) {
+  if (!released.has(name)) return false
+  released.delete(name)
+  return true
+}
+
+export function isDoubleTap(
+  previousTapSeconds: number,
+  currentTapSeconds: number,
+  windowSeconds: number,
+): boolean {
+  const elapsed = currentTapSeconds - previousTapSeconds
+  return (
+    Number.isFinite(previousTapSeconds) &&
+    elapsed >= 0 &&
+    elapsed <= windowSeconds + Number.EPSILON
+  )
 }

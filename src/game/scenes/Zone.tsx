@@ -1,6 +1,8 @@
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
 import { CameraRig } from '../player/CameraRig'
 import { PlayerController } from '../player/PlayerController'
+import { TrainingDummies } from '../combat/TrainingDummies'
+import { CordWeapon } from '../weapons/CordWeapon'
 export function Zone() {
   return (
     <>
@@ -26,6 +28,8 @@ export function Zone() {
         position={[0, 0.01, 0]}
       />
       <PlayerController />
+      <CordWeapon />
+      <TrainingDummies />
       <CameraRig />
     </>
   )
