@@ -63,9 +63,17 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     { timeout: 5_000 },
   )
 
-  await page.mouse.down({ button: 'right' })
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mousedown', { button: 2, bubbles: true }),
+    ),
+  )
   await page.waitForTimeout(120)
-  await page.mouse.up({ button: 'right' })
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mouseup', { button: 2, bubbles: true }),
+    ),
+  )
   await page.waitForFunction(
     () =>
       window
