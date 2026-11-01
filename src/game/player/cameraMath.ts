@@ -40,3 +40,11 @@ export function resolveCameraDistance(
     Math.max(0, deltaSeconds),
   )
 }
+
+export function shouldCameraRayHitCollider(
+  colliderHandle: number,
+  isSensor: boolean,
+  excludedColliderHandles: ReadonlySet<number>,
+): boolean {
+  return !isSensor && !excludedColliderHandles.has(colliderHandle)
+}

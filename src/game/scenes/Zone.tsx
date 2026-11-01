@@ -1,4 +1,5 @@
 import { TrainingDummies } from '../combat/TrainingDummies'
+import { Enemies } from '../enemies/Enemies'
 import { CameraRig } from '../player/CameraRig'
 import { PlayerController } from '../player/PlayerController'
 import { CordWeapon } from '../weapons/CordWeapon'
@@ -19,6 +20,7 @@ export function Zone() {
       <PlayerController />
       <CordWeapon />
       <TrainingDummies />
+      <Enemies />
       <CameraRig />
     </>
   )

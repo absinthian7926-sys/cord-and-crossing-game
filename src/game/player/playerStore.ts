@@ -2,6 +2,7 @@ import { createStore } from 'zustand/vanilla'
 import type { RapierCollider } from '@react-three/rapier'
 import { PLAYER } from '../../data/player'
 import { ZONE } from '../../data/zone'
+import { createPlayerDeathState, type PlayerDeathState } from './death'
 import { initialVitals, type Vitals } from './vitals'
 type Position = { x: number; y: number; z: number }
 export type PlayerState = {
@@ -11,6 +12,7 @@ export type PlayerState = {
   collider: RapierCollider | null
   cameraDistance: number
   teleportTarget: Position | null
+  death: PlayerDeathState
 }
 export const playerStore = createStore<PlayerState>(() => ({
   position: {
@@ -23,4 +25,5 @@ export const playerStore = createStore<PlayerState>(() => ({
   collider: null,
   cameraDistance: PLAYER.camera.distance,
   teleportTarget: null,
+  death: createPlayerDeathState(),
 }))

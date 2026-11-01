@@ -1,10 +1,22 @@
 import { Canvas } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import { Suspense, useEffect } from 'react'
+import type { EnemyType } from './data/enemies'
 import { PLAYER } from './data/player'
 import { ZONE } from './data/zone'
+import {
+  advanceRespawn as advanceEnemyRespawn,
+  enemyRuntime,
+  getEnemyRecord,
+  getEnemySnapshots,
+  killEnemy,
+  spawnEnemy,
+  type EnemySnapshot,
+} from './game/enemies/enemyRuntime'
+import { countActiveArrows } from './game/enemies/projectiles'
 import { attachInput, detachInput } from './game/player/input'
 import { playerStore } from './game/player/playerStore'
+import { applyDamage } from './game/player/vitals'
 import { SceneManager } from './game/scenes/SceneManager'
 import { heightAt } from './game/world/terrain'
 import {
@@ -27,6 +39,20 @@ declare global {
       getCameraDistance: () => number
       getMinimumCameraDistanceWhileOut: () => number | null
       teleport: (x: number, z: number) => void
+      getEnemies: () => EnemySnapshot[]
+      spawnEnemy: (type: EnemyType, x: number, z: number) => string
+      killEnemy: (id: string) => boolean
+      damagePlayer: (damage: number) => void
+      advanceRespawn: (seconds: number) => void
+      aggroEnemies: (radius: number) => void
+      setEnemyAttackCooldown: (id: string, seconds: number) => boolean
+      getActiveArrowCount: () => number
+      getPlayerStatus: () => {
+        health: number
+        stamina: number
+        deathPhase: string
+        invulnerable: boolean
+      }
     }
   }
 }
@@ -54,10 +80,53 @@ export default function App() {
             z,
           }
         },
+        getEnemies: getEnemySnapshots,
+        spawnEnemy,
+        killEnemy,
+        damagePlayer: (damage) => {
+          applyDamage(playerStore.getState().vitals, damage)
+        },
+        advanceRespawn: advanceEnemyRespawn,
+        aggroEnemies: (radius) => {
+          const position = playerStore.getState().position
+          const maximumDistance = Math.max(0, radius)
+          for (const enemy of enemyRuntime.records) {
+            if (
+              enemy.phase === 'Alive' &&
+              Math.hypot(enemy.x - position.x, enemy.z - position.z) <=
+                maximumDistance
+            ) {
+              enemy.state = 'Chase'
+              enemy.stateElapsed = 0
+            }
+          }
+        },
+        setEnemyAttackCooldown: (id, seconds) => {
+          const enemy = getEnemyRecord(id)
+          if (
+            !enemy ||
+            enemy.type !== 'cliffHound' ||
+            enemy.phase !== 'Alive' ||
+            enemy.state !== 'Attack'
+          )
+            return false
+          enemy.attackCooldown = Math.max(0, seconds)
+          return true
+        },
+        getActiveArrowCount: () => countActiveArrows(enemyRuntime.arrows),
+        getPlayerStatus: () => {
+          const state = playerStore.getState()
+          return {
+            health: state.vitals.health,
+            stamina: state.vitals.stamina,
+            deathPhase: state.death.phase,
+            invulnerable: state.invulnerable,
+          }
+        },
       }
     return () => {
       detachInput()
-      delete window.__CORD_AND_CROSSING_DEBUG__
+      if (import.meta.env.DEV) delete window.__CORD_AND_CROSSING_DEBUG__
     }
   }, [])
   return (

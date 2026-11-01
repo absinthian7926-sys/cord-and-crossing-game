@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { PLAYER_DEATH } from '../data/enemies'
 import { PLAYER } from '../data/player'
 import { playerStore } from '../game/player/playerStore'
 import { weaponRuntime } from '../game/weapons/weaponRuntime'
@@ -10,12 +11,14 @@ export function Hud() {
   const staminaValue = useRef<HTMLSpanElement>(null)
   const dodgeState = useRef<HTMLDivElement>(null)
   const cordState = useRef<HTMLDivElement>(null)
+  const deathFade = useRef<HTMLDivElement>(null)
   const lastDisplayed = useRef({
     health: -1,
     stamina: -1,
     invulnerable: false,
     cord: '',
     retie: -1,
+    deathOpacity: -1,
   })
 
   useEffect(() => {
@@ -67,6 +70,21 @@ export function Hud() {
         lastDisplayed.current.cord = cord.mode
         lastDisplayed.current.retie = retie
       }
+      const deathOpacity =
+        state.death.phase === 'Fading'
+          ? Math.max(
+              0,
+              Math.min(
+                1,
+                1 - state.death.fadeRemainingSeconds / PLAYER_DEATH.fadeSeconds,
+              ),
+            )
+          : 0
+      if (deathOpacity !== lastDisplayed.current.deathOpacity) {
+        if (deathFade.current)
+          deathFade.current.style.opacity = deathOpacity.toFixed(3)
+        lastDisplayed.current.deathOpacity = deathOpacity
+      }
     }
     refresh()
     const interval = window.setInterval(refresh, 100)
@@ -105,6 +123,7 @@ export function Hud() {
       <div ref={cordState} className="cord-state">
         In Hand
       </div>
+      <div ref={deathFade} className="death-fade" aria-hidden="true" />
     </div>
   )
 }

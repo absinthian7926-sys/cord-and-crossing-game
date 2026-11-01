@@ -1,8 +1,10 @@
 import { expect, test } from '@playwright/test'
+import { ENEMY_DEATH, ENEMY_TYPES } from '../src/data/enemies'
 import { PLAYER } from '../src/data/player'
+import { REACHBLADE } from '../src/data/weapons'
 import { ZONE } from '../src/data/zone'
 
-test.setTimeout(60_000)
+test.setTimeout(180_000)
 
 test('loads the game canvas and moves the player forward', async ({ page }) => {
   const browserErrors: string[] = []
@@ -173,5 +175,218 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     ZONE.spawn,
     { timeout: 5_000 },
   )
+
+  await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.teleport(30, 0))
+  await page.waitForFunction(
+    () => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - 30, position.z) < 1
+    },
+    undefined,
+    { timeout: 5_000 },
+  )
+  const healthBeforeBrigand = await page.evaluate(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().health,
+  )
+  const brigandId = await page.evaluate((spawnOffset) => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    const position = debug.getPlayerPosition()
+    return debug.spawnEnemy('roadBrigand', position.x + spawnOffset, position.z)
+  }, ENEMY_TYPES.roadBrigand.attackRange * 2)
+  await page.waitForFunction(
+    (id) =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+        .some((enemy) => enemy.id === id && enemy.state === 'Chase'),
+    brigandId,
+    { timeout: 10_000 },
+  )
+  await page.waitForFunction(
+    (startingHealth) =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().health <
+      startingHealth,
+    healthBeforeBrigand,
+    { timeout: 15_000 },
+  )
+  expect(
+    await page.evaluate(
+      (id) => window.__CORD_AND_CROSSING_DEBUG__!.killEnemy(id),
+      brigandId,
+    ),
+  ).toBe(true)
+  await page.evaluate(
+    (x) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, 0),
+    -ENEMY_DEATH.respawnPlayerDistance,
+  )
+  await page.waitForFunction(
+    (x) => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - x, position.z) < 1
+    },
+    -ENEMY_DEATH.respawnPlayerDistance,
+    { timeout: 5_000 },
+  )
+  await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.advanceRespawn(300),
+  )
+  await page.waitForFunction(
+    ({ id, health }) =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+        .some((enemy) => enemy.id === id && enemy.alive && enemy.hp === health),
+    { id: brigandId, health: ENEMY_TYPES.roadBrigand.maxHealth },
+    { timeout: 5_000 },
+  )
+  await page.evaluate(
+    (id) => window.__CORD_AND_CROSSING_DEBUG__!.killEnemy(id),
+    brigandId,
+  )
+
+  await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.teleport(30, 0))
+  await page.waitForFunction(
+    () => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - 30, position.z) < 1
+    },
+    undefined,
+    { timeout: 5_000 },
+  )
+  const houndId = await page.evaluate(() => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    const position = debug.getPlayerPosition()
+    return debug.spawnEnemy('cliffHound', position.x + 0.28, position.z)
+  })
+  await page.waitForFunction(
+    (id) =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+        .some((enemy) => enemy.id === id && enemy.state === 'Attack'),
+    houndId,
+    { timeout: 10_000 },
+  )
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mousedown', { button: 2, bubbles: true }),
+    ),
+  )
+  await page.waitForTimeout(200)
+  const healthBeforeCut = await page.evaluate(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().health,
+  )
+  expect(
+    await page.evaluate(
+      ({ id, cooldown }) => {
+        const synchronized =
+          window.__CORD_AND_CROSSING_DEBUG__!.setEnemyAttackCooldown(
+            id,
+            cooldown,
+          )
+        window.dispatchEvent(
+          new MouseEvent('mouseup', { button: 2, bubbles: true }),
+        )
+        return synchronized
+      },
+      { id: houndId, cooldown: REACHBLADE.cast.windupSeconds },
+    ),
+  ).toBe(true)
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'Cut',
+    undefined,
+    { timeout: 10_000 },
+  )
+  const healthAfterCut = await page.evaluate(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().health,
+  )
+  expect(healthBeforeCut - healthAfterCut).toBe(
+    ENEMY_TYPES.cliffHound.damage * REACHBLADE.unarmedDamageMultiplier,
+  )
+  expect(
+    await page.evaluate((id) => {
+      const hound = window
+        .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+        .find((enemy) => enemy.id === id)
+      return hound?.attackCooldown ?? 0
+    }, houndId),
+  ).toBeGreaterThan(ENEMY_TYPES.cliffHound.attackCadenceSeconds * 0.75)
+  await page.evaluate(
+    (id) => window.__CORD_AND_CROSSING_DEBUG__!.killEnemy(id),
+    houndId,
+  )
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'InHand',
+    undefined,
+    { timeout: 30_000 },
+  )
+
+  await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.damagePlayer(1_000),
+  )
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().deathPhase ===
+      'Fading',
+    undefined,
+    { timeout: 5_000 },
+  )
+  await page.waitForFunction(
+    ({ maximumHealth, maximumStamina }) => {
+      const debug = window.__CORD_AND_CROSSING_DEBUG__!
+      const status = debug.getPlayerStatus()
+      const position = debug.getPlayerPosition()
+      return (
+        status.deathPhase === 'Alive' &&
+        status.health === maximumHealth &&
+        status.stamina === maximumStamina &&
+        Math.hypot(position.x, position.z) < 1 &&
+        debug.getCordState() === 'InHand'
+      )
+    },
+    {
+      maximumHealth: PLAYER.health.max,
+      maximumStamina: PLAYER.stamina.max,
+    },
+    { timeout: 30_000 },
+  )
+
+  await page.evaluate(
+    ([x, z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    ZONE.locations.D.center,
+  )
+  await page.waitForFunction(
+    ([x, z]) => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - x, position.z - z) < 1
+    },
+    ZONE.locations.D.center,
+    { timeout: 5_000 },
+  )
+  await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.aggroEnemies(40),
+  )
+  await page.waitForFunction(
+    () => {
+      const camp = window
+        .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+        .filter((enemy) => enemy.id.startsWith('camp-'))
+      return (
+        camp.length === 9 &&
+        camp.every(
+          (enemy) => enemy.state === 'Chase' || enemy.state === 'Attack',
+        )
+      )
+    },
+    undefined,
+    { timeout: 30_000 },
+  )
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getActiveArrowCount() > 0,
+    undefined,
+    { timeout: 30_000 },
+  )
+  const busyCampPerf = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getPerfStats(),
+  )
+  expect(busyCampPerf.drawCalls).toBeLessThan(250)
+  expect(busyCampPerf.triangles).toBeLessThan(500_000)
   expect(browserErrors).toEqual([])
 })

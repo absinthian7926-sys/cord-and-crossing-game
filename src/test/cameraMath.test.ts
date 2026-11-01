@@ -3,6 +3,7 @@ import { Vector3 } from 'three'
 import {
   applyShoulderOffset,
   resolveCameraDistance,
+  shouldCameraRayHitCollider,
 } from '../game/player/cameraMath'
 
 describe('camera math', () => {
@@ -35,5 +36,14 @@ describe('camera math', () => {
     const recovering = resolveCameraDistance(1.2, 4.5, null, 1 / 60, 12, 0.3)
     expect(recovering).toBeGreaterThan(1.2)
     expect(recovering).toBeLessThan(4.5)
+  })
+
+  it('filters sensors, enemies and arrows without hiding world geometry', () => {
+    const excluded = new Set([7, 9])
+
+    expect(shouldCameraRayHitCollider(1, false, excluded)).toBe(true)
+    expect(shouldCameraRayHitCollider(2, true, excluded)).toBe(false)
+    expect(shouldCameraRayHitCollider(7, false, excluded)).toBe(false)
+    expect(shouldCameraRayHitCollider(9, false, excluded)).toBe(false)
   })
 })

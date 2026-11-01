@@ -3,8 +3,11 @@ import { REACHBLADE } from '../data/weapons'
 import {
   createVerletRope,
   ropeLength,
+  stepDroppedBlade,
   stepVerletRope,
 } from '../game/weapons/verletRope'
+import { initialCordState, step } from '../game/weapons/cordState'
+import { heightAt } from '../game/world/terrain'
 
 describe('verlet rope', () => {
   it('keeps pinned endpoints and segment lengths within tolerance', () => {
@@ -62,5 +65,56 @@ describe('verlet rope', () => {
           0.001,
       )
     }
+  })
+
+  it('settles a Stop-dropped blade and rope on Saltwind Rise terrain', () => {
+    const out = step(initialCordState(), { type: 'castRelease' })
+    const dropped = step(out, { type: 'stopDoubleTap' })
+    expect(dropped.mode).toBe('Dropped')
+
+    const hand = {
+      x: 424,
+      y: heightAt(424, 100) + 1.35,
+      z: 100,
+    }
+    const blade = {
+      x: 430,
+      y: heightAt(430, 100) + 5,
+      z: 100,
+    }
+    expect(
+      Math.abs(heightAt(hand.x, hand.z) - heightAt(blade.x, blade.z)),
+    ).toBeGreaterThan(0.01)
+    const rope = createVerletRope(hand, blade)
+    let verticalVelocity = 0
+
+    for (let index = 0; index < 900; index += 1) {
+      verticalVelocity = stepDroppedBlade(
+        blade,
+        verticalVelocity,
+        1 / 60,
+        heightAt,
+      )
+      stepVerletRope(rope, 1 / 60, hand, blade, dropped.mode, heightAt)
+    }
+
+    expect(blade.y).toBeCloseTo(
+      heightAt(blade.x, blade.z) + REACHBLADE.rope.groundHeight,
+      5,
+    )
+    expect(verticalVelocity).toBe(0)
+    for (let index = 1; index < rope.pointCount; index += 1) {
+      const offset = index * 3
+      const ground =
+        heightAt(rope.positions[offset], rope.positions[offset + 2]) +
+        REACHBLADE.rope.groundHeight
+      expect(rope.positions[offset + 1]).toBeGreaterThanOrEqual(ground - 0.001)
+    }
+    const ropeEnd = (rope.pointCount - 1) * 3
+    expect(rope.positions[ropeEnd + 1]).toBeCloseTo(
+      heightAt(rope.positions[ropeEnd], rope.positions[ropeEnd + 2]) +
+        REACHBLADE.rope.groundHeight,
+      2,
+    )
   })
 })

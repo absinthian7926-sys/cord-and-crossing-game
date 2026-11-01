@@ -1,5 +1,5 @@
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -8,6 +8,7 @@ import {
   Mesh,
   Vector3,
 } from 'three'
+import { ENEMY_ATTACK, ENEMY_TYPES } from '../../data/enemies'
 import { REACHBLADE, TRAINING_DUMMIES } from '../../data/weapons'
 import {
   initialComboState,
@@ -17,7 +18,18 @@ import {
   tryStartCloseAttack,
   type CloseAttack,
 } from '../combat/combat'
-import { capsuleOverlapsPoint } from '../combat/hitboxes'
+import {
+  capsuleOverlapsPoint,
+  distanceSquaredPointToSegment,
+} from '../combat/hitboxes'
+import { houndBiteCutsCordSegment } from '../enemies/ai'
+import {
+  angleFromEnemyFacing,
+  damageEnemy,
+  enemyRuntime,
+  registerHoundBiteHandler,
+  type EnemyRecord,
+} from '../enemies/enemyRuntime'
 import {
   consumeInput,
   consumeReleased,
@@ -37,11 +49,16 @@ import {
 import {
   recordCameraDistanceWhileOut,
   registerForceCut,
+  registerWeaponReset,
   recordDummyDamage,
   resetWeaponRuntime,
   setCordState,
 } from './weaponRuntime'
-import { createVerletRope, stepVerletRope } from './verletRope'
+import {
+  createVerletRope,
+  stepDroppedBlade,
+  stepVerletRope,
+} from './verletRope'
 
 type PendingAction =
   | { kind: 'close'; remaining: number; attack: CloseAttack }
@@ -57,6 +74,31 @@ const arcTargets = TRAINING_DUMMIES.map((dummy) => ({
   x: dummy.position[0],
   z: dummy.position[2],
 }))
+
+function bladeOverlapsEnemy(enemy: EnemyRecord): boolean {
+  const stats = ENEMY_TYPES[enemy.type]
+  const radius = stats.collider.radius
+  const bodyHeight =
+    enemy.type === 'cliffHound'
+      ? ENEMY_TYPES.cliffHound.collider.length
+      : ENEMY_TYPES[enemy.type].collider.height
+  const halfSegment = Math.max(0, bodyHeight * 0.5 - radius)
+  const combinedRadius = REACHBLADE.bladeHitRadius + radius
+  return (
+    distanceSquaredPointToSegment(
+      blade.x,
+      blade.y,
+      blade.z,
+      enemy.x,
+      enemy.y - halfSegment,
+      enemy.z,
+      enemy.x,
+      enemy.y + halfSegment,
+      enemy.z,
+    ) <=
+    combinedRadius * combinedRadius
+  )
+}
 
 export function CordWeapon() {
   const { camera } = useThree()
@@ -110,10 +152,33 @@ export function CordWeapon() {
     return line
   }, [aimGeometry])
 
-  const updateCord = (next: CordState) => {
+  const updateCord = useCallback((next: CordState) => {
     cord.current = next
     setCordState(next)
-  }
+  }, [])
+
+  const cutCordAtHoundPoint = useCallback(
+    (x: number, y: number, z: number): boolean => {
+      if (
+        !houndBiteCutsCordSegment(
+          cord.current,
+          x,
+          y,
+          z,
+          hand.x,
+          hand.y,
+          hand.z,
+          blade.x,
+          blade.y,
+          blade.z,
+        )
+      )
+        return false
+      updateCord(step(cord.current, { type: 'cut' }))
+      return true
+    },
+    [updateCord],
+  )
 
   const damageDummy = (
     dummyId: string,
@@ -135,6 +200,8 @@ export function CordWeapon() {
     reach: number,
     nowSeconds: number,
     staggerSeconds = 0,
+    kind: 'close' | 'shove' = 'close',
+    comboIndex?: number,
   ) => {
     const position = playerStore.getState().position
     for (const dummy of TRAINING_DUMMIES) {
@@ -154,6 +221,28 @@ export function CordWeapon() {
         return
       }
     }
+    for (const enemy of enemyRuntime.records) {
+      if (
+        enemy.phase === 'Alive' &&
+        isTargetInArc(
+          position.x,
+          position.z,
+          aimDirection.x,
+          aimDirection.z,
+          enemy.x,
+          enemy.z,
+          reach,
+          arcDegrees,
+        )
+      ) {
+        damageEnemy(enemy.id, damage, {
+          kind,
+          comboIndex,
+          staggerSeconds,
+        })
+        return
+      }
+    }
   }
 
   useEffect(() => {
@@ -162,23 +251,48 @@ export function CordWeapon() {
     registerForceCut(() => {
       updateCord(step(cord.current, { type: 'cut' }))
     })
+    registerHoundBiteHandler(cutCordAtHoundPoint)
+    registerWeaponReset(() => {
+      updateCord(initialCordState())
+      combo.current = initialComboState()
+      pending.current = null
+      lastQTap.current = Number.NEGATIVE_INFINITY
+      skipAimRelease.current = false
+      closeActiveRemaining.current = 0
+      droppedVelocity.current = 0
+      blade.copy(hand)
+      ropeObject.visible = false
+      aimObject.visible = false
+      if (bladeMesh.current) bladeMesh.current.position.copy(blade)
+    })
     return () => {
       registerForceCut(null)
+      registerHoundBiteHandler(null)
+      registerWeaponReset(null)
       ropeGeometry.dispose()
       aimGeometry.dispose()
       ;(ropeObject.material as LineBasicMaterial).dispose()
       ;(aimObject.material as LineBasicMaterial).dispose()
     }
-  }, [aimGeometry, aimObject, ropeGeometry, ropeObject])
+  }, [
+    aimGeometry,
+    aimObject,
+    cutCordAtHoundPoint,
+    ropeGeometry,
+    ropeObject,
+    updateCord,
+  ])
 
   useFrame(({ clock }, rawDelta) => {
     const delta = Math.min(rawDelta, 1 / 30)
+    let launchedThisFrame = false
     closeActiveRemaining.current = Math.max(
       0,
       closeActiveRemaining.current - delta,
     )
     const now = clock.elapsedTime
     const player = playerStore.getState()
+    if (player.death.phase !== 'Alive') return
     camera.getWorldDirection(aimDirection)
     aimDirection.y = 0
     aimDirection.normalize()
@@ -238,6 +352,8 @@ export function CordWeapon() {
           REACHBLADE.close.arcDegrees,
           REACHBLADE.close.reach,
           now,
+          0,
+          'shove',
         )
       }
     }
@@ -269,12 +385,16 @@ export function CordWeapon() {
             REACHBLADE.close.arcDegrees,
             REACHBLADE.close.reach,
             now,
+            REACHBLADE.cast.staggerSeconds,
+            'close',
+            action.attack.index,
           )
         } else {
           castDirection.set(action.x, 0, action.z).normalize()
           blade.copy(hand)
           if (action.kind === 'cast') {
             updateCord(step(cord.current, { type: 'castRelease' }))
+            launchedThisFrame = true
           } else {
             updateCord(step(cord.current, { type: 'arcRelease' }))
             blade.addScaledVector(
@@ -290,6 +410,7 @@ export function CordWeapon() {
               castDirection.x,
               castDirection.z,
             )
+            let hitCount = 0
             for (const target of selected) {
               damageDummy(
                 target.id,
@@ -297,6 +418,31 @@ export function CordWeapon() {
                 REACHBLADE.cast.staggerSeconds,
                 now,
               )
+              hitCount += 1
+            }
+            for (const enemy of enemyRuntime.records) {
+              if (hitCount >= REACHBLADE.flatArc.maximumTargets) break
+              if (
+                enemy.phase === 'Alive' &&
+                isTargetInArc(
+                  player.position.x,
+                  player.position.z,
+                  castDirection.x,
+                  castDirection.z,
+                  enemy.x,
+                  enemy.z,
+                  REACHBLADE.flatArc.maximumRadius,
+                  REACHBLADE.flatArc.arcDegrees,
+                  REACHBLADE.flatArc.minimumRadius,
+                )
+              ) {
+                damageEnemy(enemy.id, REACHBLADE.flatArc.damage, {
+                  kind: 'arc',
+                  breaksGuard: ENEMY_ATTACK.breaksGuardByDefault,
+                  staggerSeconds: REACHBLADE.cast.staggerSeconds,
+                })
+                hitCount += 1
+              }
             }
             updateCord(step(cord.current, { type: 'hit' }))
           }
@@ -306,10 +452,10 @@ export function CordWeapon() {
 
     if (cord.current.mode === 'InHand') {
       blade.copy(hand).addScaledVector(aimDirection, 0.3)
-    } else if (cord.current.mode === 'Out') {
+    } else if (cord.current.mode === 'Out' && !launchedThisFrame) {
       blade.addScaledVector(castDirection, REACHBLADE.cast.travelSpeed * delta)
       const distance = blade.distanceTo(hand)
-      let hitDummy = false
+      let hitTarget = false
       for (const dummy of TRAINING_DUMMIES) {
         const dx = blade.x - dummy.position[0]
         const dz = blade.z - dummy.position[2]
@@ -321,11 +467,31 @@ export function CordWeapon() {
             now,
           )
           updateCord(step(cord.current, { type: 'hit' }))
-          hitDummy = true
+          hitTarget = true
           break
         }
       }
-      if (!hitDummy && distance >= REACHBLADE.maxCordLength) {
+      if (!hitTarget) {
+        for (const enemy of enemyRuntime.records) {
+          if (enemy.phase !== 'Alive') continue
+          if (bladeOverlapsEnemy(enemy)) {
+            damageEnemy(enemy.id, REACHBLADE.cast.damage, {
+              kind: 'cast',
+              angleFromFacingDegrees: angleFromEnemyFacing(
+                enemy,
+                player.position.x,
+                player.position.z,
+              ),
+              breaksGuard: ENEMY_ATTACK.breaksGuardByDefault,
+              staggerSeconds: REACHBLADE.cast.staggerSeconds,
+            })
+            updateCord(step(cord.current, { type: 'hit' }))
+            hitTarget = true
+            break
+          }
+        }
+      }
+      if (!hitTarget && distance >= REACHBLADE.maxCordLength) {
         blade
           .copy(hand)
           .addScaledVector(castDirection, REACHBLADE.maxCordLength)
@@ -375,14 +541,12 @@ export function CordWeapon() {
         blade.copy(hand)
       }
     } else if (cord.current.mode === 'Dropped') {
-      const groundHeight =
-        heightAt(blade.x, blade.z) + REACHBLADE.rope.groundHeight
-      droppedVelocity.current -= REACHBLADE.rope.gravity * delta
-      blade.y = Math.max(
-        groundHeight,
-        blade.y + droppedVelocity.current * delta,
+      droppedVelocity.current = stepDroppedBlade(
+        blade,
+        droppedVelocity.current,
+        delta,
+        heightAt,
       )
-      if (blade.y === groundHeight) droppedVelocity.current = 0
       const pickupX = blade.x - player.position.x
       const pickupZ = blade.z - player.position.z
       if (
