@@ -8,10 +8,17 @@ export function Hud() {
   const staminaFill = useRef<HTMLDivElement>(null)
   const staminaValue = useRef<HTMLSpanElement>(null)
   const dodgeState = useRef<HTMLDivElement>(null)
+  const lastDisplayed = useRef({
+    health: -1,
+    stamina: -1,
+    invulnerable: false,
+  })
 
   useEffect(() => {
     const refresh = () => {
       const state = playerStore.getState()
+      const health = Math.ceil(state.vitals.health)
+      const stamina = Math.ceil(state.vitals.stamina)
       const healthPercent = Math.max(
         0,
         Math.min(100, (state.vitals.health / PLAYER.health.max) * 100),
@@ -20,16 +27,26 @@ export function Hud() {
         0,
         Math.min(100, (state.vitals.stamina / PLAYER.stamina.max) * 100),
       )
-      if (healthFill.current)
-        healthFill.current.style.width = `${healthPercent}%`
-      if (healthValue.current)
-        healthValue.current.textContent = `${Math.ceil(state.vitals.health)}`
-      if (staminaFill.current)
-        staminaFill.current.style.width = `${staminaPercent}%`
-      if (staminaValue.current)
-        staminaValue.current.textContent = `${Math.ceil(state.vitals.stamina)}`
-      if (dodgeState.current)
-        dodgeState.current.style.display = state.invulnerable ? 'block' : 'none'
+      if (health !== lastDisplayed.current.health) {
+        if (healthFill.current)
+          healthFill.current.style.width = `${healthPercent}%`
+        if (healthValue.current) healthValue.current.textContent = `${health}`
+        lastDisplayed.current.health = health
+      }
+      if (stamina !== lastDisplayed.current.stamina) {
+        if (staminaFill.current)
+          staminaFill.current.style.width = `${staminaPercent}%`
+        if (staminaValue.current)
+          staminaValue.current.textContent = `${stamina}`
+        lastDisplayed.current.stamina = stamina
+      }
+      if (state.invulnerable !== lastDisplayed.current.invulnerable) {
+        if (dodgeState.current)
+          dodgeState.current.style.display = state.invulnerable
+            ? 'block'
+            : 'none'
+        lastDisplayed.current.invulnerable = state.invulnerable
+      }
     }
     refresh()
     const interval = window.setInterval(refresh, 100)

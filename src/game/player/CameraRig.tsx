@@ -3,8 +3,10 @@ import { useRapier } from '@react-three/rapier'
 import { useEffect, useRef } from 'react'
 import { MathUtils, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
+import { applyShoulderOffset, resolveCameraDistance } from './cameraMath'
 import { playerStore } from './playerStore'
 
+const baseTarget = new Vector3()
 const target = new Vector3()
 const right = new Vector3()
 const desiredCamera = new Vector3()
@@ -25,6 +27,7 @@ export function CameraRig() {
     dragging: false,
   })
   const ray = useRef(new rapier.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }))
+  const currentDistance = useRef<number>(PLAYER.camera.distance)
 
   useEffect(() => {
     const canvas = gl.domElement
@@ -64,18 +67,23 @@ export function CameraRig() {
     }
   }, [gl])
 
-  useFrame(() => {
+  useFrame((_, deltaSeconds) => {
     const position = playerStore.getState().position
     const { yaw, pitch, distance } = orbit.current
-    right.set(Math.cos(yaw), 0, -Math.sin(yaw))
-    target.set(position.x, position.y + 0.45, position.z)
-    target.addScaledVector(right, PLAYER.camera.shoulderOffset)
+    baseTarget.set(position.x, position.y + 0.45, position.z)
 
     const horizontalDistance = Math.cos(pitch) * distance
     desiredCamera.set(
-      target.x + Math.sin(yaw) * horizontalDistance,
-      target.y + Math.sin(pitch) * distance,
-      target.z + Math.cos(yaw) * horizontalDistance,
+      baseTarget.x + Math.sin(yaw) * horizontalDistance,
+      baseTarget.y + Math.sin(pitch) * distance,
+      baseTarget.z + Math.cos(yaw) * horizontalDistance,
+    )
+    applyShoulderOffset(
+      baseTarget,
+      desiredCamera,
+      PLAYER.camera.shoulderOffset,
+      right,
+      target,
     )
     rayDirection.copy(desiredCamera).sub(target).normalize()
 
@@ -91,17 +99,31 @@ export function CameraRig() {
       true,
       rapier.QueryFilterFlags.EXCLUDE_SENSORS,
     )
-    const collisionDistance = hit
-      ? MathUtils.clamp(
-          hit.timeOfImpact - 0.2,
-          PLAYER.camera.minimumDistance,
-          PLAYER.camera.maximumDistance,
+    const collisionLimit = hit
+      ? Math.min(
+          distance,
+          MathUtils.clamp(
+            hit.timeOfImpact - PLAYER.camera.collisionPadding,
+            PLAYER.camera.minimumDistance,
+            PLAYER.camera.maximumDistance,
+          ),
         )
-      : distance
+      : null
+    currentDistance.current = resolveCameraDistance(
+      currentDistance.current,
+      distance,
+      collisionLimit,
+      deltaSeconds,
+      PLAYER.camera.collisionReturnDamping,
+    )
 
-    camera.position
-      .copy(target)
-      .addScaledVector(rayDirection, collisionDistance)
+    const renderedDistance = MathUtils.clamp(
+      currentDistance.current,
+      PLAYER.camera.minimumDistance,
+      PLAYER.camera.maximumDistance,
+    )
+
+    camera.position.copy(target).addScaledVector(rayDirection, renderedDistance)
     camera.lookAt(target)
   })
 

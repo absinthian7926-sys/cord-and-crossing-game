@@ -47,7 +47,7 @@ export function updateVitals(
   current.secondsSinceStaminaUse = secondsSinceStaminaUse
   if (
     current.runLocked &&
-    current.stamina >= PLAYER.stamina.runReengageThreshold
+    current.stamina + Number.EPSILON >= PLAYER.stamina.runReengageThreshold
   ) {
     current.runLocked = false
   }

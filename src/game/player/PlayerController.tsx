@@ -10,8 +10,9 @@ import { useEffect, useRef } from 'react'
 import { Group, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
 import { consumeInput, inputHeld } from './input'
+import { resolveGroundSpeed } from './movement'
 import { playerStore } from './playerStore'
-import { canRun, spendDodgeStamina, updateVitals } from './vitals'
+import { spendDodgeStamina, updateVitals } from './vitals'
 
 const input = new Vector3(),
   forward = new Vector3(),
@@ -79,13 +80,15 @@ export function PlayerController() {
       )
     vertical.current -= PLAYER.movement.gravity * delta
     const dodging = dodgeLeft.current > 0
-    const running =
-      inputHeld('run') && move.lengthSq() > 0 && canRun(store.vitals)
+    const groundSpeed = resolveGroundSpeed(
+      inputHeld('run'),
+      move.lengthSq() > 0,
+      store.vitals,
+    )
+    const running = groundSpeed === PLAYER.movement.runSpeed
     const speed = dodging
       ? PLAYER.movement.dodgeDistance / PLAYER.movement.dodgeDurationSeconds
-      : running
-        ? PLAYER.movement.runSpeed
-        : PLAYER.movement.walkSpeed
+      : groundSpeed
     const direction = dodging ? dodge : move
     translation.x = direction.x * speed * delta
     translation.y = vertical.current * delta
