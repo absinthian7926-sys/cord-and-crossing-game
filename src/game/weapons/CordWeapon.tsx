@@ -26,6 +26,7 @@ import {
 } from '../player/input'
 import { playerStore } from '../player/playerStore'
 import { spendStamina } from '../player/vitals'
+import { heightAt } from '../world/terrain'
 import {
   canCloseStrike,
   canCordBeCut,
@@ -65,6 +66,7 @@ export function CordWeapon() {
   const lastQTap = useRef(Number.NEGATIVE_INFINITY)
   const skipAimRelease = useRef(false)
   const closeActiveRemaining = useRef(0)
+  const droppedVelocity = useRef(0)
   const rope = useRef(
     createVerletRope({ x: 0, y: 1.35, z: 0 }, { x: 0, y: 1.35, z: 0 }),
   )
@@ -336,7 +338,7 @@ export function CordWeapon() {
           dummy.cordCutter &&
           capsuleOverlapsPoint(
             dummy.position[0],
-            dummy.position[1],
+            heightAt(dummy.position[0], dummy.position[2]) + dummy.position[1],
             dummy.position[2],
             hand.x,
             hand.y,
@@ -372,13 +374,35 @@ export function CordWeapon() {
         blade.copy(hand)
       }
     } else if (cord.current.mode === 'Dropped') {
-      if (blade.distanceTo(player.position) <= REACHBLADE.stop.pickupRadius) {
+      const groundHeight =
+        heightAt(blade.x, blade.z) + REACHBLADE.rope.groundHeight
+      droppedVelocity.current -= REACHBLADE.rope.gravity * delta
+      blade.y = Math.max(
+        groundHeight,
+        blade.y + droppedVelocity.current * delta,
+      )
+      if (blade.y === groundHeight) droppedVelocity.current = 0
+      const pickupX = blade.x - player.position.x
+      const pickupZ = blade.z - player.position.z
+      if (
+        pickupX * pickupX + pickupZ * pickupZ <=
+        REACHBLADE.stop.pickupRadius ** 2
+      ) {
         updateCord(step(cord.current, { type: 'pickup' }))
         blade.copy(hand)
       }
+    } else {
+      droppedVelocity.current = 0
     }
 
-    stepVerletRope(rope.current, delta, hand, blade, cord.current.mode)
+    stepVerletRope(
+      rope.current,
+      delta,
+      hand,
+      blade,
+      cord.current.mode,
+      heightAt,
+    )
     const ropeAttribute = ropeGeometry.getAttribute(
       'position',
     ) as BufferAttribute

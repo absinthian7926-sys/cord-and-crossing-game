@@ -120,12 +120,12 @@ export function CameraRig() {
       PLAYER.camera.collisionReturnDamping,
       PLAYER.camera.collisionMinimumDistance,
     )
-
     const renderedDistance = MathUtils.clamp(
       currentDistance.current,
       PLAYER.camera.collisionMinimumDistance,
       PLAYER.camera.maximumDistance,
     )
+    playerStore.getState().cameraDistance = renderedDistance
 
     camera.position.copy(target).addScaledVector(rayDirection, renderedDistance)
     camera.lookAt(target)

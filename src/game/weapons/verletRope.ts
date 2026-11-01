@@ -2,6 +2,9 @@ import { REACHBLADE } from '../../data/weapons'
 import type { CordMode } from './cordState'
 
 export type Point3 = { x: number; y: number; z: number }
+export type HeightSampler = (x: number, z: number) => number
+
+const flatGroundHeight: HeightSampler = () => 0
 
 export type VerletRope = {
   positions: Float32Array
@@ -80,6 +83,7 @@ export function stepVerletRope(
   hand: Point3,
   blade: Point3,
   mode: CordMode,
+  sampleHeight: HeightSampler = flatGroundHeight,
 ): void {
   const dt = Math.max(0, Math.min(deltaSeconds, 1 / 30))
   const pinEnd = mode === 'Out' || mode === 'Returning' || mode === 'InHand'
@@ -104,12 +108,16 @@ export function stepVerletRope(
     rope.previous[offset] = x
     rope.previous[offset + 1] = y
     rope.previous[offset + 2] = z
-    rope.positions[offset] = x + velocityX
+    const nextX = x + velocityX
+    const nextZ = z + velocityZ
+    const groundHeight =
+      sampleHeight(nextX, nextZ) + REACHBLADE.rope.groundHeight
+    rope.positions[offset] = nextX
     rope.positions[offset + 1] = Math.max(
-      REACHBLADE.rope.groundHeight,
+      groundHeight,
       y + velocityY - REACHBLADE.rope.gravity * dt * dt,
     )
-    rope.positions[offset + 2] = z + velocityZ
+    rope.positions[offset + 2] = nextZ
   }
 
   for (
@@ -120,8 +128,11 @@ export function stepVerletRope(
     constrain(rope, hand, blade, pinEnd)
     for (let index = 1; index < lastIntegrated; index += 1) {
       const y = index * 3 + 1
-      if (rope.positions[y] < REACHBLADE.rope.groundHeight) {
-        rope.positions[y] = REACHBLADE.rope.groundHeight
+      const x = rope.positions[y - 1]
+      const z = rope.positions[y + 1]
+      const groundHeight = sampleHeight(x, z) + REACHBLADE.rope.groundHeight
+      if (rope.positions[y] < groundHeight) {
+        rope.positions[y] = groundHeight
       }
     }
   }

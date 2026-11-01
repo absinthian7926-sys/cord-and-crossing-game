@@ -9,6 +9,8 @@ import {
 import { useEffect, useRef } from 'react'
 import { Group, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
+import { ZONE } from '../../data/zone'
+import { heightAt } from '../world/terrain'
 import { consumeInput, inputHeld } from './input'
 import { resolveGroundSpeed } from './movement'
 import { playerStore } from './playerStore'
@@ -29,7 +31,8 @@ export function PlayerController() {
   const vertical = useRef(0),
     dodgeLeft = useRef(0),
     cooldown = useRef(0),
-    invulnerableLeft = useRef(0)
+    invulnerableLeft = useRef(0),
+    unsafeSeconds = useRef(0)
   const { world } = useRapier()
   const character = useRef(world.createCharacterController(0.01))
   const { camera } = useThree()
@@ -50,6 +53,19 @@ export function PlayerController() {
   useFrame((_, rawDelta) => {
     if (!body.current || !collider.current) return
     const delta = Math.min(rawDelta, 1 / 30)
+    const store = playerStore.getState()
+    const teleportTarget = store.teleportTarget
+    if (teleportTarget) {
+      store.position.x = teleportTarget.x
+      store.position.y = teleportTarget.y
+      store.position.z = teleportTarget.z
+      body.current.setTranslation(store.position, true)
+      body.current.setNextKinematicTranslation(store.position)
+      store.teleportTarget = null
+      vertical.current = 0
+      unsafeSeconds.current = 0
+      return
+    }
     dodgeLeft.current = Math.max(0, dodgeLeft.current - delta)
     cooldown.current = Math.max(0, cooldown.current - delta)
     invulnerableLeft.current = Math.max(0, invulnerableLeft.current - delta)
@@ -65,7 +81,6 @@ export function PlayerController() {
     move.copy(right).multiplyScalar(input.x).addScaledVector(forward, -input.z)
     if (move.lengthSq() > 1) move.normalize()
 
-    const store = playerStore.getState()
     if (consumeInput('dodge') && cooldown.current <= 0) {
       if (spendDodgeStamina(store.vitals)) {
         if (move.lengthSq() > 0) {
@@ -105,6 +120,30 @@ export function PlayerController() {
     position.y = current.y + corrected.y
     position.z = current.z + corrected.z
     body.current.setNextKinematicTranslation(position)
+    const belowTerrain =
+      position.y < heightAt(position.x, position.z) - ZONE.respawn.terrainDrop
+    const belowSea =
+      heightAt(position.x, position.z) < ZONE.sea.level - ZONE.respawn.seaDepth
+    const outsideBounds =
+      position.x < ZONE.bounds.minimumX ||
+      position.x > ZONE.bounds.maximumX ||
+      position.z < ZONE.bounds.minimumZ ||
+      position.z > ZONE.bounds.maximumZ
+    if (belowTerrain || belowSea || outsideBounds) {
+      unsafeSeconds.current += delta
+      if (unsafeSeconds.current >= ZONE.respawn.delaySeconds) {
+        position.x = ZONE.spawn[0]
+        position.y =
+          ZONE.spawn[1] + PLAYER.collider.halfHeight + PLAYER.collider.radius
+        position.z = ZONE.spawn[2]
+        body.current.setTranslation(position, true)
+        body.current.setNextKinematicTranslation(position)
+        vertical.current = 0
+        unsafeSeconds.current = 0
+      }
+    } else {
+      unsafeSeconds.current = 0
+    }
     if (character.current.computedGrounded() && vertical.current < 0)
       vertical.current = 0
     if (direction.lengthSq() > 0.001 && visual.current)
@@ -117,7 +156,11 @@ export function PlayerController() {
     <RigidBody
       ref={body}
       type="kinematicPosition"
-      position={[0, 1.3, 0]}
+      position={[
+        ZONE.spawn[0],
+        ZONE.spawn[1] + PLAYER.collider.halfHeight + PLAYER.collider.radius,
+        ZONE.spawn[2],
+      ]}
       colliders={false}
       name="player"
     >

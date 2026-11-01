@@ -1,5 +1,13 @@
 import { expect, test } from '@playwright/test'
+import { PLAYER } from '../src/data/player'
+import { ZONE } from '../src/data/zone'
+
 test('loads the game canvas and moves the player forward', async ({ page }) => {
+  const browserErrors: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => browserErrors.push(error.message))
   await page.goto('/')
   await expect(page.locator('canvas')).toBeVisible()
   await page.waitForFunction(
@@ -75,6 +83,17 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     ),
   )
   await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'Out',
+    undefined,
+    { timeout: 2_000 },
+  )
+  const cameraDistanceWhileOut = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getCameraDistance(),
+  )
+  expect(cameraDistanceWhileOut).toBeGreaterThanOrEqual(
+    PLAYER.camera.minimumDistance,
+  )
+  await page.waitForFunction(
     () =>
       window
         .__CORD_AND_CROSSING_DEBUG__!.getDummyDamageLog()
@@ -87,4 +106,62 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     undefined,
     { timeout: 5_000 },
   )
+
+  await page.waitForFunction(
+    ({ halfHeight, radius }) => {
+      const debug = window.__CORD_AND_CROSSING_DEBUG__!
+      const position = debug.getPlayerPosition()
+      const ground = debug.getTerrainHeight(position.x, position.z)
+      return Math.abs(position.y - ground - halfHeight - radius) < 0.35
+    },
+    PLAYER.collider,
+    { timeout: 5_000 },
+  )
+
+  await page.evaluate(
+    ([x, z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    ZONE.locations.D.center,
+  )
+  await page.waitForFunction(
+    ([x, z]) => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - x, position.z - z) < 1
+    },
+    ZONE.locations.D.center,
+    { timeout: 5_000 },
+  )
+  await page.waitForFunction(
+    ({ halfHeight, radius }) => {
+      const debug = window.__CORD_AND_CROSSING_DEBUG__!
+      const position = debug.getPlayerPosition()
+      const ground = debug.getTerrainHeight(position.x, position.z)
+      return Math.abs(position.y - ground - halfHeight - radius) < 0.35
+    },
+    PLAYER.collider,
+    { timeout: 5_000 },
+  )
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPerfStats().drawCalls > 0,
+    undefined,
+    { timeout: 5_000 },
+  )
+  const campPerf = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getPerfStats(),
+  )
+  expect(campPerf.drawCalls).toBeLessThan(250)
+  expect(campPerf.triangles).toBeLessThan(500_000)
+
+  await page.evaluate(
+    ([x, , z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    ZONE.spawn,
+  )
+  await page.waitForFunction(
+    ([x, , z]) => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - x, position.z - z) < 1
+    },
+    ZONE.spawn,
+    { timeout: 5_000 },
+  )
+  expect(browserErrors).toEqual([])
 })

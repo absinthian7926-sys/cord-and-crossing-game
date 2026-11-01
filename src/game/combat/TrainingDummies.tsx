@@ -1,4 +1,5 @@
 import { TRAINING_DUMMIES } from '../../data/weapons'
+import { heightAt } from '../world/terrain'
 import { TrainingDummy } from './TrainingDummy'
 
 export function TrainingDummies() {
@@ -8,7 +9,11 @@ export function TrainingDummies() {
         <TrainingDummy
           key={dummy.id}
           id={dummy.id}
-          position={dummy.position}
+          position={[
+            dummy.position[0],
+            heightAt(dummy.position[0], dummy.position[2]) + dummy.position[1],
+            dummy.position[2],
+          ]}
           cordCutter={dummy.cordCutter}
         />
       ))}

@@ -45,4 +45,22 @@ describe('verlet rope', () => {
     for (const value of rope.positions)
       expect(Number.isFinite(value)).toBe(true)
   })
+
+  it('settles on terrain sampled from a slope', () => {
+    const sampleSlope = (x: number, z: number) => x * 0.1 - z * 0.05
+    const hand = { x: 0, y: 2, z: 0 }
+    const blade = { x: 4, y: 2, z: -2 }
+    const rope = createVerletRope(hand, blade)
+    for (let index = 0; index < 600; index += 1)
+      stepVerletRope(rope, 1 / 60, hand, blade, 'Dropped', sampleSlope)
+
+    for (let index = 1; index < rope.pointCount; index += 1) {
+      const offset = index * 3
+      expect(rope.positions[offset + 1]).toBeGreaterThanOrEqual(
+        sampleSlope(rope.positions[offset], rope.positions[offset + 2]) +
+          REACHBLADE.rope.groundHeight -
+          0.001,
+      )
+    }
+  })
 })
