@@ -17,6 +17,7 @@ Controls: WASD to move, Shift to run, Space to jump, Ctrl or C to dodge, drag to
 ## Checks
 
 ```sh
+npm run typecheck
 npm run build
 npm test
 npm run test:e2e
