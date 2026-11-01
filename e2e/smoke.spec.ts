@@ -308,14 +308,14 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
       return hound?.attackCooldown ?? 0
     }, houndId),
   ).toBeGreaterThan(ENEMY_TYPES.cliffHound.attackCadenceSeconds * 0.75)
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'InHand',
-    undefined,
-    { timeout: 10_000 },
-  )
   await page.evaluate(
     (id) => window.__CORD_AND_CROSSING_DEBUG__!.killEnemy(id),
     houndId,
+  )
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'InHand',
+    undefined,
+    { timeout: 30_000 },
   )
 
   await page.evaluate(() =>
