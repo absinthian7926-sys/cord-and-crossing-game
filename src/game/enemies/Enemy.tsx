@@ -69,7 +69,6 @@ function canDrawBow(enemy: EnemyRecord): boolean {
     enemy.type === 'brigandArcher' &&
     enemy.phase === 'Alive' &&
     enemy.state === 'Attack' &&
-    enemy.attackCooldown === 0 &&
     enemy.drawRemaining > 0
   )
 }

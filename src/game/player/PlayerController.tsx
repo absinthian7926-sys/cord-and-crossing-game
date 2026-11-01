@@ -92,10 +92,14 @@ export function PlayerController() {
       store.teleportTarget = null
       vertical.current = 0
       unsafeSeconds.current = 0
+      clearInput()
       resetWeaponToInHand()
       return
     }
-    if (isPlayerInputLocked(store.death)) return
+    if (isPlayerInputLocked(store.death)) {
+      clearInput()
+      return
+    }
     const teleportTarget = store.teleportTarget
     if (teleportTarget) {
       store.position.x = teleportTarget.x

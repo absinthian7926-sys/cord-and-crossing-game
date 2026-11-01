@@ -104,9 +104,12 @@ function EnemyProjectiles() {
 
 export function Enemies() {
   const [, rerender] = useReducer((value: number) => value + 1, 0)
-  initializeDefaultRoster()
 
-  useEffect(() => subscribeEnemyRoster(rerender), [])
+  useEffect(() => {
+    const unsubscribe = subscribeEnemyRoster(rerender)
+    initializeDefaultRoster()
+    return unsubscribe
+  }, [])
 
   return (
     <>
