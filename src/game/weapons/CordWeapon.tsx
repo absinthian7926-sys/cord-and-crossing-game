@@ -309,9 +309,8 @@ export function CordWeapon() {
       let hitDummy = false
       for (const dummy of TRAINING_DUMMIES) {
         const dx = blade.x - dummy.position[0]
-        const dy = blade.y - dummy.position[1]
         const dz = blade.z - dummy.position[2]
-        if (dx * dx + dy * dy + dz * dz <= REACHBLADE.bladeHitRadius ** 2) {
+        if (dx * dx + dz * dz <= REACHBLADE.bladeHitRadius ** 2) {
           damageDummy(
             dummy.id,
             REACHBLADE.cast.damage,
