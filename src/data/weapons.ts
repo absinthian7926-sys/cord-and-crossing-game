@@ -53,5 +53,5 @@ export const REACHBLADE = {
 export const TRAINING_DUMMIES = [
   { id: 'close', position: [0, 0.9, -3], cordCutter: false },
   { id: 'cast', position: [-1.25, 0.9, -5], cordCutter: false },
-  { id: 'cutter', position: [2, 0.9, -8], cordCutter: true },
+  { id: 'cutter', position: [2, 0.9, -5.6], cordCutter: true },
 ] as const
