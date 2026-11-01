@@ -19,12 +19,12 @@ export function CameraRig() {
     yaw: number
     pitch: number
     distance: number
-    dragging: boolean
+    fallbackDragging: boolean
   }>({
     yaw: 0,
     pitch: 0.32,
     distance: PLAYER.camera.distance,
-    dragging: false,
+    fallbackDragging: false,
   })
   const ray = useRef(new rapier.Ray({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 1 }))
   const currentDistance = useRef<number>(PLAYER.camera.distance)
@@ -32,13 +32,21 @@ export function CameraRig() {
   useEffect(() => {
     const canvas = gl.domElement
     const pointerDown = (event: PointerEvent) => {
-      if (event.button === 0) orbit.current.dragging = true
+      if (import.meta.env.DEV && event.button === 1) {
+        orbit.current.fallbackDragging = true
+      } else if (event.button === 0 && document.pointerLockElement !== canvas) {
+        void canvas.requestPointerLock().catch(() => undefined)
+      }
     }
-    const pointerUp = () => {
-      orbit.current.dragging = false
+    const pointerUp = (event: PointerEvent) => {
+      if (event.button === 1) orbit.current.fallbackDragging = false
     }
     const pointerMove = (event: PointerEvent) => {
-      if (!orbit.current.dragging) return
+      if (
+        document.pointerLockElement !== canvas &&
+        !orbit.current.fallbackDragging
+      )
+        return
       orbit.current.yaw -= event.movementX * 0.004
       orbit.current.pitch = MathUtils.clamp(
         orbit.current.pitch - event.movementY * 0.003,
@@ -98,16 +106,11 @@ export function CameraRig() {
       distance,
       true,
       rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+      undefined,
+      playerStore.getState().collider ?? undefined,
     )
     const collisionLimit = hit
-      ? Math.min(
-          distance,
-          MathUtils.clamp(
-            hit.timeOfImpact - PLAYER.camera.collisionPadding,
-            PLAYER.camera.minimumDistance,
-            PLAYER.camera.maximumDistance,
-          ),
-        )
+      ? hit.timeOfImpact - PLAYER.camera.collisionPadding
       : null
     currentDistance.current = resolveCameraDistance(
       currentDistance.current,
@@ -115,11 +118,12 @@ export function CameraRig() {
       collisionLimit,
       deltaSeconds,
       PLAYER.camera.collisionReturnDamping,
+      PLAYER.camera.collisionMinimumDistance,
     )
 
     const renderedDistance = MathUtils.clamp(
       currentDistance.current,
-      PLAYER.camera.minimumDistance,
+      PLAYER.camera.collisionMinimumDistance,
       PLAYER.camera.maximumDistance,
     )
 

@@ -60,7 +60,7 @@ Time of day: fixed late afternoon in Slice 1 (warm sun low over the sea). Day-ni
 
 ## 5. Player
 
-- Camera: third-person orbit, shoulder offset 0.6 m right, distance 4.5 m (2.5 to 7 m on scroll), collision-aware with 0.2 m clearance and recovery damping 12 after obstruction.
+- Camera: third-person orbit, shoulder offset 0.6 m right, distance 4.5 m (2.5 to 7 m on scroll), collision-aware with 0.2 m clearance and recovery damping 12 after obstruction. GAME (NEW): collision may pull in to 0.3 m when geometry is closer than the scroll minimum.
 - Movement: walk 2.2 m/s, run 5.5 m/s (Shift), dodge roll 4 m over 0.45 s with 0.3 s of invulnerability, 0.8 s cooldown. Jump 1.1 m. No climbing in Slice 1.
 - Health: 100. Regenerates 4 per second after 6 s without damage.
 - Stamina: 100. Run costs 8/s, dodge 25, cord cast 15. Regenerates 20/s after 1 s. After run drains stamina to 0, running re-engages at 10 stamina.
@@ -88,6 +88,7 @@ The reachblade (SITE): a forearm-length leaf-shaped single-edged blade with an i
 ### 6.3 Utility (Slice 1)
 - Snag: casting at marked rope posts or loose crates pulls them 2 m (one physics puzzle in Crossing Hollow).
 - Stop: tapping Q twice within 0.3 s instantly drops the cord tension and cancels the cast with zero recovery delay, but the blade lands at the current point and must be picked up (walk over it). Teaches "stopping and recovery".
+- GAME (NEW): dropped blade pickup radius is 0.8 m and the moving blade hit radius is 0.6 m. The M2 rope simulation uses 16 points, 12 constraint iterations, damping 0.985, gravity 9.81 m/s2, a 0.04 m ground height and a 0.12 m rope hit radius. The visible cut-line stub uses 5 points. Training dummies stand at 3 m, 5 m and 8 m from spawn; the 8 m dummy is the cord-cutter test target with a 0.38 m cutter volume.
 
 ### 6.4 Effects and heelstones
 - Crossing (CANON): stepping fully through an active portico screen (both feet past the screen plane, tracked by a trigger volume pair) grants the effect. Partial entry grants nothing. A fresh effect needs another full crossing.

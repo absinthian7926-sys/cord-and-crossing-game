@@ -30,9 +30,10 @@ describe('camera math', () => {
   })
 
   it('pulls in immediately and smooths back toward the orbit distance', () => {
-    expect(resolveCameraDistance(4.5, 4.5, 2.5, 1 / 60, 12)).toBe(2.5)
-    const recovering = resolveCameraDistance(2.5, 4.5, null, 1 / 60, 12)
-    expect(recovering).toBeGreaterThan(2.5)
+    expect(resolveCameraDistance(4.5, 4.5, 0.1, 1 / 60, 12, 0.3)).toBe(0.3)
+    expect(resolveCameraDistance(4.5, 4.5, 1.2, 1 / 60, 12, 0.3)).toBe(1.2)
+    const recovering = resolveCameraDistance(1.2, 4.5, null, 1 / 60, 12, 0.3)
+    expect(recovering).toBeGreaterThan(1.2)
     expect(recovering).toBeLessThan(4.5)
   })
 })

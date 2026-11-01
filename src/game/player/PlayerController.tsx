@@ -36,11 +36,15 @@ export function PlayerController() {
 
   useEffect(() => {
     const controller = character.current
+    playerStore.getState().collider = collider.current
     controller.enableAutostep(0.35, 0.15, true)
     controller.enableSnapToGround(0.2)
     controller.setMaxSlopeClimbAngle(Math.PI / 4)
     controller.setMinSlopeSlideAngle((50 * Math.PI) / 180)
-    return () => world.removeCharacterController(controller)
+    return () => {
+      playerStore.getState().collider = null
+      world.removeCharacterController(controller)
+    }
   }, [world])
 
   useFrame((_, rawDelta) => {
