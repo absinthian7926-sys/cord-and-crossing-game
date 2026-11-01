@@ -143,6 +143,7 @@ describe('enemy AI', () => {
     })
     expect(result.state).toBe('Return')
     expect(result.attack).toBe(false)
+    expect(result.healAtAnchor).toBe(true)
   })
 
   it('forces Return when the player is dead', () => {
@@ -202,6 +203,42 @@ describe('enemy AI', () => {
       ENEMY_TYPES.brigandArcher.drawSeconds / 2,
     )
     expect(cadenceRelease.attack).toBe(true)
+  })
+
+  it('bites on the hound 0.8 s attack cadence', () => {
+    const firstBite = run('Attack', {
+      enemyType: 'cliffHound',
+      distanceToPlayer: ENEMY_TYPES.cliffHound.attackRange,
+    })
+    expect(firstBite.attack).toBe(true)
+    expect(firstBite.attackCooldownSeconds).toBe(
+      ENEMY_TYPES.cliffHound.attackCadenceSeconds,
+    )
+
+    const waiting = run(
+      'Attack',
+      {
+        enemyType: 'cliffHound',
+        distanceToPlayer: ENEMY_TYPES.cliffHound.attackRange,
+        attackCooldownSeconds: firstBite.attackCooldownSeconds,
+      },
+      ENEMY_TYPES.cliffHound.attackCadenceSeconds - 0.01,
+    )
+    expect(waiting.attack).toBe(false)
+
+    const nextBite = run(
+      'Attack',
+      {
+        enemyType: 'cliffHound',
+        distanceToPlayer: ENEMY_TYPES.cliffHound.attackRange,
+        attackCooldownSeconds: waiting.attackCooldownSeconds,
+      },
+      0.01,
+    )
+    expect(nextBite.attack).toBe(true)
+    expect(nextBite.attackCooldownSeconds).toBe(
+      ENEMY_TYPES.cliffHound.attackCadenceSeconds,
+    )
   })
 
   it('blocks about half of frontal straight casts with seeded rolls', () => {

@@ -77,8 +77,10 @@ describe('reachblade combat', () => {
     const vitals = initialVitals()
     expect(applyCombatDamage(vitals, 12, true, false)).toBe(15)
     expect(vitals.health).toBe(85)
+    vitals.secondsSinceDamage = 3
     expect(applyCombatDamage(vitals, 12, true, true)).toBe(0)
     expect(vitals.health).toBe(85)
+    expect(vitals.secondsSinceDamage).toBe(3)
   })
 
   it('scales recall linearly from current distance', () => {

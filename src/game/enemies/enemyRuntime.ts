@@ -2,6 +2,7 @@ import { ENEMY_DEATH, ENEMY_TYPES, type EnemyType } from '../../data/enemies'
 import { heightAt } from '../world/terrain'
 import { shouldBucklerBlock, type AiState } from './ai'
 import { createArrowPool, launchArrow } from './projectiles'
+import { advanceRespawnElapsed } from './spawns'
 
 export type EnemyPhase = 'Alive' | 'Dying' | 'Dead'
 
@@ -279,7 +280,11 @@ export function advanceRespawn(seconds: number): void {
   const elapsed = Math.max(0, seconds)
   for (const enemy of enemyRuntime.records) {
     if (enemy.phase === 'Dying') enemy.deathElapsed += elapsed
-    if (enemy.phase !== 'Alive') enemy.respawnElapsed += elapsed
+    if (enemy.phase !== 'Alive')
+      enemy.respawnElapsed = advanceRespawnElapsed(
+        enemy.respawnElapsed,
+        elapsed,
+      )
   }
 }
 

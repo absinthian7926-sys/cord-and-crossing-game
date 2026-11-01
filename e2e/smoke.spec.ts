@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
-import { ENEMY_TYPES } from '../src/data/enemies'
+import { ENEMY_DEATH, ENEMY_TYPES } from '../src/data/enemies'
 import { PLAYER } from '../src/data/player'
+import { REACHBLADE } from '../src/data/weapons'
 import { ZONE } from '../src/data/zone'
 
 test.setTimeout(120_000)
@@ -187,9 +188,11 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
   const healthBeforeBrigand = await page.evaluate(
     () => window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().health,
   )
-  const brigandId = await page.evaluate(() =>
-    window.__CORD_AND_CROSSING_DEBUG__!.spawnEnemy('roadBrigand', 45, 0),
-  )
+  const brigandId = await page.evaluate((spawnOffset) => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    const position = debug.getPlayerPosition()
+    return debug.spawnEnemy('roadBrigand', position.x + spawnOffset, position.z)
+  }, ENEMY_TYPES.roadBrigand.attackRange * 2)
   await page.waitForFunction(
     (id) =>
       window
@@ -211,13 +214,16 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
       brigandId,
     ),
   ).toBe(true)
-  await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.teleport(0, 0))
+  await page.evaluate(
+    (x) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, 0),
+    -ENEMY_DEATH.respawnPlayerDistance,
+  )
   await page.waitForFunction(
-    () => {
+    (x) => {
       const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
-      return Math.hypot(position.x, position.z) < 1
+      return Math.hypot(position.x - x, position.z) < 1
     },
-    undefined,
+    -ENEMY_DEATH.respawnPlayerDistance,
     { timeout: 5_000 },
   )
   await page.evaluate(() =>
@@ -245,9 +251,11 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     undefined,
     { timeout: 5_000 },
   )
-  const houndId = await page.evaluate(() =>
-    window.__CORD_AND_CROSSING_DEBUG__!.spawnEnemy('cliffHound', 30, 1.4),
-  )
+  const houndId = await page.evaluate(() => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    const position = debug.getPlayerPosition()
+    return debug.spawnEnemy('cliffHound', position.x + 0.28, position.z)
+  })
   await page.waitForFunction(
     (id) =>
       window
@@ -261,29 +269,45 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
       new MouseEvent('mousedown', { button: 2, bubbles: true }),
     ),
   )
-  await page.waitForTimeout(500)
-  await page.evaluate(() =>
-    window.dispatchEvent(
-      new MouseEvent('mouseup', { button: 2, bubbles: true }),
-    ),
-  )
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'Out',
-    undefined,
-    { timeout: 10_000 },
+  await page.waitForTimeout(200)
+  const healthBeforeCut = await page.evaluate(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().health,
   )
   expect(
-    await page.evaluate((id) => {
-      const debug = window.__CORD_AND_CROSSING_DEBUG__!
-      const position = debug.getPlayerPosition()
-      return debug.forceHoundBite(id, position.x + 0.28, position.z - 0.15)
-    }, houndId),
+    await page.evaluate(
+      ({ id, cooldown }) => {
+        const synchronized =
+          window.__CORD_AND_CROSSING_DEBUG__!.setEnemyAttackCooldown(
+            id,
+            cooldown,
+          )
+        window.dispatchEvent(
+          new MouseEvent('mouseup', { button: 2, bubbles: true }),
+        )
+        return synchronized
+      },
+      { id: houndId, cooldown: REACHBLADE.cast.windupSeconds },
+    ),
   ).toBe(true)
   await page.waitForFunction(
     () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'Cut',
     undefined,
     { timeout: 10_000 },
   )
+  const healthAfterCut = await page.evaluate(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().health,
+  )
+  expect(healthBeforeCut - healthAfterCut).toBe(
+    ENEMY_TYPES.cliffHound.damage * REACHBLADE.unarmedDamageMultiplier,
+  )
+  expect(
+    await page.evaluate((id) => {
+      const hound = window
+        .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+        .find((enemy) => enemy.id === id)
+      return hound?.attackCooldown ?? 0
+    }, houndId),
+  ).toBeGreaterThan(ENEMY_TYPES.cliffHound.attackCadenceSeconds * 0.75)
   await page.waitForFunction(
     () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'InHand',
     undefined,

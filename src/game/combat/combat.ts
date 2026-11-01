@@ -130,7 +130,7 @@ export function applyCombatDamage(
   invulnerable: boolean,
 ): number {
   const damage = incomingDamage(baseDamage, unarmed, invulnerable)
-  applyDamage(vitals, damage)
+  if (damage > 0) applyDamage(vitals, damage)
   return damage
 }
 

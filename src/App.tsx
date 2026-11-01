@@ -1,7 +1,7 @@
 import { Canvas } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import { Suspense, useEffect } from 'react'
-import { ENEMY_TYPES, type EnemyType } from './data/enemies'
+import type { EnemyType } from './data/enemies'
 import { PLAYER } from './data/player'
 import { ZONE } from './data/zone'
 import {
@@ -10,7 +10,6 @@ import {
   getEnemyRecord,
   getEnemySnapshots,
   killEnemy,
-  requestHoundCordBite,
   spawnEnemy,
   type EnemySnapshot,
 } from './game/enemies/enemyRuntime'
@@ -46,7 +45,7 @@ declare global {
       damagePlayer: (damage: number) => void
       advanceRespawn: (seconds: number) => void
       aggroEnemies: (radius: number) => void
-      forceHoundBite: (id: string, x: number, z: number) => boolean
+      setEnemyAttackCooldown: (id: string, seconds: number) => boolean
       getActiveArrowCount: () => number
       getPlayerStatus: () => {
         health: number
@@ -102,7 +101,7 @@ export default function App() {
             }
           }
         },
-        forceHoundBite: (id, x, z) => {
+        setEnemyAttackCooldown: (id, seconds) => {
           const enemy = getEnemyRecord(id)
           if (
             !enemy ||
@@ -111,15 +110,8 @@ export default function App() {
             enemy.state !== 'Attack'
           )
             return false
-          enemy.x = x
-          enemy.z = z
-          enemy.y =
-            heightAt(x, z) + ENEMY_TYPES.cliffHound.collider.length * 0.5
-          return requestHoundCordBite(
-            enemy.x,
-            enemy.y + ENEMY_TYPES.cliffHound.collider.length * 0.5,
-            enemy.z,
-          )
+          enemy.attackCooldown = Math.max(0, seconds)
+          return true
         },
         getActiveArrowCount: () => countActiveArrows(enemyRuntime.arrows),
         getPlayerStatus: () => {

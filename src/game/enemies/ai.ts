@@ -131,6 +131,8 @@ export function stepAi(
     inputs.distanceFromAnchor > ENEMY_AI.leashRadius
   ) {
     enterState(result, state, 'Return', elapsedSeconds)
+    result.healAtAnchor =
+      inputs.distanceToAnchor <= ENEMY_AI.returnAnchorDistance
     setMovementIntent(result, inputs.enemyType)
     return result
   }

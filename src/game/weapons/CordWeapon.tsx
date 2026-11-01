@@ -1,5 +1,5 @@
 import { useFrame, useThree } from '@react-three/fiber'
-import { useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -18,13 +18,17 @@ import {
   tryStartCloseAttack,
   type CloseAttack,
 } from '../combat/combat'
-import { capsuleOverlapsPoint } from '../combat/hitboxes'
+import {
+  capsuleOverlapsPoint,
+  distanceSquaredPointToSegment,
+} from '../combat/hitboxes'
 import { houndBiteCutsCordSegment } from '../enemies/ai'
 import {
   angleFromEnemyFacing,
   damageEnemy,
   enemyRuntime,
   registerHoundBiteHandler,
+  type EnemyRecord,
 } from '../enemies/enemyRuntime'
 import {
   consumeInput,
@@ -70,6 +74,31 @@ const arcTargets = TRAINING_DUMMIES.map((dummy) => ({
   x: dummy.position[0],
   z: dummy.position[2],
 }))
+
+function bladeOverlapsEnemy(enemy: EnemyRecord): boolean {
+  const stats = ENEMY_TYPES[enemy.type]
+  const radius = stats.collider.radius
+  const bodyHeight =
+    enemy.type === 'cliffHound'
+      ? ENEMY_TYPES.cliffHound.collider.length
+      : ENEMY_TYPES[enemy.type].collider.height
+  const halfSegment = Math.max(0, bodyHeight * 0.5 - radius)
+  const combinedRadius = REACHBLADE.bladeHitRadius + radius
+  return (
+    distanceSquaredPointToSegment(
+      blade.x,
+      blade.y,
+      blade.z,
+      enemy.x,
+      enemy.y - halfSegment,
+      enemy.z,
+      enemy.x,
+      enemy.y + halfSegment,
+      enemy.z,
+    ) <=
+    combinedRadius * combinedRadius
+  )
+}
 
 export function CordWeapon() {
   const { camera } = useThree()
@@ -123,10 +152,33 @@ export function CordWeapon() {
     return line
   }, [aimGeometry])
 
-  const updateCord = (next: CordState) => {
+  const updateCord = useCallback((next: CordState) => {
     cord.current = next
     setCordState(next)
-  }
+  }, [])
+
+  const cutCordAtHoundPoint = useCallback(
+    (x: number, y: number, z: number): boolean => {
+      if (
+        !houndBiteCutsCordSegment(
+          cord.current,
+          x,
+          y,
+          z,
+          hand.x,
+          hand.y,
+          hand.z,
+          blade.x,
+          blade.y,
+          blade.z,
+        )
+      )
+        return false
+      updateCord(step(cord.current, { type: 'cut' }))
+      return true
+    },
+    [updateCord],
+  )
 
   const damageDummy = (
     dummyId: string,
@@ -199,25 +251,7 @@ export function CordWeapon() {
     registerForceCut(() => {
       updateCord(step(cord.current, { type: 'cut' }))
     })
-    registerHoundBiteHandler((x, y, z) => {
-      if (
-        !houndBiteCutsCordSegment(
-          cord.current,
-          x,
-          y,
-          z,
-          hand.x,
-          hand.y,
-          hand.z,
-          blade.x,
-          blade.y,
-          blade.z,
-        )
-      )
-        return false
-      updateCord(step(cord.current, { type: 'cut' }))
-      return true
-    })
+    registerHoundBiteHandler(cutCordAtHoundPoint)
     registerWeaponReset(() => {
       updateCord(initialCordState())
       combo.current = initialComboState()
@@ -240,7 +274,14 @@ export function CordWeapon() {
       ;(ropeObject.material as LineBasicMaterial).dispose()
       ;(aimObject.material as LineBasicMaterial).dispose()
     }
-  }, [aimGeometry, aimObject, ropeGeometry, ropeObject])
+  }, [
+    aimGeometry,
+    aimObject,
+    cutCordAtHoundPoint,
+    ropeGeometry,
+    ropeObject,
+    updateCord,
+  ])
 
   useFrame(({ clock }, rawDelta) => {
     const delta = Math.min(rawDelta, 1 / 30)
@@ -433,11 +474,7 @@ export function CordWeapon() {
       if (!hitTarget) {
         for (const enemy of enemyRuntime.records) {
           if (enemy.phase !== 'Alive') continue
-          const dx = blade.x - enemy.x
-          const dz = blade.z - enemy.z
-          const hitRadius =
-            REACHBLADE.bladeHitRadius + ENEMY_TYPES[enemy.type].collider.radius
-          if (dx * dx + dz * dz <= hitRadius * hitRadius) {
+          if (bladeOverlapsEnemy(enemy)) {
             damageEnemy(enemy.id, REACHBLADE.cast.damage, {
               kind: 'cast',
               angleFromFacingDegrees: angleFromEnemyFacing(

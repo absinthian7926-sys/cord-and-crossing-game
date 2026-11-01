@@ -1,7 +1,7 @@
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useMemo, useReducer, useRef } from 'react'
 import { InstancedMesh, Object3D } from 'three'
-import { ENEMY_ARROW } from '../../data/enemies'
+import { ENEMY_ARROW, ENEMY_PRESENTATION } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
 import { applyCombatDamage } from '../combat/combat'
 import { playerStore } from '../player/playerStore'
@@ -96,8 +96,17 @@ function EnemyProjectiles() {
       args={[undefined, undefined, ENEMY_ARROW.poolSize]}
       frustumCulled={false}
     >
-      <boxGeometry args={[0.025, 0.025, 0.65]} />
-      <meshStandardMaterial color="#5e4b35" roughness={0.9} />
+      <boxGeometry
+        args={[
+          ENEMY_PRESENTATION.arrow.width,
+          ENEMY_PRESENTATION.arrow.height,
+          ENEMY_PRESENTATION.arrow.length,
+        ]}
+      />
+      <meshStandardMaterial
+        color={ENEMY_PRESENTATION.arrow.color}
+        roughness={ENEMY_PRESENTATION.arrow.roughness}
+      />
     </instancedMesh>
   )
 }

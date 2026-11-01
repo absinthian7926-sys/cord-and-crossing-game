@@ -51,19 +51,37 @@ export function launchArrow(
   const offsetX = targetX - startX
   const offsetY = targetY - startY
   const offsetZ = targetZ - startZ
-  const length = Math.hypot(offsetX, offsetY, offsetZ)
-  const inverseLength = length > 0 ? 1 / length : 0
+  const horizontalDistance = Math.hypot(offsetX, offsetZ)
+  const speedSquared = ENEMY_ARROW.speed * ENEMY_ARROW.speed
+  const discriminant =
+    speedSquared * speedSquared -
+    ENEMY_ARROW.gravity *
+      (ENEMY_ARROW.gravity * horizontalDistance * horizontalDistance +
+        2 * offsetY * speedSquared)
 
   pool.active[index] = 1
   pool.x[index] = startX
   pool.y[index] = startY
   pool.z[index] = startZ
-  pool.velocityX[index] = offsetX * inverseLength * ENEMY_ARROW.speed
-  pool.velocityY[index] = offsetY * inverseLength * ENEMY_ARROW.speed
-  pool.velocityZ[index] =
-    length > 0
-      ? offsetZ * inverseLength * ENEMY_ARROW.speed
-      : -ENEMY_ARROW.speed
+  if (horizontalDistance > 0 && discriminant >= 0) {
+    const tangent =
+      (speedSquared - Math.sqrt(discriminant)) /
+      (ENEMY_ARROW.gravity * horizontalDistance)
+    const cosine = 1 / Math.sqrt(1 + tangent * tangent)
+    const horizontalSpeed = ENEMY_ARROW.speed * cosine
+    pool.velocityX[index] = (offsetX / horizontalDistance) * horizontalSpeed
+    pool.velocityY[index] = tangent * horizontalSpeed
+    pool.velocityZ[index] = (offsetZ / horizontalDistance) * horizontalSpeed
+  } else {
+    const length = Math.hypot(offsetX, offsetY, offsetZ)
+    const inverseLength = length > 0 ? 1 / length : 0
+    pool.velocityX[index] = offsetX * inverseLength * ENEMY_ARROW.speed
+    pool.velocityY[index] = offsetY * inverseLength * ENEMY_ARROW.speed
+    pool.velocityZ[index] =
+      length > 0
+        ? offsetZ * inverseLength * ENEMY_ARROW.speed
+        : -ENEMY_ARROW.speed
+  }
   pool.ageSeconds[index] = 0
   pool.distanceTravelled[index] = 0
   return index

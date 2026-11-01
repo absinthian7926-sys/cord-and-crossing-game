@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { ENEMY_DEATH, ENEMY_SPAWNS } from '../data/enemies'
 import {
+  advanceRespawnElapsed,
   advanceRespawn,
+  canRespawnFromElapsed,
   createRespawnState,
   createSpawnPlan,
   markEnemyDead,
@@ -59,5 +61,17 @@ describe('enemy spawns', () => {
     expect(advanceRespawn(state, 0, 40.001)).toBe(true)
     expect(state.dead).toBe(false)
     expect(advanceRespawn(state, 100, 100)).toBe(false)
+  })
+
+  it('counts the runtime respawn timer from the lethal hit through the fall', () => {
+    let elapsed = advanceRespawnElapsed(0, 299)
+    expect(canRespawnFromElapsed(elapsed, 100)).toBe(false)
+    elapsed = advanceRespawnElapsed(elapsed, 1)
+    expect(
+      canRespawnFromElapsed(elapsed, ENEMY_DEATH.respawnPlayerDistance),
+    ).toBe(false)
+    expect(
+      canRespawnFromElapsed(elapsed, ENEMY_DEATH.respawnPlayerDistance + 0.001),
+    ).toBe(true)
   })
 })

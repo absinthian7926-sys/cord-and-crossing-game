@@ -159,6 +159,23 @@ export function createRespawnState(): RespawnState {
   return { dead: false, remainingSeconds: 0 }
 }
 
+export function advanceRespawnElapsed(
+  elapsedSeconds: number,
+  dtSeconds: number,
+): number {
+  return Math.max(0, elapsedSeconds) + Math.max(0, dtSeconds)
+}
+
+export function canRespawnFromElapsed(
+  elapsedSeconds: number,
+  playerDistanceFromAnchor: number,
+): boolean {
+  return (
+    elapsedSeconds >= ENEMY_DEATH.respawnSeconds &&
+    playerDistanceFromAnchor > ENEMY_DEATH.respawnPlayerDistance
+  )
+}
+
 export function markEnemyDead(state: RespawnState): void {
   state.dead = true
   state.remainingSeconds = ENEMY_DEATH.respawnSeconds
