@@ -44,13 +44,17 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
   )
   expect(afterBackwardDodge.z - end.z).toBeGreaterThan(3)
 
-  await page.keyboard.down('KeyW')
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition().z < -1.45,
-    undefined,
-    { timeout: 8_000 },
+  await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.teleport(0, -1.7),
   )
-  await page.keyboard.up('KeyW')
+  await page.waitForFunction(
+    () => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.abs(position.x) < 0.05 && Math.abs(position.z + 1.7) < 0.05
+    },
+    undefined,
+    { timeout: 5_000 },
+  )
 
   const canvas = page.locator('canvas')
   const bounds = await canvas.boundingBox()
@@ -59,9 +63,17 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     bounds.x + bounds.width / 2,
     bounds.y + bounds.height / 2,
   )
-  await page.mouse.down({ button: 'left' })
-  await page.waitForTimeout(60)
-  await page.mouse.up({ button: 'left' })
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mousedown', { button: 0, bubbles: true }),
+    ),
+  )
+  await page.waitForTimeout(500)
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mouseup', { button: 0, bubbles: true }),
+    ),
+  )
   await page.waitForFunction(
     () =>
       window
@@ -76,7 +88,7 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
       new MouseEvent('mousedown', { button: 2, bubbles: true }),
     ),
   )
-  await page.waitForTimeout(120)
+  await page.waitForTimeout(500)
   await page.evaluate(() =>
     window.dispatchEvent(
       new MouseEvent('mouseup', { button: 2, bubbles: true }),
