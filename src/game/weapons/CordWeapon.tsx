@@ -35,6 +35,7 @@ import {
   type CordState,
 } from './cordState'
 import {
+  recordCameraDistanceWhileOut,
   registerForceCut,
   recordDummyDamage,
   resetWeaponRuntime,
@@ -403,6 +404,8 @@ export function CordWeapon() {
       cord.current.mode,
       heightAt,
     )
+    if (cord.current.mode === 'Out')
+      recordCameraDistanceWhileOut(player.cameraDistance)
     const ropeAttribute = ropeGeometry.getAttribute(
       'position',
     ) as BufferAttribute

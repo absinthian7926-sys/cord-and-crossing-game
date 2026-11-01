@@ -25,6 +25,7 @@ declare global {
       getPerfStats: () => PerfStats
       getTerrainHeight: (x: number, z: number) => number
       getCameraDistance: () => number
+      getMinimumCameraDistanceWhileOut: () => number | null
       teleport: (x: number, z: number) => void
     }
   }
@@ -41,6 +42,8 @@ export default function App() {
         getPerfStats,
         getTerrainHeight: heightAt,
         getCameraDistance: () => playerStore.getState().cameraDistance,
+        getMinimumCameraDistanceWhileOut: () =>
+          weaponRuntime.minimumCameraDistanceWhileOut,
         teleport: (x, z) => {
           playerStore.getState().teleportTarget = {
             x,

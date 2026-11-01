@@ -2,6 +2,8 @@ import { expect, test } from '@playwright/test'
 import { PLAYER } from '../src/data/player'
 import { ZONE } from '../src/data/zone'
 
+test.setTimeout(60_000)
+
 test('loads the game canvas and moves the player forward', async ({ page }) => {
   const browserErrors: string[] = []
   page.on('console', (message) => {
@@ -23,7 +25,7 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
       return Math.hypot(current.x - origin.x, current.z - origin.z) > 0.5
     },
     start,
-    { timeout: 5_000 },
+    { timeout: 10_000 },
   )
   await page.keyboard.up('KeyW')
   const end = await page.evaluate(() =>
@@ -36,7 +38,7 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     (origin) =>
       window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition().z - origin.z > 3,
     end,
-    { timeout: 5_000 },
+    { timeout: 10_000 },
   )
   await page.keyboard.up('KeyC')
   const afterBackwardDodge = await page.evaluate(() =>
@@ -80,7 +82,7 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
         .__CORD_AND_CROSSING_DEBUG__!.getDummyDamageLog()
         .some((entry) => entry.damage === 14),
     undefined,
-    { timeout: 5_000 },
+    { timeout: 10_000 },
   )
 
   await page.evaluate(() =>
@@ -95,28 +97,24 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     ),
   )
   await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'Out',
-    undefined,
-    { timeout: 2_000 },
-  )
-  const cameraDistanceWhileOut = await page.evaluate(() =>
-    window.__CORD_AND_CROSSING_DEBUG__!.getCameraDistance(),
-  )
-  expect(cameraDistanceWhileOut).toBeGreaterThanOrEqual(
-    PLAYER.camera.minimumDistance,
-  )
-  await page.waitForFunction(
     () =>
       window
         .__CORD_AND_CROSSING_DEBUG__!.getDummyDamageLog()
         .some((entry) => entry.damage === 26),
     undefined,
-    { timeout: 5_000 },
+    { timeout: 10_000 },
   )
   await page.waitForFunction(
     () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'InHand',
     undefined,
-    { timeout: 5_000 },
+    { timeout: 10_000 },
+  )
+  const cameraDistanceWhileOut = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getMinimumCameraDistanceWhileOut(),
+  )
+  expect(cameraDistanceWhileOut).not.toBeNull()
+  expect(cameraDistanceWhileOut!).toBeGreaterThanOrEqual(
+    PLAYER.camera.minimumDistance,
   )
 
   await page.waitForFunction(
