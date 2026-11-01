@@ -10,8 +10,18 @@ import { useEffect, useRef } from 'react'
 import { Group, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
 import { ZONE } from '../../data/zone'
+import { resetEnemiesToReturn } from '../enemies/enemyRuntime'
+import { resetWeaponToInHand } from '../weapons/weaponRuntime'
 import { heightAt } from '../world/terrain'
-import { consumeInput, inputHeld } from './input'
+import {
+  beginPlayerDeath,
+  isPlayerInputLocked,
+  isPlayerSpawnInvulnerable,
+  resetVitalsForRespawn,
+  stepPlayerDeath,
+  WAYSTATION_RESPAWN,
+} from './death'
+import { clearInput, consumeInput, inputHeld } from './input'
 import { resolveGroundSpeed } from './movement'
 import { playerStore } from './playerStore'
 import { spendDodgeStamina, updateVitals } from './vitals'
@@ -54,6 +64,38 @@ export function PlayerController() {
     if (!body.current || !collider.current) return
     const delta = Math.min(rawDelta, 1 / 30)
     const store = playerStore.getState()
+    if (beginPlayerDeath(store.death, store.vitals.health)) {
+      clearInput()
+      dodgeLeft.current = 0
+      cooldown.current = 0
+      invulnerableLeft.current = 0
+      vertical.current = 0
+      resetWeaponToInHand()
+      resetEnemiesToReturn()
+    }
+    const respawned = stepPlayerDeath(store.death, delta)
+    store.invulnerable =
+      isPlayerInputLocked(store.death) ||
+      isPlayerSpawnInvulnerable(store.death) ||
+      invulnerableLeft.current > 0
+    if (respawned) {
+      const position = store.position
+      resetVitalsForRespawn(store.vitals)
+      position.x = WAYSTATION_RESPAWN.x
+      position.y =
+        WAYSTATION_RESPAWN.y +
+        PLAYER.collider.halfHeight +
+        PLAYER.collider.radius
+      position.z = WAYSTATION_RESPAWN.z
+      body.current.setTranslation(position, true)
+      body.current.setNextKinematicTranslation(position)
+      store.teleportTarget = null
+      vertical.current = 0
+      unsafeSeconds.current = 0
+      resetWeaponToInHand()
+      return
+    }
+    if (isPlayerInputLocked(store.death)) return
     const teleportTarget = store.teleportTarget
     if (teleportTarget) {
       store.position.x = teleportTarget.x
@@ -149,7 +191,8 @@ export function PlayerController() {
     if (direction.lengthSq() > 0.001 && visual.current)
       visual.current.rotation.y = Math.atan2(direction.x, direction.z)
     updateVitals(store.vitals, delta, running)
-    store.invulnerable = invulnerableLeft.current > 0
+    store.invulnerable =
+      invulnerableLeft.current > 0 || isPlayerSpawnInvulnerable(store.death)
   })
 
   return (

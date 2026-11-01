@@ -16,6 +16,7 @@ import {
 } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
 import { applyCombatDamage } from '../combat/combat'
+import { distanceSquaredPointToSegment } from '../combat/hitboxes'
 import {
   cameraRayFilterPredicate,
   registerCameraExcludedCollider,
@@ -178,7 +179,24 @@ export function Enemy({ enemy }: EnemyProps) {
     const distanceToPlayer = Math.hypot(toPlayerX, toPlayerZ)
     const fromAnchorX = enemy.x - enemy.anchorX
     const fromAnchorZ = enemy.z - enemy.anchorZ
-    const distanceFromAnchor = Math.hypot(fromAnchorX, fromAnchorZ)
+    const hasPatrolRoute =
+      enemy.patrolStartX !== enemy.patrolEndX ||
+      enemy.patrolStartZ !== enemy.patrolEndZ
+    const distanceFromAnchor = hasPatrolRoute
+      ? Math.sqrt(
+          distanceSquaredPointToSegment(
+            enemy.x,
+            0,
+            enemy.z,
+            enemy.patrolStartX,
+            0,
+            enemy.patrolStartZ,
+            enemy.patrolEndX,
+            0,
+            enemy.patrolEndZ,
+          ),
+        )
+      : Math.hypot(fromAnchorX, fromAnchorZ)
     const playerSafeDistance = Math.hypot(player.position.x, player.position.z)
     const enemySafeDistance = Math.hypot(enemy.x, enemy.z)
 
@@ -198,7 +216,7 @@ export function Enemy({ enemy }: EnemyProps) {
         true,
         rapier.QueryFilterFlags.EXCLUDE_SENSORS,
         undefined,
-        enemyCollider,
+        player.collider ?? undefined,
         undefined,
         cameraRayFilterPredicate,
       )
@@ -261,7 +279,11 @@ export function Enemy({ enemy }: EnemyProps) {
           player.invulnerable,
         )
         if (enemy.type === 'cliffHound')
-          requestHoundCordBite(enemy.x, enemy.y, enemy.z)
+          requestHoundCordBite(
+            enemy.x,
+            enemy.y + ENEMY_TYPES.cliffHound.collider.length * 0.5,
+            enemy.z,
+          )
       }
     }
 
@@ -270,10 +292,7 @@ export function Enemy({ enemy }: EnemyProps) {
     let shouldMove = false
     const intent = result.moveTarget
     if (intent === 'PatrolPoint') {
-      const hasRoute =
-        enemy.patrolStartX !== enemy.patrolEndX ||
-        enemy.patrolStartZ !== enemy.patrolEndZ
-      if (hasRoute) {
+      if (hasPatrolRoute) {
         const towardEnd = enemy.patrolIndex % 2 === 0
         targetX = towardEnd ? enemy.patrolEndX : enemy.patrolStartX
         targetZ = towardEnd ? enemy.patrolEndZ : enemy.patrolStartZ

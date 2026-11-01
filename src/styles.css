@@ -121,6 +121,13 @@ canvas {
   font-size: 0.7rem;
   letter-spacing: 0.12em;
 }
+.death-fade {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  background: #101415;
+  opacity: 0;
+}
 @media (max-width: 600px) {
   .controls-hint {
     display: none;

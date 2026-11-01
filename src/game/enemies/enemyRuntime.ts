@@ -58,6 +58,7 @@ export type EnemySnapshot = {
   hp: number
   position: { x: number; y: number; z: number }
   alive: boolean
+  attackCooldown: number
 }
 
 export type EnemySpawnLike = {
@@ -191,6 +192,7 @@ export function getEnemySnapshots(): EnemySnapshot[] {
     hp: enemy.hp,
     position: { x: enemy.x, y: enemy.y, z: enemy.z },
     alive: enemy.phase === 'Alive',
+    attackCooldown: enemy.attackCooldown,
   }))
 }
 

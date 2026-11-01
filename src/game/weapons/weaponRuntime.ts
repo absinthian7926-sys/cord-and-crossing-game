@@ -11,6 +11,7 @@ type DamageListener = (entry: DamageLogEntry) => void
 
 const damageListeners = new Set<DamageListener>()
 let forceCutHandler: (() => void) | null = null
+let resetWeaponHandler: (() => void) | null = null
 
 export const weaponRuntime = {
   cord: initialCordState(),
@@ -49,6 +50,14 @@ export function registerForceCut(handler: (() => void) | null): void {
 
 export function forceCut(): void {
   forceCutHandler?.()
+}
+
+export function registerWeaponReset(handler: (() => void) | null): void {
+  resetWeaponHandler = handler
+}
+
+export function resetWeaponToInHand(): void {
+  resetWeaponHandler?.()
 }
 
 export function resetWeaponRuntime(): void {

@@ -132,13 +132,14 @@ M4 implementation defaults (all GAME (NEW), revisable):
 - Placeholder Road brigand and Brigand archer bodies use capsules with 0.4 m radius and 1.8 m height. Their placeholder colors are #655c50 and #8b8170. Cliff hounds use low capsules with 0.3 m radius, 0.9 m length and color #665e4d.
 - Road brigand attack reach is 1.8 m and Cliff hound bite reach is 1.4 m. Archers and hounds are light enemies and take the existing 0.4 s cast stagger. Road brigands stagger only on close combo hit 3. Bucklers block 50% of straight casts inside a 90 degree frontal cone. Arc hits never block. The `breaksGuard` hit flag exists but defaults false in M4.
 - Arrows travel at 35 m/s with 9.81 m/s2 gravity, use a 0.15 m hit radius, draw from a fixed pool of 16 and despawn after 2 s, after 30 m or on terrain impact. They aim at the player's current position at release with no lead.
-- A Cliff hound in Attack within its 1.4 m bite reach checks the existing cord capsule on its 0.8 s bite cadence. Its cutter volume radius is 0.38 m. A bite overlapping the cord while it is Out produces one cut through the existing cut and re-tie path.
-- Patrol movement is 50% of chase speed. Each patrol uses 3 or 4 points within 15 m of its anchor. The mixed road patrol has 2 Road brigands and 1 Brigand archer between road distances 150 m and 350 m.
+- A Cliff hound in Attack within its 1.4 m bite reach checks the existing cord capsule on its 0.8 s bite cadence. Its cutter volume radius is 0.38 m and is centered at the top of the low hound capsule. A bite overlapping the cord while it is Out produces one cut through the existing cut and re-tie path.
+- Patrol movement is 50% of chase speed. Each patrol uses 3 or 4 points within 15 m of its anchor. The mixed road patrol has 2 Road brigands and 1 Brigand archer between road distances 150 m and 350 m. Its 40 m leash is measured from the nearest point on that route corridor so the patrol can traverse both endpoints.
 - The camp spawn anchor is (380, -240) with enemies spread within 30 m. Cliff hound pack anchors are (25, -160) with 3 hounds and (-20, -225) with 2 hounds.
 - Alert lasts 0.6 s before Chase. Return restores full health when an enemy is within 1 m of its anchor. Line of sight uses one physics ray against terrain and large rocks.
 - Enemies ignore a player inside the 25 m waystation safe zone and Return if the player is there. Enemy bodies, arrows and all sensors are excluded from the camera ray. Terrain, large rocks and buildings remain camera blockers.
-- Player death uses a 1.5 s placeholder fade, then respawns at (0, 8, 0) with full health and stamina, 2 s spawn invulnerability and the cord In Hand.
+- Player death uses a 1.5 s placeholder fade, then respawns at (0, 8, 0) with full health and stamina, 2 s spawn invulnerability and the cord In Hand. All living enemies reset to Return when the player dies because no nearby reset radius is defined for M4.
 - Enemy death uses a 1.0 s placeholder fall before removal. Respawn is scheduled after 300 s and waits until the player is more than 40 m from the anchor. A small PLACEHOLDER world-space health bar is shown for 4 s after damage.
+- Road brigand and Cliff hound damage lands immediately when the cadence is ready and the target remains within reach because no melee windup is defined for M4.
 
 ## 8. Quest (one NPC)
 
