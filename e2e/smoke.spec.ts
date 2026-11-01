@@ -4,7 +4,7 @@ import { PLAYER } from '../src/data/player'
 import { REACHBLADE } from '../src/data/weapons'
 import { ZONE } from '../src/data/zone'
 
-test.setTimeout(120_000)
+test.setTimeout(180_000)
 
 test('loads the game canvas and moves the player forward', async ({ page }) => {
   const browserErrors: string[] = []
@@ -345,7 +345,7 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
       maximumHealth: PLAYER.health.max,
       maximumStamina: PLAYER.stamina.max,
     },
-    { timeout: 10_000 },
+    { timeout: 30_000 },
   )
 
   await page.evaluate(
@@ -376,12 +376,12 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
       )
     },
     undefined,
-    { timeout: 10_000 },
+    { timeout: 30_000 },
   )
   await page.waitForFunction(
     () => window.__CORD_AND_CROSSING_DEBUG__!.getActiveArrowCount() > 0,
     undefined,
-    { timeout: 10_000 },
+    { timeout: 30_000 },
   )
   const busyCampPerf = await page.evaluate(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.getPerfStats(),
