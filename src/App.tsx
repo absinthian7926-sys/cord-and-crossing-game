@@ -5,11 +5,19 @@ import { PLAYER } from './data/player'
 import { attachInput, detachInput } from './game/player/input'
 import { playerStore } from './game/player/playerStore'
 import { SceneManager } from './game/scenes/SceneManager'
+import {
+  forceCut,
+  weaponRuntime,
+  type DamageLogEntry,
+} from './game/weapons/weaponRuntime'
 import { Hud } from './ui/Hud'
 declare global {
   interface Window {
     __CORD_AND_CROSSING_DEBUG__?: {
       getPlayerPosition: () => { x: number; y: number; z: number }
+      getCordState: () => string
+      getDummyDamageLog: () => DamageLogEntry[]
+      forceCut: () => void
     }
   }
 }
@@ -19,6 +27,9 @@ export default function App() {
     if (import.meta.env.DEV)
       window.__CORD_AND_CROSSING_DEBUG__ = {
         getPlayerPosition: () => ({ ...playerStore.getState().position }),
+        getCordState: () => weaponRuntime.cord.mode,
+        getDummyDamageLog: () => [...weaponRuntime.damageLog],
+        forceCut,
       }
     return () => {
       detachInput()

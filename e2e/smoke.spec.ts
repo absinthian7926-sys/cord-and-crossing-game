@@ -35,4 +35,48 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition(),
   )
   expect(afterBackwardDodge.z - end.z).toBeGreaterThan(3)
+
+  await page.keyboard.down('KeyW')
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition().z < -1.45,
+    undefined,
+    { timeout: 8_000 },
+  )
+  await page.keyboard.up('KeyW')
+
+  const canvas = page.locator('canvas')
+  const bounds = await canvas.boundingBox()
+  if (!bounds) throw new Error('Canvas bounds unavailable')
+  await page.mouse.move(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2,
+  )
+  await page.mouse.down({ button: 'left' })
+  await page.waitForTimeout(60)
+  await page.mouse.up({ button: 'left' })
+  await page.waitForFunction(
+    () =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getDummyDamageLog()
+        .some((entry) => entry.damage === 14),
+    undefined,
+    { timeout: 5_000 },
+  )
+
+  await page.mouse.down({ button: 'right' })
+  await page.waitForTimeout(120)
+  await page.mouse.up({ button: 'right' })
+  await page.waitForFunction(
+    () =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getDummyDamageLog()
+        .some((entry) => entry.damage === 26),
+    undefined,
+    { timeout: 5_000 },
+  )
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'InHand',
+    undefined,
+    { timeout: 5_000 },
+  )
 })
