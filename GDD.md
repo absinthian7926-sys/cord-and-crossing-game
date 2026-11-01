@@ -56,6 +56,22 @@ Layout (about 1000 m x 1000 m, heightmap terrain, sea on the west edge):
 - E. Ruin shelf: a collapsed stone frame shelter at the top of the rise holding a portico pair (GAME placement; portico pairs and frame shelters are CANON concepts). The screen is dormant until the quest step unlocks it.
 - F. Crossing Hollow (second small area, about 120 m x 120 m, separate scene loaded after the crossing): a sheltered stone hollow with a practice rail, a target post and a small final encounter.
 
+M3 implementation defaults (all GAME (NEW), revisable):
+- Coordinates use +X east, -Z north and +Y up. The 1000 m square runs from X -150 to 850 and Z -500 to 500, putting the west coast about 150 m from the waystation while leaving room for the 600 m road. Spawn is (0, 8, 0).
+- The heightmap is a deterministic 257 x 257 grid with seed 1, 64-cell chunks, 2 LOD levels and a 260 m LOD switch. Maximum height is 60 m. The waystation, camp and Ruin Shelf flatten to about 8 m, 38 m and 58 m. Noise uses scales 95 m and 31 m with amplitudes 3.5 m and 1.1 m.
+- Sea level is 0. The coast begins at X -150 and blends to the plateau by X -75. The sea plane is 500 m wide and 1200 m deep.
+- Location centers and scatter-exclusion radii are A (0, 0), 25 m; B (300, -55), 12 m; C (0, -190), 24 m; D (380, -240), 55 m; and E (600, -80), 42 m.
+- The road is 6 m wide, drawn 0.04 m above terrain, flattened across 13 m and excludes scatter within 9 m. It is sampled every 3 m through control points (0, 0), (75, -8), (150, -28), (230, -15), (310, -70), (390, -120), (490, -95) and (600, -80). Wrecked carts sit about 200 m and 400 m along it.
+- The cliff path is 3 m wide through points (120, -30), (70, -95), (25, -160), (-20, -225) and (-65, -280). Its rope rail is 1.1 m high with posts every 8 m; rail posts use 0.1 m radius and the rope sits at 0.9 m.
+- Medium scatter uses seed 11 for 2500 rocks across 3 variants and seed 29 for 6000 scrub across 2 variants. Low density is 0.5x, Medium 1x and High 1.5x. Rock scale ranges from 0.35 to 2.2 and scrub from 0.35 to 1.15. Rocks at least 1.5 m scale within 10 m of a road or path may receive simple colliders.
+- Quality defaults to Medium. Low, Medium and High draw distances are 450 m, 650 m and 850 m. Fixed fog starts at 150 m and ends at 600 m, using color #91a3a4. Sun shadow maps are 1024 on Low and Medium and 2048 on High. Quality changes only shadow map size, scatter density and draw distance.
+- The fixed sun points from west-southwest with normalized direction (-0.933, 0.259, 0.25), color #ffc98a and intensity 2.4. Hemisphere fill intensity is 0.7. The moving shadow camera covers 90 m around the player, follows across 160 m and uses bias -0.0005.
+- Falling or leaving the 1000 m bounds resets after 1 s when 5 m below terrain or 1.5 m into the sea. Boundary walls are 80 m high and 2 m thick.
+- The inert portico pillars are 2.4 m apart and 3.2 m high. The waystation shelter is 8 x 3.2 x 5 m centered at (-7, 3), uses 0.16 m posts, and has a 0.5 m radius by 1.2 m barrel at offset (4, 2). Its PLACEHOLDER NPC marker is a flat 0.6 m disc at offset (2, 2), with no person, interaction or gameplay.
+- Placeholder carts use a 3.2 x 0.7 x 1.6 m body with 0.48 m radius by 0.22 m wheels. Camp tents use 6 x 3.2 x 4 m forms at offsets (-10, 0), (8, -5) and (2, 10). The static fire radius is 0.8 m with glow range 12 m. The lookout is 3 x 6 x 3 m at offset (14, -12).
+- Ruin frame posts use 1.4 x 4 x 1.4 m forms at offsets (-6, 0), (6, 0) and (0, 5), with a 13 x 0.8 x 1.4 m lintel. The inert portico center is (600, -80) and its pillar forms are 0.7 x 3.2 x 0.7 m.
+- The dev performance overlay samples every 0.25 s and toggles with F3. Palette values are terrain #6f735f, road #725f45, sea #557981, rocks #686b66 / #77766d / #595f5d, scrub #6d7657 / #7c7657, wood #8b7658, rope #a48a5e, stone #777873, tent #82745f, fire #d98245 and NPC marker #b8aa82.
+
 Time of day: fixed late afternoon in Slice 1 (warm sun low over the sea). Day-night cycle later.
 
 ## 5. Player
@@ -88,7 +104,7 @@ The reachblade (SITE): a forearm-length leaf-shaped single-edged blade with an i
 ### 6.3 Utility (Slice 1)
 - Snag: casting at marked rope posts or loose crates pulls them 2 m (one physics puzzle in Crossing Hollow).
 - Stop: tapping Q twice within 0.3 s instantly drops the cord tension and cancels the cast with zero recovery delay, but the blade lands at the current point and must be picked up (walk over it). Teaches "stopping and recovery".
-- GAME (NEW): dropped blade pickup radius is 0.8 m and the moving blade hit radius is 0.6 m. The M2 rope simulation uses 16 points, 12 constraint iterations, damping 0.985, gravity 9.81 m/s2, a 0.04 m ground height and a 0.12 m rope hit radius. The visible cut-line stub uses 5 points. Training dummies stand at 3 m, 5 m and 8 m from spawn; the 8 m dummy is the cord-cutter test target with a 0.38 m cutter volume.
+- GAME (NEW): dropped blade pickup radius is 0.8 m and the moving blade hit radius is 0.6 m. The M2 rope simulation uses 16 points, 12 constraint iterations, damping 0.985, gravity 9.81 m/s2, a 0.04 m ground offset and a 0.12 m rope hit radius. The visible cut-line stub uses 5 points. Training dummies stand about 3 m, 5.2 m and 5.95 m from spawn; the 5.95 m dummy is the cord-cutter test target with a 0.38 m cutter volume.
 
 ### 6.4 Effects and heelstones
 - Crossing (CANON): stepping fully through an active portico screen (both feet past the screen plane, tracked by a trigger volume pair) grants the effect. Partial entry grants nothing. A fresh effect needs another full crossing.

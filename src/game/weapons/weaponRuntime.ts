@@ -15,10 +15,21 @@ let forceCutHandler: (() => void) | null = null
 export const weaponRuntime = {
   cord: initialCordState(),
   damageLog: [] as DamageLogEntry[],
+  minimumCameraDistanceWhileOut: null as number | null,
 }
 
 export function setCordState(state: CordState): void {
+  if (state.mode === 'Out' && weaponRuntime.cord.mode !== 'Out')
+    weaponRuntime.minimumCameraDistanceWhileOut = null
   weaponRuntime.cord = state
+}
+
+export function recordCameraDistanceWhileOut(distance: number): void {
+  if (weaponRuntime.cord.mode !== 'Out') return
+  weaponRuntime.minimumCameraDistanceWhileOut =
+    weaponRuntime.minimumCameraDistanceWhileOut === null
+      ? distance
+      : Math.min(weaponRuntime.minimumCameraDistanceWhileOut, distance)
 }
 
 export function recordDummyDamage(entry: DamageLogEntry): void {
@@ -43,4 +54,5 @@ export function forceCut(): void {
 export function resetWeaponRuntime(): void {
   weaponRuntime.cord = initialCordState()
   weaponRuntime.damageLog.length = 0
+  weaponRuntime.minimumCameraDistanceWhileOut = null
 }
