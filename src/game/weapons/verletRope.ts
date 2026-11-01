@@ -6,6 +6,20 @@ export type HeightSampler = (x: number, z: number) => number
 
 const flatGroundHeight: HeightSampler = () => 0
 
+export function stepDroppedBlade(
+  blade: Point3,
+  verticalVelocity: number,
+  deltaSeconds: number,
+  sampleHeight: HeightSampler = flatGroundHeight,
+): number {
+  const dt = Math.max(0, Math.min(deltaSeconds, 1 / 30))
+  const groundHeight =
+    sampleHeight(blade.x, blade.z) + REACHBLADE.rope.groundHeight
+  const nextVelocity = verticalVelocity - REACHBLADE.rope.gravity * dt
+  blade.y = Math.max(groundHeight, blade.y + nextVelocity * dt)
+  return blade.y <= groundHeight ? 0 : nextVelocity
+}
+
 export type VerletRope = {
   positions: Float32Array
   previous: Float32Array

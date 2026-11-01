@@ -41,7 +41,11 @@ import {
   resetWeaponRuntime,
   setCordState,
 } from './weaponRuntime'
-import { createVerletRope, stepVerletRope } from './verletRope'
+import {
+  createVerletRope,
+  stepDroppedBlade,
+  stepVerletRope,
+} from './verletRope'
 
 type PendingAction =
   | { kind: 'close'; remaining: number; attack: CloseAttack }
@@ -375,14 +379,12 @@ export function CordWeapon() {
         blade.copy(hand)
       }
     } else if (cord.current.mode === 'Dropped') {
-      const groundHeight =
-        heightAt(blade.x, blade.z) + REACHBLADE.rope.groundHeight
-      droppedVelocity.current -= REACHBLADE.rope.gravity * delta
-      blade.y = Math.max(
-        groundHeight,
-        blade.y + droppedVelocity.current * delta,
+      droppedVelocity.current = stepDroppedBlade(
+        blade,
+        droppedVelocity.current,
+        delta,
+        heightAt,
       )
-      if (blade.y === groundHeight) droppedVelocity.current = 0
       const pickupX = blade.x - player.position.x
       const pickupZ = blade.z - player.position.z
       if (

@@ -5,14 +5,15 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
+    "build": "tsc -b && vite build && npm run verify:prod-debug",
     "typecheck": "tsc -b --pretty false",
     "preview": "vite preview",
     "test": "vitest run --coverage",
     "test:e2e": "playwright test",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "verify:prod-debug": "node scripts/verify-production-debug-hook.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.0.0",
