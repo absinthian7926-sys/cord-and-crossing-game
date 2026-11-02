@@ -16,6 +16,7 @@ import {
   isHeelstonePassRunning,
 } from '../effects/effectRuntime'
 import { resetEnemiesNearDeathToReturn } from '../enemies/enemyRuntime'
+import { getPausableDelta } from '../pause/pauseRuntime'
 import { getWorldConfiguration } from '../scenes/sceneRuntime'
 import { resetWeaponToInHand } from '../weapons/weaponRuntime'
 import {
@@ -77,7 +78,8 @@ export function PlayerController() {
   useFrame((_, rawDelta) => {
     const controller = character.current
     if (!body.current || !collider.current || !controller) return
-    const delta = Math.min(rawDelta, 1 / 30)
+    const delta = getPausableDelta(rawDelta)
+    if (delta === 0) return
     const store = playerStore.getState()
     if (beginPlayerDeath(store.death, store.vitals.health)) {
       clearInput()

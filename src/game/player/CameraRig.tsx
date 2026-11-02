@@ -3,6 +3,7 @@ import { useRapier } from '@react-three/rapier'
 import { useEffect, useRef } from 'react'
 import { MathUtils, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
+import { getPausableDelta } from '../pause/pauseRuntime'
 import { cameraRayFilterPredicate } from './cameraCollisionRegistry'
 import { applyShoulderOffset, resolveCameraDistance } from './cameraMath'
 import { playerStore } from './playerStore'
@@ -76,7 +77,8 @@ export function CameraRig() {
     }
   }, [gl])
 
-  useFrame((_, deltaSeconds) => {
+  useFrame((_, rawDeltaSeconds) => {
+    const deltaSeconds = getPausableDelta(rawDeltaSeconds)
     const position = playerStore.getState().position
     const { yaw, pitch, distance } = orbit.current
     baseTarget.set(position.x, position.y + 0.45, position.z)

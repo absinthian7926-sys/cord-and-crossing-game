@@ -4,6 +4,12 @@ import { resetEffectRuntime } from '../effects/effectRuntime'
 import { createPlayerDeathState } from '../player/death'
 import { playerStore } from '../player/playerStore'
 import {
+  getPauseRuntimeSnapshot,
+  isGameplayTimePaused,
+  subscribePausableClock,
+  subscribePauseRuntime,
+} from '../pause/pauseRuntime'
+import {
   getQuestRuntimeSnapshot,
   hydrateQuestRuntime,
   subscribeQuestRuntime,
@@ -163,7 +169,24 @@ export function installRuntimeAutosave(
     persist()
   })
   const unsubscribeWorld = worldAdapter.subscribe(persist)
+  let pauseWasOpen = getPauseRuntimeSnapshot().open
+  const unsubscribePause = subscribePauseRuntime(() => {
+    const pauseOpen = getPauseRuntimeSnapshot().open
+    if (pauseOpen && !pauseWasOpen) persist()
+    pauseWasOpen = pauseOpen
+  })
+  let periodicElapsedSeconds = 0
+  let clockHasAdvanced = false
+  const unsubscribeClock = subscribePausableClock((deltaSeconds) => {
+    clockHasAdvanced = true
+    periodicElapsedSeconds += deltaSeconds
+    if (periodicElapsedSeconds < SAVE_CONFIG.autosaveSeconds) return
+    periodicElapsedSeconds %= SAVE_CONFIG.autosaveSeconds
+    const player = playerStore.getState()
+    if (player.death.phase === 'Alive' && player.vitals.health > 0) persist()
+  })
   const intervalId = host.setInterval(() => {
+    if (isGameplayTimePaused() || clockHasAdvanced) return
     const player = playerStore.getState()
     if (player.death.phase === 'Alive' && player.vitals.health > 0) persist()
   }, SAVE_CONFIG.autosaveSeconds * 1_000)
@@ -173,6 +196,8 @@ export function installRuntimeAutosave(
   return () => {
     unsubscribeQuest()
     unsubscribeWorld()
+    unsubscribePause()
+    unsubscribeClock()
     host.clearInterval(intervalId)
     host.removeEventListener('pagehide', onPageHide)
   }

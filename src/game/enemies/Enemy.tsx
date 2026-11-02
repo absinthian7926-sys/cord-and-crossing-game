@@ -28,6 +28,7 @@ import {
 } from '../player/cameraCollisionRegistry'
 import { playerStore } from '../player/playerStore'
 import { getWorldConfiguration } from '../scenes/sceneRuntime'
+import { getPausableDelta } from '../pause/pauseRuntime'
 import { isUnarmed } from '../weapons/cordState'
 import { weaponRuntime } from '../weapons/weaponRuntime'
 import {
@@ -140,7 +141,8 @@ export function Enemy({ enemy }: EnemyProps) {
     const enemyVisual = visual.current
     const controller = character.current
     if (!enemyBody || !enemyCollider || !enemyVisual || !controller) return
-    const delta = Math.min(rawDelta, 1 / 30)
+    const delta = getPausableDelta(rawDelta)
+    if (delta === 0) return
     const player = playerStore.getState()
 
     if (enemy.teleportRequested) {

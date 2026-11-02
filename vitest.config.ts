@@ -6,6 +6,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: [
+        'src/game/pause/pause.ts',
         'src/game/weapons/cordState.ts',
         'src/game/quest/quest.ts',
         'src/game/save/save.ts',
@@ -17,6 +18,12 @@ export default defineConfig({
         'scripts/bundleBudget.mjs',
       ],
       thresholds: {
+        'src/game/pause/pause.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
         'src/game/weapons/cordState.ts': { branches: 100 },
         'src/game/quest/quest.ts': { branches: 100 },
         'src/game/save/save.ts': {

@@ -4,6 +4,7 @@ import { Frustum, InstancedMesh, Matrix4, Object3D, Vector3 } from 'three'
 import { ENEMY_ARROW, ENEMY_PRESENTATION } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
 import { applyCombatDamage } from '../combat/combat'
+import { getPausableDelta } from '../pause/pauseRuntime'
 import { playerStore } from '../player/playerStore'
 import { isUnarmed } from '../weapons/cordState'
 import { weaponRuntime } from '../weapons/weaponRuntime'
@@ -46,16 +47,20 @@ function EnemyProjectiles() {
   useFrame((_, rawDelta) => {
     const arrows = enemyRuntime.arrows
     const player = playerStore.getState()
-    const damage = stepArrows(
-      arrows,
-      Math.min(rawDelta, 1 / 30),
-      player.position.x,
-      player.position.y,
-      player.position.z,
-      PLAYER.collider.radius,
-      player.invulnerable,
-      getWorldConfiguration().sampleHeight,
-    )
+    const delta = getPausableDelta(rawDelta)
+    const damage =
+      delta > 0
+        ? stepArrows(
+            arrows,
+            delta,
+            player.position.x,
+            player.position.y,
+            player.position.z,
+            PLAYER.collider.radius,
+            player.invulnerable,
+            getWorldConfiguration().sampleHeight,
+          )
+        : 0
     if (damage > 0)
       applyCombatDamage(
         player.vitals,

@@ -2,6 +2,7 @@ import { Html } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { Group, MeshStandardMaterial } from 'three'
+import { getPauseRuntimeSnapshot } from '../pause/pauseRuntime'
 import {
   subscribeDummyDamage,
   type DamageLogEntry,
@@ -38,8 +39,8 @@ export function TrainingDummy({
     [id],
   )
 
-  useFrame(({ clock }) => {
-    const now = clock.elapsedTime
+  useFrame(() => {
+    const now = getPauseRuntimeSnapshot().elapsedSeconds
     if (group.current) {
       const staggered = now < staggerUntil.current
       group.current.rotation.z = staggered ? Math.sin(now * 32) * 0.1 : 0

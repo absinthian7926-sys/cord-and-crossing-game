@@ -1,6 +1,6 @@
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useFrame } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
-import { Suspense, useEffect } from 'react'
+import { Suspense, useEffect, useSyncExternalStore } from 'react'
 import {
   ENEMY_ARROW,
   ENEMY_TYPES,
@@ -40,12 +40,23 @@ import {
   detachInput,
   isGameplayInputLocked,
 } from './game/player/input'
+import type { PauseContext } from './game/pause/pause'
+import {
+  advancePausableClock,
+  getPauseRuntimeRevision,
+  getPauseRuntimeSnapshot,
+  requestPause,
+  resetPauseRuntime,
+  subscribePauseRuntime,
+} from './game/pause/pauseRuntime'
 import { playerStore } from './game/player/playerStore'
 import { applyDamage } from './game/player/vitals'
 import {
+  closeHollenDialogue,
   emitQuestEvent,
   getQuestRuntimeSnapshot,
   openHollenDialogue,
+  setQuestLogOpen,
 } from './game/quest/questRuntime'
 import {
   clearSave,
@@ -93,6 +104,37 @@ import { PerfOverlayGate, PerfSamplerGate } from './ui/PerfReadoutGate'
 import { getPerfStats, type PerfStats } from './ui/perfRuntime'
 import { QuestOverlay } from './ui/QuestOverlay'
 import { SceneTransitionOverlay } from './ui/SceneTransitionOverlay'
+
+const pauseContext: PauseContext = {
+  titleOpen: false,
+  dialogueOpen: false,
+  questLogOpen: false,
+  crossingFlash: false,
+  loading: false,
+  deathFade: false,
+}
+
+function readPauseContext(): PauseContext {
+  const pause = getPauseRuntimeSnapshot()
+  const quest = getQuestRuntimeSnapshot()
+  const scene = getSceneRuntimeSnapshot()
+  pauseContext.titleOpen = pause.titleOpen
+  pauseContext.dialogueOpen = quest.dialogue.currentNodeId !== null
+  pauseContext.questLogOpen = quest.questLogOpen
+  pauseContext.crossingFlash = scene.phase === 'flashing'
+  pauseContext.loading = scene.phase === 'loading'
+  pauseContext.deathFade = playerStore.getState().death.phase !== 'Alive'
+  return pauseContext
+}
+
+function PausableClockDriver() {
+  useFrame((_, deltaSeconds) => {
+    advancePausableClock(deltaSeconds)
+    if (getPauseRuntimeSnapshot().pending)
+      requestPause({ type: 'blockersCleared' }, readPauseContext())
+  }, -100)
+  return null
+}
 
 const SCENE_POSITION_RULES: ScenePositionRules = {
   zone: {
@@ -227,11 +269,32 @@ declare global {
   }
 }
 export default function App() {
+  useSyncExternalStore(
+    subscribePauseRuntime,
+    getPauseRuntimeRevision,
+    getPauseRuntimeRevision,
+  )
+  const pause = getPauseRuntimeSnapshot()
   useEffect(() => {
     configureSaveWorldRuntimeAdapter(saveWorldRuntimeAdapter)
     attachInput()
     loadRuntimeSave(window.localStorage, SCENE_POSITION_RULES)
     const stopAutosave = installRuntimeAutosave(window.localStorage, window)
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape' || event.repeat) return
+      const action = requestPause({ type: 'escape' }, readPauseContext())
+      if (action === 'closeDialogue') closeHollenDialogue()
+      else if (action === 'closeQuestLog') setQuestLogOpen(false)
+      else if (action === 'none') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
+    const onPointerLockChange = () => {
+      if (document.pointerLockElement === null)
+        requestPause({ type: 'pointerLockLost' }, readPauseContext())
+    }
+    window.addEventListener('keydown', onEscape, true)
+    document.addEventListener('pointerlockchange', onPointerLockChange)
     if (import.meta.env.DEV) {
       const DEBUG_ONLY_INVULNERABLE = 'CORD_DEBUG_ONLY_INVULNERABLE'
       const DEBUG_ONLY_GRANT_EFFECT = 'CORD_DEBUG_ONLY_GRANT_EFFECT'
@@ -541,8 +604,11 @@ export default function App() {
       }
     }
     return () => {
+      window.removeEventListener('keydown', onEscape, true)
+      document.removeEventListener('pointerlockchange', onPointerLockChange)
       stopAutosave()
       detachInput()
+      resetPauseRuntime()
       configureSaveWorldRuntimeAdapter(null)
       if (import.meta.env.DEV) delete window.__CORD_AND_CROSSING_DEBUG__
     }
@@ -560,8 +626,13 @@ export default function App() {
         dpr={[1, 1.5]}
       >
         <PerfSamplerGate />
+        <PausableClockDriver />
         <Suspense fallback={null}>
-          <Physics gravity={[0, -PLAYER.movement.gravity, 0]} timeStep={1 / 60}>
+          <Physics
+            gravity={[0, -PLAYER.movement.gravity, 0]}
+            timeStep={1 / 60}
+            paused={pause.open || pause.titleOpen}
+          >
             <SceneManager />
           </Physics>
         </Suspense>

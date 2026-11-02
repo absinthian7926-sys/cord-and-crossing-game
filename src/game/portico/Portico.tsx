@@ -23,6 +23,7 @@ import {
   registerCameraExcludedCollider,
   unregisterCameraExcludedCollider,
 } from '../player/cameraCollisionRegistry'
+import { getPausableDelta } from '../pause/pauseRuntime'
 import { playerStore } from '../player/playerStore'
 import {
   createCrossingResult,
@@ -225,7 +226,8 @@ export function Portico({
     else dispatchPorticoCrossing(direction)
   })
 
-  useFrame(({ camera }, delta) => {
+  useFrame(({ camera }, rawDelta) => {
+    const delta = getPausableDelta(rawDelta)
     const shader = material.current
     if (shader) {
       shader.uniforms.uTime.value += delta

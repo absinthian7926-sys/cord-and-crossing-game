@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PLAYER } from '../data/player'
 import { SAVE_CONFIG } from '../data/quests'
+import {
+  advancePausableClock,
+  resetPauseRuntime,
+  setPauseOpen,
+} from '../game/pause/pauseRuntime'
 import { playerStore } from '../game/player/playerStore'
 import {
   emitQuestEvent,
@@ -85,6 +90,7 @@ function testWorldAdapter(initial?: Partial<SaveWorldRuntimeState>): {
 
 describe('save runtime', () => {
   beforeEach(() => {
+    resetPauseRuntime()
     configureSaveWorldRuntimeAdapter(null)
     resetQuestRuntime()
     const player = playerStore.getState()
@@ -266,5 +272,45 @@ describe('save runtime', () => {
 
     configureSaveWorldRuntimeAdapter(null)
     installRuntimeAutosave(storage, host)()
+  })
+
+  it('autosaves on pause open and counts exactly 30 unpaused seconds', () => {
+    resetPauseRuntime()
+    const storage = memoryStorage()
+    let interval: (() => void) | null = null
+    const host: AutosaveHost = {
+      setInterval: (handler) => {
+        interval = handler
+        return 9
+      },
+      clearInterval: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }
+    const cleanup = installRuntimeAutosave(storage, host)
+
+    setPauseOpen(true)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    ;(interval as (() => void) | null)?.()
+    expect(storage.entries.size).toBe(0)
+
+    advancePausableClock(120)
+    expect(storage.entries.size).toBe(0)
+
+    setPauseOpen(false)
+    advancePausableClock(29)
+    expect(storage.entries.size).toBe(0)
+    setPauseOpen(true)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    advancePausableClock(300)
+    expect(storage.entries.size).toBe(0)
+    setPauseOpen(false)
+    advancePausableClock(1)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+
+    cleanup()
+    resetPauseRuntime()
   })
 })

@@ -48,6 +48,11 @@ import {
   hitMarkedSnagPost,
 } from '../hollow/hollowRuntime'
 import {
+  getPausableDelta,
+  getPausableRawDelta,
+  getPauseRuntimeSnapshot,
+} from '../pause/pauseRuntime'
+import {
   consumeInput,
   consumeReleased,
   inputHeld,
@@ -358,14 +363,15 @@ export function CordWeapon() {
     updateCord,
   ])
 
-  useFrame(({ clock }, rawDelta) => {
-    const delta = Math.min(rawDelta, 1 / 30)
+  useFrame((_, rawDelta) => {
+    const rawGameplayDelta = getPausableRawDelta(rawDelta)
+    const delta = getPausableDelta(rawDelta)
     let launchedThisFrame = false
     closeActiveRemaining.current = Math.max(
       0,
       closeActiveRemaining.current - delta,
     )
-    const now = clock.elapsedTime
+    const now = getPauseRuntimeSnapshot().elapsedSeconds
     const player = playerStore.getState()
     const worldConfiguration = getWorldConfiguration()
     const weaponPresent = isWeaponPresentInScene(
@@ -688,7 +694,7 @@ export function CordWeapon() {
     } else if (cord.current.mode === 'Cut') {
       // Re-tie is an elapsed-time rule, not a motion integration. Keeping the
       // unclamped render delta prevents the 2 s timer from stretching at low FPS.
-      updateCord(step(cord.current, { type: 'tick' }, rawDelta))
+      updateCord(step(cord.current, { type: 'tick' }, rawGameplayDelta))
       if (cord.current.retieRemaining <= 0) {
         updateCord(step(cord.current, { type: 'retieDone' }))
         blade.copy(hand)
