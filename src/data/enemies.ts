@@ -49,6 +49,26 @@ export const ENEMY_TYPES = {
 
 export type EnemyType = keyof typeof ENEMY_TYPES
 
+export const CAMP_LEADER = {
+  // PLACEHOLDER: player-visible generic label for the quest variant.
+  displayName: 'Camp leader',
+  baseType: 'roadBrigand',
+  maxHealth: 120,
+  scale: 1.15,
+  campOffset: [0, 4],
+  minimumQuestStep: 2,
+  respawns: false,
+  // PLACEHOLDER: dyed cloth sash is the only bright accent.
+  sashColor: '#9f493e',
+} as const
+
+export const ENEMY_VARIANTS = {
+  standard: 'standard',
+  campLeader: 'campLeader',
+} as const
+
+export type EnemyVariant = (typeof ENEMY_VARIANTS)[keyof typeof ENEMY_VARIANTS]
+
 export const ENEMY_AI = {
   aggroRadius: 18,
   leashRadius: 40,

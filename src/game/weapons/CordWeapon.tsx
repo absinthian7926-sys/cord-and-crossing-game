@@ -77,12 +77,12 @@ const arcTargets = TRAINING_DUMMIES.map((dummy) => ({
 
 function bladeOverlapsEnemy(enemy: EnemyRecord): boolean {
   const stats = ENEMY_TYPES[enemy.type]
-  const radius = stats.collider.radius
+  const radius = stats.collider.radius * enemy.scale
   const bodyHeight =
     enemy.type === 'cliffHound'
       ? ENEMY_TYPES.cliffHound.collider.length
       : ENEMY_TYPES[enemy.type].collider.height
-  const halfSegment = Math.max(0, bodyHeight * 0.5 - radius)
+  const halfSegment = Math.max(0, bodyHeight * enemy.scale * 0.5 - radius)
   const combinedRadius = REACHBLADE.bladeHitRadius + radius
   return (
     distanceSquaredPointToSegment(

@@ -1,13 +1,20 @@
 import {
+  CAMP_LEADER,
   ENEMY_AI,
   ENEMY_DEATH,
   ENEMY_TYPES,
+  ENEMY_VARIANTS,
   type EnemyType,
+  type EnemyVariant,
 } from '../../data/enemies'
 import { heightAt } from '../world/terrain'
 import { shouldBucklerBlock, type AiState } from './ai'
 import { createArrowPool, launchArrow } from './projectiles'
-import { advanceRespawnElapsed } from './spawns'
+import {
+  advanceRespawnElapsed,
+  createCampLeaderSpawn,
+  type CampLeaderSpawnState,
+} from './spawns'
 
 export type EnemyPhase = 'Alive' | 'Dying' | 'Dead'
 
@@ -31,6 +38,9 @@ export type EnemyDamageResult = {
 export type EnemyRecord = {
   id: string
   type: EnemyType
+  variant: EnemyVariant
+  scale: number
+  respawns: boolean
   state: AiState
   hp: number
   maxHp: number
@@ -60,6 +70,7 @@ export type EnemyRecord = {
 export type EnemySnapshot = {
   id: string
   type: EnemyType
+  variant: EnemyVariant
   state: AiState
   hp: number
   position: { x: number; y: number; z: number }
@@ -70,6 +81,7 @@ export type EnemySnapshot = {
 export type EnemySpawnLike = {
   id: string
   type: EnemyType
+  variant?: EnemyVariant
   x: number
   z: number
   anchorX?: number
@@ -82,9 +94,16 @@ export type EnemySpawnLike = {
 
 type RosterListener = () => void
 type HoundBiteHandler = (x: number, y: number, z: number) => boolean
+type CampLeaderDefeatedHandler = (
+  id: string,
+  x: number,
+  y: number,
+  z: number,
+) => void
 
 const rosterListeners = new Set<RosterListener>()
 let houndBiteHandler: HoundBiteHandler | null = null
+let campLeaderDefeatedHandler: CampLeaderDefeatedHandler | null = null
 let debugSpawnSequence = 0
 let randomState = 0x51_4f_4e_45
 
@@ -92,12 +111,17 @@ function notifyRoster(): void {
   for (const listener of rosterListeners) listener()
 }
 
-function groundedY(type: EnemyType, x: number, z: number): number {
+function groundedY(
+  type: EnemyType,
+  scale: number,
+  x: number,
+  z: number,
+): number {
   const bodyHeight =
     type === 'cliffHound'
       ? ENEMY_TYPES.cliffHound.collider.length
       : ENEMY_TYPES[type].collider.height
-  return heightAt(x, z) + bodyHeight * 0.5
+  return heightAt(x, z) + bodyHeight * scale * 0.5
 }
 
 function nextRandom(): number {
@@ -107,14 +131,21 @@ function nextRandom(): number {
 
 function makeRecord(spawn: EnemySpawnLike): EnemyRecord {
   const stats = ENEMY_TYPES[spawn.type]
+  const variant = spawn.variant ?? ENEMY_VARIANTS.standard
+  const isCampLeader = variant === ENEMY_VARIANTS.campLeader
+  const scale = isCampLeader ? CAMP_LEADER.scale : 1
+  const maxHealth = isCampLeader ? CAMP_LEADER.maxHealth : stats.maxHealth
   return {
     id: spawn.id,
     type: spawn.type,
+    variant,
+    scale,
+    respawns: isCampLeader ? CAMP_LEADER.respawns : true,
     state: 'Idle',
-    hp: stats.maxHealth,
-    maxHp: stats.maxHealth,
+    hp: maxHealth,
+    maxHp: maxHealth,
     x: spawn.x,
-    y: groundedY(spawn.type, spawn.x, spawn.z),
+    y: groundedY(spawn.type, scale, spawn.x, spawn.z),
     z: spawn.z,
     anchorX: spawn.anchorX ?? spawn.x,
     anchorZ: spawn.anchorZ ?? spawn.z,
@@ -140,6 +171,7 @@ function makeRecord(spawn: EnemySpawnLike): EnemyRecord {
 export const enemyRuntime = {
   records: [] as EnemyRecord[],
   arrows: createArrowPool(),
+  campLeaderDefeated: false,
 }
 
 export function initializeEnemyRoster(spawns: readonly EnemySpawnLike[]): void {
@@ -148,6 +180,7 @@ export function initializeEnemyRoster(spawns: readonly EnemySpawnLike[]): void {
   debugSpawnSequence = 0
   randomState = 0x51_4f_4e_45
   enemyRuntime.arrows.active.fill(0)
+  enemyRuntime.campLeaderDefeated = false
   notifyRoster()
 }
 
@@ -181,6 +214,16 @@ export function registerHoundBiteHandler(
   houndBiteHandler = handler
 }
 
+export function registerCampLeaderDefeatedHandler(
+  handler: CampLeaderDefeatedHandler | null,
+): void {
+  campLeaderDefeatedHandler = handler
+}
+
+export function setCampLeaderDefeated(defeated: boolean): void {
+  enemyRuntime.campLeaderDefeated = defeated
+}
+
 export function requestHoundCordBite(x: number, y: number, z: number): boolean {
   return houndBiteHandler?.(x, y, z) ?? false
 }
@@ -194,12 +237,40 @@ export function getEnemySnapshots(): EnemySnapshot[] {
   return enemyRuntime.records.map((enemy) => ({
     id: enemy.id,
     type: enemy.type,
+    variant: enemy.variant,
     state: enemy.state,
     hp: enemy.hp,
     position: { x: enemy.x, y: enemy.y, z: enemy.z },
     alive: enemy.phase === 'Alive',
     attackCooldown: enemy.attackCooldown,
   }))
+}
+
+export function ensureCampLeaderSpawned(
+  state: CampLeaderSpawnState,
+): string | null {
+  if (enemyRuntime.campLeaderDefeated) return null
+  const spawn = createCampLeaderSpawn(state)
+  if (!spawn) return null
+  for (const enemy of enemyRuntime.records)
+    if (enemy.variant === ENEMY_VARIANTS.campLeader) return enemy.id
+  enemyRuntime.records.push(
+    makeRecord({
+      id: spawn.id,
+      type: spawn.enemyType,
+      variant: spawn.variant,
+      x: spawn.x,
+      z: spawn.z,
+      anchorX: spawn.anchorX,
+      anchorZ: spawn.anchorZ,
+      patrolStartX: spawn.patrolStartX,
+      patrolStartZ: spawn.patrolStartZ,
+      patrolEndX: spawn.patrolEndX,
+      patrolEndZ: spawn.patrolEndZ,
+    }),
+  )
+  notifyRoster()
+  return spawn.id
 }
 
 export function spawnEnemy(type: EnemyType, x: number, z: number): string {
@@ -254,8 +325,16 @@ export function damageEnemy(
     enemy.deathElapsed = 0
     enemy.respawnElapsed = 0
     enemy.state = 'Return'
+    if (enemy.variant === ENEMY_VARIANTS.campLeader) {
+      enemyRuntime.campLeaderDefeated = true
+      campLeaderDefeatedHandler?.(enemy.id, enemy.x, enemy.y, enemy.z)
+    }
   }
   return { damage, blocked: false, killed: enemy.hp === 0 }
+}
+
+export function canEnemyRespawn(enemy: EnemyRecord): boolean {
+  return enemy.respawns
 }
 
 export function angleFromEnemyFacing(
@@ -324,13 +403,11 @@ export function resetEnemiesNearDeathToReturn(
 }
 
 export function resetEnemyAtAnchor(enemy: EnemyRecord): void {
-  const stats = ENEMY_TYPES[enemy.type]
   enemy.state = 'Idle'
-  enemy.hp = stats.maxHealth
-  enemy.maxHp = stats.maxHealth
+  enemy.hp = enemy.maxHp
   enemy.x = enemy.anchorX
   enemy.z = enemy.anchorZ
-  enemy.y = groundedY(enemy.type, enemy.x, enemy.z)
+  enemy.y = groundedY(enemy.type, enemy.scale, enemy.x, enemy.z)
   enemy.facingX = 0
   enemy.facingZ = -1
   enemy.phase = 'Alive'

@@ -2,7 +2,10 @@ import {
   ENEMY_DEATH,
   ENEMY_SPAWNS,
   ENEMY_TYPES,
+  CAMP_LEADER,
+  ENEMY_VARIANTS,
   type EnemyType,
+  type EnemyVariant,
 } from '../../data/enemies'
 import { ROAD_LENGTH, roadPointAt, type MutablePoint2 } from '../world/road'
 
@@ -12,6 +15,7 @@ export type SpawnGroup =
 export type SpawnDefinition = {
   id: string
   enemyType: EnemyType
+  variant?: EnemyVariant
   group: SpawnGroup
   x: number
   z: number
@@ -21,6 +25,42 @@ export type SpawnDefinition = {
   patrolStartZ: number
   patrolEndX: number
   patrolEndZ: number
+}
+
+export type CampLeaderSpawnState = {
+  questStep: number
+  keyLooted: boolean
+  leaderDefeated: boolean
+}
+
+export function canSpawnCampLeader(state: CampLeaderSpawnState): boolean {
+  return (
+    state.questStep >= CAMP_LEADER.minimumQuestStep &&
+    !state.keyLooted &&
+    !state.leaderDefeated
+  )
+}
+
+export function createCampLeaderSpawn(
+  state: CampLeaderSpawnState,
+): SpawnDefinition | null {
+  if (!canSpawnCampLeader(state)) return null
+  const x = ENEMY_SPAWNS.camp.anchor[0] + CAMP_LEADER.campOffset[0]
+  const z = ENEMY_SPAWNS.camp.anchor[1] + CAMP_LEADER.campOffset[1]
+  return {
+    id: 'camp-leader',
+    enemyType: CAMP_LEADER.baseType,
+    variant: ENEMY_VARIANTS.campLeader,
+    group: 'camp',
+    x,
+    z,
+    anchorX: x,
+    anchorZ: z,
+    patrolStartX: x,
+    patrolStartZ: z,
+    patrolEndX: x,
+    patrolEndZ: z,
+  }
 }
 
 function addCampSpawns(

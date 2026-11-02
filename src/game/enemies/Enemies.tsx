@@ -24,6 +24,7 @@ function initializeDefaultRoster(): void {
     spawnPlan.map((spawn) => ({
       id: spawn.id,
       type: spawn.enemyType,
+      variant: spawn.variant,
       x: spawn.x,
       z: spawn.z,
       anchorX: spawn.anchorX,
