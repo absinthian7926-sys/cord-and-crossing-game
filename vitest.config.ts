@@ -19,6 +19,7 @@ export default defineConfig({
         'src/game/effects/heelstonePass.ts',
         'src/game/portico/crossing.ts',
         'src/game/settings/quality.ts',
+        'src/game/settings/qualityFallback.ts',
         'src/game/settings/settings.ts',
         'src/ui/compass.ts',
         'src/ui/perfStats.ts',
@@ -73,6 +74,12 @@ export default defineConfig({
         'src/game/effects/heelstonePass.ts': { branches: 100 },
         'src/game/portico/crossing.ts': { branches: 100 },
         'src/game/settings/quality.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        'src/game/settings/qualityFallback.ts': {
           branches: 100,
           functions: 100,
           lines: 100,

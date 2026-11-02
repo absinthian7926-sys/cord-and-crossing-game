@@ -17,6 +17,7 @@ const forbiddenMarkers = [
   'CORD_DEBUG_ONLY_GET_QUALITY',
   'CORD_DEBUG_ONLY_GET_AUDIO',
   'CORD_DEBUG_ONLY_GET_COMPASS',
+  'CORD_DEBUG_ONLY_FORCE_FPS',
 ].map((marker) => Buffer.from(marker))
 const pendingDirectories = [distDirectory]
 const matches = []

@@ -89,6 +89,8 @@ import {
 } from './game/save/saveRuntime'
 import { SceneManager } from './game/scenes/SceneManager'
 import { qualityProfile } from './game/settings/quality'
+import { QualityFallbackDriver } from './game/settings/QualityFallbackDriver'
+import { setForcedQualityFps } from './game/settings/qualityFallbackRuntime'
 import type { SettingsData } from './game/settings/settings'
 import {
   disposeSettingsRuntime,
@@ -335,6 +337,7 @@ declare global {
       getQualityTier: () => QualityLevel
       getAudioState: () => ReturnType<typeof getLazyAudioSnapshot>
       getCompass: () => ReturnType<typeof getCompassSnapshot>
+      forceFps: (value: number) => void
     }
   }
 }
@@ -468,6 +471,7 @@ export default function App() {
       const DEBUG_ONLY_GET_QUALITY = 'CORD_DEBUG_ONLY_GET_QUALITY'
       const DEBUG_ONLY_GET_AUDIO = 'CORD_DEBUG_ONLY_GET_AUDIO'
       const DEBUG_ONLY_GET_COMPASS = 'CORD_DEBUG_ONLY_GET_COMPASS'
+      const DEBUG_ONLY_FORCE_FPS = 'CORD_DEBUG_ONLY_FORCE_FPS'
       window.__CORD_AND_CROSSING_DEBUG__ = {
         getPlayerPosition: () => ({ ...playerStore.getState().position }),
         getCordState: () => weaponRuntime.cord.mode,
@@ -841,6 +845,10 @@ export default function App() {
           void DEBUG_ONLY_GET_COMPASS
           return getCompassSnapshot()
         },
+        forceFps: (value) => {
+          void DEBUG_ONLY_FORCE_FPS
+          setForcedQualityFps(value)
+        },
       }
     }
     return () => {
@@ -871,6 +879,7 @@ export default function App() {
       >
         <LiveRendererSettings drawDistance={quality.drawDistance} />
         <PerfSamplerGate />
+        <QualityFallbackDriver />
         <PausableClockDriver />
         <Suspense fallback={null}>
           <Physics
