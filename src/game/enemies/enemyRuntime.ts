@@ -34,6 +34,7 @@ export type EnemyHitMeta = {
 export type EnemyDamageResult = {
   damage: number
   blocked: boolean
+  guardBroken: boolean
   killed: boolean
 }
 
@@ -67,6 +68,8 @@ export type EnemyRecord = {
   patrolIndex: number
   stateElapsed: number
   lastDamage: number
+  hitFlashSequence: number
+  blockFlashSequence: number
   inFrustum: boolean
   teleportRequested: boolean
 }
@@ -201,6 +204,8 @@ function makeRecord(spawn: EnemySpawnLike): EnemyRecord {
     patrolIndex: 0,
     stateElapsed: 0,
     lastDamage: 0,
+    hitFlashSequence: 0,
+    blockFlashSequence: 0,
     inFrustum: false,
     teleportRequested: false,
   }
@@ -401,26 +406,31 @@ export function damageEnemy(
 ): EnemyDamageResult {
   const enemy = getEnemyRecord(id)
   if (!enemy || enemy.phase !== 'Alive')
-    return { damage: 0, blocked: false, killed: false }
+    return { damage: 0, blocked: false, guardBroken: false, killed: false }
 
+  let guardBroken = false
   if (meta.kind === 'cast') {
     const roll = meta.randomValue ?? nextRandom()
     const angle = meta.angleFromFacingDegrees ?? 180
-    if (
-      shouldBucklerBlock(
-        enemy.type,
-        'straightCast',
-        angle,
-        meta.breaksGuard === true,
-        roll,
-      )
+    const wouldBlock = shouldBucklerBlock(
+      enemy.type,
+      'straightCast',
+      angle,
+      false,
+      roll,
     )
-      return { damage: 0, blocked: true, killed: false }
+    guardBroken = wouldBlock && meta.breaksGuard === true
+    if (wouldBlock && !guardBroken) {
+      enemy.blockFlashSequence += 1
+      return { damage: 0, blocked: true, guardBroken: false, killed: false }
+    }
   }
 
   const damage = Math.max(0, amount)
   enemy.hp = Math.max(0, enemy.hp - damage)
   enemy.lastDamage = damage
+  if (guardBroken) enemy.blockFlashSequence += 1
+  if (damage > 0) enemy.hitFlashSequence += 1
   enemy.healthBarRemaining = ENEMY_DEATH.healthBarSeconds
   const castStaggersLight =
     meta.kind === 'cast' && ENEMY_TYPES[enemy.type].light
@@ -443,7 +453,12 @@ export function damageEnemy(
       campLeaderDefeatedHandler?.(enemy.id, enemy.x, enemy.y, enemy.z)
     }
   }
-  return { damage, blocked: false, killed: enemy.hp === 0 }
+  return {
+    damage,
+    blocked: false,
+    guardBroken,
+    killed: enemy.hp === 0,
+  }
 }
 
 export function canEnemyRespawn(enemy: EnemyRecord): boolean {
@@ -533,6 +548,8 @@ export function resetEnemyAtAnchor(enemy: EnemyRecord): void {
   enemy.patrolIndex = 0
   enemy.stateElapsed = 0
   enemy.lastDamage = 0
+  enemy.hitFlashSequence = 0
+  enemy.blockFlashSequence = 0
   enemy.inFrustum = false
   enemy.teleportRequested = false
 }

@@ -7,10 +7,19 @@ import {
   type RapierCollider,
 } from '@react-three/rapier'
 import { useCallback, useEffect, useRef } from 'react'
-import type { Group } from 'three'
+import type { AnimationClip, Group, Object3D } from 'three'
 import { ENEMY_PRESENTATION } from '../../data/enemies'
 import { HOLLEN } from '../../data/quests'
+import { FEEL } from '../../data/feel'
+import {
+  createAnimationController,
+  destroyAnimationController,
+  recordHollenAnimation,
+  stepAnimationController,
+  type AnimationController,
+} from '../animation/animationRuntime'
 import { ModelSlot } from '../models/ModelSlot'
+import { getPausableDelta } from '../pause/pauseRuntime'
 import {
   registerCameraExcludedCollider,
   unregisterCameraExcludedCollider,
@@ -32,6 +41,7 @@ export function Hollen({
   onTransientProximityChange,
 }: HollenProps) {
   const visual = useRef<Group>(null)
+  const animation = useRef<AnimationController | null>(null)
   const interactionSensor = useRef<RapierCollider>(null)
   const proximityCallback = useRef(onProximityChange)
   const transientProximityCallback = useRef(onTransientProximityChange)
@@ -47,6 +57,14 @@ export function Hollen({
   const roadFacing = Math.atan2(
     HOLLEN.facingTarget[0] - x,
     HOLLEN.facingTarget[1] - z,
+  )
+
+  const modelReady = useCallback(
+    (object: Object3D, clips: readonly AnimationClip[]) => {
+      destroyAnimationController(animation.current)
+      animation.current = createAnimationController(object, clips)
+    },
+    [],
   )
 
   useEffect(() => {
@@ -65,6 +83,8 @@ export function Hollen({
     () => () => {
       proximityCallback.current?.(false)
       transientProximityCallback.current?.(false)
+      destroyAnimationController(animation.current)
+      animation.current = null
     },
     [],
   )
@@ -78,7 +98,8 @@ export function Hollen({
     if (publish) proximityCallback.current?.(isNearby)
   }, [])
 
-  useFrame(() => {
+  useFrame((_, rawDelta) => {
+    const delta = getPausableDelta(rawDelta)
     const player = playerStore.getState().position
     const offsetX = player.x - x
     const offsetZ = player.z - z
@@ -88,6 +109,15 @@ export function Hollen({
     )
     if (dialogueOpen && visual.current)
       visual.current.rotation.y = Math.atan2(offsetX, offsetZ)
+    const clipId = dialogueOpen ? 'talk' : 'idle'
+    stepAnimationController(
+      animation.current,
+      clipId,
+      delta,
+      1,
+      FEEL.animation.crossfadeSeconds,
+    )
+    recordHollenAnimation(clipId)
   })
 
   return (
@@ -124,6 +154,7 @@ export function Hollen({
       >
         <ModelSlot
           model="hollen"
+          onReady={modelReady}
           fallback={
             <mesh castShadow receiveShadow>
               <capsuleGeometry

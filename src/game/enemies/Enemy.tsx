@@ -6,8 +6,15 @@ import {
   type RapierCollider,
   type RapierRigidBody,
 } from '@react-three/rapier'
-import { useEffect, useMemo, useRef } from 'react'
-import { Color, type Group, type Mesh, type MeshStandardMaterial } from 'three'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import {
+  Color,
+  type AnimationClip,
+  type Group,
+  type Mesh,
+  type MeshStandardMaterial,
+  type Object3D,
+} from 'three'
 import {
   CAMP_LEADER,
   ENEMY_AI,
@@ -19,6 +26,15 @@ import {
   type EnemyType,
 } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
+import { FEEL } from '../../data/feel'
+import {
+  createAnimationController,
+  destroyAnimationController,
+  recordEnemyAnimation,
+  stepAnimationController,
+  type AnimationController,
+} from '../animation/animationRuntime'
+import { audioBus, emitAudioEvent } from '../audio/audioBus'
 import { applyCombatDamage } from '../combat/combat'
 import { distanceSquaredPointToSegment } from '../combat/hitboxes'
 import {
@@ -30,6 +46,19 @@ import { playerStore } from '../player/playerStore'
 import { getWorldConfiguration } from '../scenes/sceneRuntime'
 import { getPausableDelta } from '../pause/pauseRuntime'
 import { ModelSlot } from '../models/ModelSlot'
+import {
+  createEnemyFlashState,
+  createTimedFlashState,
+  stepBlockFlash,
+  stepEnemyHitFlash,
+  triggerBlockFlash,
+  triggerEnemyHitFlash,
+} from '../feel/hitFlash'
+import {
+  recordBlockFlash,
+  recordEnemyHitFlash,
+  triggerPlayerHitFeedback,
+} from '../feel/feelRuntime'
 import { isUnarmed } from '../weapons/cordState'
 import { weaponRuntime } from '../weapons/weaponRuntime'
 import {
@@ -91,6 +120,15 @@ export function Enemy({ enemy }: EnemyProps) {
     () => new Color(ENEMY_PRESENTATION.meleeWindup.tintColor),
     [],
   )
+  const hitBodyColor = useMemo(() => new Color(FEEL.hitFlash.enemy.color), [])
+  const baseShieldColor = useMemo(
+    () => new Color(ENEMY_PRESENTATION.roadBrigand.shieldColor),
+    [],
+  )
+  const blockShieldColor = useMemo(
+    () => new Color(FEEL.hitFlash.block.color),
+    [],
+  )
   const body = useRef<RapierRigidBody>(null)
   const collider = useRef<RapierCollider>(null)
   const visual = useRef<Group>(null)
@@ -98,7 +136,13 @@ export function Enemy({ enemy }: EnemyProps) {
   const healthFill = useRef<Mesh>(null)
   const drawBar = useRef<Mesh>(null)
   const bodyMaterial = useRef<MeshStandardMaterial>(null)
+  const shieldMaterial = useRef<MeshStandardMaterial>(null)
   const sword = useRef<Mesh>(null)
+  const animation = useRef<AnimationController | null>(null)
+  const hitFlash = useRef(createEnemyFlashState())
+  const blockFlash = useRef(createTimedFlashState())
+  const seenHitFlash = useRef(enemy.hitFlashSequence)
+  const seenBlockFlash = useRef(enemy.blockFlashSequence)
   const { world, rapier } = useRapier()
   const character = useRef<ReturnType<
     typeof world.createCharacterController
@@ -120,6 +164,30 @@ export function Enemy({ enemy }: EnemyProps) {
   })
   const nextTranslation = useRef({ x: enemy.x, y: enemy.y, z: enemy.z })
 
+  const modelReady = useCallback(
+    (object: Object3D, clips: readonly AnimationClip[]) => {
+      destroyAnimationController(animation.current)
+      animation.current = createAnimationController(object, clips)
+      const bodyNode = object.getObjectByName(
+        enemy.type === 'cliffHound' ? 'body' : 'pelvis',
+      ) as Mesh | undefined
+      if (bodyNode) {
+        bodyMaterial.current = bodyNode.material as MeshStandardMaterial
+        baseBodyColor.copy(bodyMaterial.current.color)
+      }
+      const swordNode = object.getObjectByName('sword') as Mesh | undefined
+      if (swordNode) sword.current = swordNode
+      const shieldNode = object.getObjectByName('buckler') as Mesh | undefined
+      if (shieldNode) {
+        shieldMaterial.current = shieldNode.material as MeshStandardMaterial
+        baseShieldColor.copy(shieldMaterial.current.color)
+      }
+      const sash = object.getObjectByName('leaderSash')
+      if (sash) sash.visible = enemy.variant === ENEMY_VARIANTS.campLeader
+    },
+    [baseBodyColor, baseShieldColor, enemy.type, enemy.variant],
+  )
+
   useEffect(() => {
     const controller = world.createCharacterController(0.01)
     const enemyCollider = collider.current
@@ -133,6 +201,8 @@ export function Enemy({ enemy }: EnemyProps) {
       if (enemyCollider) unregisterCameraExcludedCollider(enemyCollider.handle)
       world.removeCharacterController(controller)
       character.current = null
+      destroyAnimationController(animation.current)
+      animation.current = null
     }
   }, [world])
 
@@ -175,6 +245,14 @@ export function Enemy({ enemy }: EnemyProps) {
       enemyVisual.rotation.z =
         Math.min(1, enemy.deathElapsed / ENEMY_DEATH.fallSeconds) *
         (Math.PI * 0.5)
+      stepAnimationController(
+        animation.current,
+        'death',
+        delta,
+        1,
+        FEEL.animation.crossfadeSeconds,
+      )
+      recordEnemyAnimation('death')
       if (enemy.deathElapsed >= ENEMY_DEATH.fallSeconds) {
         enemy.phase = 'Dead'
         enemyVisual.visible = false
@@ -307,19 +385,34 @@ export function Enemy({ enemy }: EnemyProps) {
       )
     }
 
+    const attackWindupActive =
+      enemy.drawRemaining > 0 && enemy.staggerRemaining === 0
     const meleeWindupActive =
-      enemy.type !== 'brigandArcher' &&
-      enemy.drawRemaining > 0 &&
-      enemy.staggerRemaining === 0
-    if (bodyMaterial.current)
+      enemy.type !== 'brigandArcher' && attackWindupActive
+    if (enemy.hitFlashSequence !== seenHitFlash.current) {
+      seenHitFlash.current = enemy.hitFlashSequence
+      triggerEnemyHitFlash(hitFlash.current, meleeWindupActive)
+      recordEnemyHitFlash()
+    }
+    if (enemy.blockFlashSequence !== seenBlockFlash.current) {
+      seenBlockFlash.current = enemy.blockFlashSequence
+      triggerBlockFlash(blockFlash.current)
+      recordBlockFlash()
+    }
+    const hitMix = stepEnemyHitFlash(hitFlash.current, delta, meleeWindupActive)
+    if (bodyMaterial.current) {
       bodyMaterial.current.color.copy(
         meleeWindupActive ? windupBodyColor : baseBodyColor,
       )
-    if (sword.current)
-      sword.current.rotation.z =
-        enemy.type === 'roadBrigand' && meleeWindupActive
-          ? ENEMY_PRESENTATION.meleeWindup.brigandSwordRaiseRadians
-          : 0
+      if (!meleeWindupActive && hitMix > 0)
+        bodyMaterial.current.color.lerp(hitBodyColor, hitMix)
+    }
+    const blockMix = stepBlockFlash(blockFlash.current, delta)
+    if (shieldMaterial.current) {
+      shieldMaterial.current.color.copy(baseShieldColor)
+      if (blockMix > 0)
+        shieldMaterial.current.color.lerp(blockShieldColor, blockMix)
+    }
     enemyVisual.scale.y =
       enemy.type === 'cliffHound' && meleeWindupActive
         ? ENEMY_PRESENTATION.meleeWindup.houndCrouchScaleY
@@ -336,12 +429,16 @@ export function Enemy({ enemy }: EnemyProps) {
           player.position.z,
         )
       } else {
-        applyCombatDamage(
+        const appliedDamage = applyCombatDamage(
           player.vitals,
           ENEMY_TYPES[enemy.type].damage,
           isUnarmed(weaponRuntime.cord),
           player.invulnerable,
         )
+        if (appliedDamage > 0) {
+          emitAudioEvent(audioBus, 'player-hurt')
+          triggerPlayerHitFeedback()
+        }
         if (enemy.type === 'cliffHound')
           requestHoundCordBite(
             enemy.x,
@@ -440,6 +537,33 @@ export function Enemy({ enemy }: EnemyProps) {
         enemyVisual.rotation.y = Math.atan2(directionX, directionZ)
       }
     }
+    const animationClip =
+      enemy.staggerRemaining > 0 && enemy.type === 'roadBrigand'
+        ? 'stagger'
+        : attackWindupActive
+          ? enemy.type === 'brigandArcher'
+            ? 'draw'
+            : enemy.type === 'cliffHound'
+              ? 'bite'
+              : 'attack'
+          : shouldMove
+            ? enemy.type === 'cliffHound'
+              ? 'run'
+              : 'walk'
+            : 'idle'
+    stepAnimationController(
+      animation.current,
+      animationClip,
+      delta,
+      1,
+      FEEL.animation.crossfadeSeconds,
+    )
+    recordEnemyAnimation(animationClip)
+    if (sword.current)
+      sword.current.rotation.z =
+        enemy.type === 'roadBrigand' && meleeWindupActive
+          ? ENEMY_PRESENTATION.meleeWindup.brigandSwordRaiseRadians
+          : 0
   })
 
   const radius = colliderRadius(enemy)
@@ -468,18 +592,7 @@ export function Enemy({ enemy }: EnemyProps) {
           }
           loadedScale={enemy.scale}
           uniqueMaterials
-          onReady={(object) => {
-            const bodyNode = object.getObjectByName(
-              enemy.type === 'cliffHound' ? 'body' : 'pelvis',
-            ) as Mesh | undefined
-            if (bodyNode)
-              bodyMaterial.current = bodyNode.material as MeshStandardMaterial
-            const swordNode = object.getObjectByName('sword') as
-              Mesh | undefined
-            if (swordNode) sword.current = swordNode
-            const sash = object.getObjectByName('leaderSash')
-            if (sash) sash.visible = enemy.variant === ENEMY_VARIANTS.campLeader
-          }}
+          onReady={modelReady}
           fallback={
             enemy.type === 'cliffHound' ? (
               <>
@@ -613,6 +726,7 @@ export function Enemy({ enemy }: EnemyProps) {
                         ]}
                       />
                       <meshStandardMaterial
+                        ref={shieldMaterial}
                         color={ENEMY_PRESENTATION.roadBrigand.shieldColor}
                         metalness={
                           ENEMY_PRESENTATION.roadBrigand.shieldMetalness
