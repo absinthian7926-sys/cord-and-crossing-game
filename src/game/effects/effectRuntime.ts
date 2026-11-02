@@ -1,4 +1,5 @@
 import { EFFECTS } from '../../data/effects'
+import { audioBus, emitAudioEvent } from '../audio/audioBus'
 import { getSceneRuntimeSnapshot } from '../scenes/sceneRuntime'
 import { weaponRuntime } from '../weapons/weaponRuntime'
 import {
@@ -68,6 +69,19 @@ function publish(): void {
   for (const listener of listeners) listener()
 }
 
+function emitHeelstoneModeTransition(
+  previousMode: HeelstonePassMode,
+  nextMode: HeelstonePassMode,
+): void {
+  if (previousMode === 'Idle' && nextMode === 'Passing') {
+    emitAudioEvent(audioBus, 'heelstone-hiss-start')
+  } else if (previousMode === 'Passing' && nextMode === 'Carried') {
+    emitAudioEvent(audioBus, 'heelstone-chime')
+  } else if (previousMode === 'Passing' && nextMode !== 'Passing') {
+    emitAudioEvent(audioBus, 'heelstone-hiss-stop')
+  }
+}
+
 export function getEffectRuntimeSnapshot(): EffectRuntimeSnapshot {
   return snapshot
 }
@@ -78,8 +92,10 @@ export function subscribeEffectRuntime(listener: Listener): () => void {
 }
 
 export function resetEffectRuntime(): void {
+  const previousMode = effectRuntime.pass.mode
   clearEffects(effectRuntime.effects)
   Object.assign(effectRuntime.pass, createHeelstonePassState())
+  emitHeelstoneModeTransition(previousMode, effectRuntime.pass.mode)
   publish()
 }
 
@@ -110,6 +126,7 @@ export function startHeelstonePass(): boolean {
     lineAlreadyCarrying: isLineCarrying(effectRuntime.effects),
   })
   if (effectRuntime.pass.mode === previous) return false
+  emitHeelstoneModeTransition(previous, effectRuntime.pass.mode)
   publish()
   return true
 }
@@ -123,6 +140,7 @@ function passEvent(event: HeelstonePassEvent): boolean {
     effectRuntime.pass.effectId === previousEffect
   )
     return false
+  emitHeelstoneModeTransition(previousMode, effectRuntime.pass.mode)
   publish()
   return true
 }
@@ -143,23 +161,29 @@ export function makeCarriedLinePlain(reason: PlainLineReason): boolean {
 }
 
 export function clearEffectsOnDeath(): void {
+  const previousMode = effectRuntime.pass.mode
   clearEffects(effectRuntime.effects)
   stepHeelstonePass(effectRuntime.pass, { type: 'death' })
+  emitHeelstoneModeTransition(previousMode, effectRuntime.pass.mode)
   publish()
 }
 
 export function tickEffectRuntime(dtSeconds: number): void {
   const carriedId = effectRuntime.effects.carriedEffectId
   const expiredCount = tickEffects(effectRuntime.effects, dtSeconds)
-  if (carriedId !== null && !hasEffect(effectRuntime.effects, carriedId))
+  if (carriedId !== null && !hasEffect(effectRuntime.effects, carriedId)) {
+    const previousMode = effectRuntime.pass.mode
     stepHeelstonePass(effectRuntime.pass, {
       type: 'effectExpired',
       effectId: carriedId,
     })
+    emitHeelstoneModeTransition(previousMode, effectRuntime.pass.mode)
+  }
 
   const previousMode = effectRuntime.pass.mode
   const effectId = effectRuntime.pass.effectId
   stepHeelstonePass(effectRuntime.pass, TICK_PASS_EVENT, dtSeconds)
+  emitHeelstoneModeTransition(previousMode, effectRuntime.pass.mode)
   if (
     previousMode === 'Passing' &&
     effectRuntime.pass.mode === 'Carried' &&

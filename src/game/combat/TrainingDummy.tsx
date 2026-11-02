@@ -2,6 +2,7 @@ import { Html } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
 import { useEffect, useRef } from 'react'
 import { Group, MeshStandardMaterial } from 'three'
+import { audioBus, emitAudioEvent } from '../audio/audioBus'
 import { getPauseRuntimeSnapshot } from '../pause/pauseRuntime'
 import {
   subscribeDummyDamage,
@@ -29,6 +30,7 @@ export function TrainingDummy({
     () =>
       subscribeDummyDamage((entry: DamageLogEntry) => {
         if (entry.dummyId !== id) return
+        if (entry.damage > 0) emitAudioEvent(audioBus, 'hit-flesh')
         hitAt.current = entry.atSeconds
         staggerUntil.current = entry.atSeconds + entry.staggerSeconds
         if (damageLabel.current) {

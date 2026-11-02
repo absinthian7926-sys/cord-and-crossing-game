@@ -3,6 +3,7 @@ import { useEffect, useMemo, useReducer, useRef } from 'react'
 import { Frustum, InstancedMesh, Matrix4, Object3D, Vector3 } from 'three'
 import { ENEMY_ARROW, ENEMY_PRESENTATION } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
+import { audioBus, emitAudioEvent } from '../audio/audioBus'
 import { applyCombatDamage } from '../combat/combat'
 import { getPausableDelta } from '../pause/pauseRuntime'
 import { playerStore } from '../player/playerStore'
@@ -18,7 +19,7 @@ import {
   subscribeEnemyRoster,
   type EnemySpawnLike,
 } from './enemyRuntime'
-import { stepArrows } from './projectiles'
+import { createArrowStepResult, stepArrowsWithResult } from './projectiles'
 import { createSpawnPlan } from './spawns'
 
 function initializeDefaultRoster(): void {
@@ -43,31 +44,39 @@ function initializeDefaultRoster(): void {
 function EnemyProjectiles() {
   const mesh = useRef<InstancedMesh>(null)
   const transform = useMemo(() => new Object3D(), [])
+  const stepResult = useMemo(() => createArrowStepResult(), [])
 
   useFrame((_, rawDelta) => {
     const arrows = enemyRuntime.arrows
     const player = playerStore.getState()
     const delta = getPausableDelta(rawDelta)
-    const damage =
-      delta > 0
-        ? stepArrows(
-            arrows,
-            delta,
-            player.position.x,
-            player.position.y,
-            player.position.z,
-            PLAYER.collider.radius,
-            player.invulnerable,
-            getWorldConfiguration().sampleHeight,
-          )
-        : 0
-    if (damage > 0)
-      applyCombatDamage(
+    if (delta > 0) {
+      stepArrowsWithResult(
+        arrows,
+        delta,
+        player.position.x,
+        player.position.y,
+        player.position.z,
+        PLAYER.collider.radius,
+        player.invulnerable,
+        getWorldConfiguration().sampleHeight,
+        stepResult,
+      )
+    } else {
+      stepResult.damage = 0
+      stepResult.terrainHitCount = 0
+    }
+    for (let index = 0; index < stepResult.terrainHitCount; index += 1)
+      emitAudioEvent(audioBus, 'arrow-terrain')
+    if (stepResult.damage > 0) {
+      const appliedDamage = applyCombatDamage(
         player.vitals,
-        damage,
+        stepResult.damage,
         isUnarmed(weaponRuntime.cord),
         player.invulnerable,
       )
+      if (appliedDamage > 0) emitAudioEvent(audioBus, 'player-hurt')
+    }
 
     const arrowsMesh = mesh.current
     if (!arrowsMesh) return

@@ -1,5 +1,8 @@
+import { FEEL } from '../../data/feel'
 import { ZONE } from '../../data/zone'
+import { audioBus, emitAudioEvent } from '../audio/audioBus'
 import { grantStrengthFromCrossing } from '../effects/effectRuntime'
+import { addFeelTrauma } from '../feel/feelRuntime'
 import { setGameplayInputLock } from '../player/input'
 import { emitQuestEvent, getQuestRuntimeSnapshot } from '../quest/questRuntime'
 import { requestSceneTransition, type GameScene } from '../scenes/sceneRuntime'
@@ -47,6 +50,8 @@ export function handlePorticoCrossing(direction: PorticoDirection): boolean {
     }
     setGameplayInputLock('scene-transition', true)
     setGameplayInputLock('portico-transition-request', false)
+    emitAudioEvent(audioBus, 'portico-bell')
+    addFeelTrauma(FEEL.shake.trauma.validCrossing)
     grantStrengthFromCrossing(false)
     if (getQuestRuntimeSnapshot().quest.currentStep === 4)
       emitQuestEvent('crossedPortico')
@@ -67,6 +72,8 @@ export function handlePorticoCrossing(direction: PorticoDirection): boolean {
   }
   setGameplayInputLock('scene-transition', true)
   setGameplayInputLock('portico-transition-request', false)
+  emitAudioEvent(audioBus, 'portico-bell')
+  addFeelTrauma(FEEL.shake.trauma.validCrossing)
   grantStrengthFromCrossing(true)
   return true
 }
