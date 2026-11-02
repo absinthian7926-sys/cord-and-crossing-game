@@ -6,6 +6,7 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: [
+        'src/game/animation/heroAnimation.ts',
         'src/game/audio/audioBus.ts',
         'src/game/audio/audioCues.ts',
         'src/game/audio/mixer.ts',
@@ -17,6 +18,10 @@ export default defineConfig({
         'src/game/save/saveRuntime.ts',
         'src/game/effects/effects.ts',
         'src/game/effects/heelstonePass.ts',
+        'src/game/feel/footsteps.ts',
+        'src/game/feel/hitFlash.ts',
+        'src/game/feel/postQuality.ts',
+        'src/game/feel/shake.ts',
         'src/game/portico/crossing.ts',
         'src/game/settings/quality.ts',
         'src/game/settings/qualityFallback.ts',
@@ -26,6 +31,12 @@ export default defineConfig({
         'scripts/bundleBudget.mjs',
       ],
       thresholds: {
+        'src/game/animation/heroAnimation.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
         'src/game/audio/audioBus.ts': {
           branches: 100,
           functions: 100,
@@ -72,6 +83,30 @@ export default defineConfig({
         },
         'src/game/effects/effects.ts': { branches: 100 },
         'src/game/effects/heelstonePass.ts': { branches: 100 },
+        'src/game/feel/footsteps.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        'src/game/feel/hitFlash.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        'src/game/feel/postQuality.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        'src/game/feel/shake.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
         'src/game/portico/crossing.ts': { branches: 100 },
         'src/game/settings/quality.ts': {
           branches: 100,

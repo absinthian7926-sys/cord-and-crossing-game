@@ -237,6 +237,8 @@ M7 settings defaults (all GAME (NEW), revisable):
 - Pause freezes fixed-step physics and the shared gameplay clock. Escape closes dialogue or the quest log first, otherwise toggles pause. Pointer-lock loss during active play opens pause. A pause requested during a crossing flash, scene load or death fade opens after that blocker clears.
 - M7 credits are exactly: "Cord and Crossing"; "Co-developed with AI by RJ and Absinthian."; "Design and direction: RJ"; "Models: made for this project with Blender scripts and code (CC0)."; "Audio: generated in code for this project (CC0)."; and "Built with open-source software: Blender, Vite, React, three.js, React Three Fiber, drei, Rapier, zustand, postprocessing. See each project's license."
 - M7 uses system fonts only: Georgia, `Times New Roman`, serif for titles and system-ui, `-apple-system`, `Segoe UI`, sans-serif for HUD and menus. No web font is downloaded.
+- Reduce motion changes the 1 s crossing flash to 35 percent white, uses 0.3 s scene and death crossfades, halves shimmer ripple speed, disables camera shake and halves the player-hit vignette peak.
+- PLACEHOLDER hit feedback: an enemy flashes toward #f4ead7 at mix 0.6 for 0.08 s, then returns over 0.06 s. Telegraph tint takes priority and queues the hit flash. A blocked buckler flashes #c9a46a for 0.08 s. Player damage shows a #9f493e edge vignette for 0.18 s at peak opacity 0.35.
 
 ## 11. Art direction
 
@@ -259,6 +261,9 @@ M7 model defaults (all GAME (NEW), PLACEHOLDER art and revisable):
 - Road brigand clips are idle 2 s, walk 0.8 s, attack 1.1 s, stagger 0.4 s and death 1 s. Brigand archer clips are idle 2 s, walk 0.8 s, draw 0.6 s and death 1 s. Cliff hound clips are idle 1.6 s, run 0.55 s, bite 0.8 s and death 1 s. Hollen clips are idle 2 s and talk 1.5 s.
 - Static model ids are waystation shelter, water barrel, cart, tent, camp fire, lookout, ruin frame post, ruin lintel, portico pillar, rope rail post, frame shelter key, practice rail, target post, snag post, Hollow gate and tassel. Rope rail posts remain instanced primitives in the world to keep their one-draw-call budget, while the generated model remains available.
 - The M7 code-built outputs total 103816 bytes. The largest file is `hero.glb` at 13128 bytes. All outputs are dedicated CC0 by the project and recorded in `public/models/CREDITS.md`.
+- PLACEHOLDER camera shake uses seed 17, 11 Hz smooth noise, trauma squared, decay 1.6 per second, maximum translation 0.12 m and maximum roll 1.2 degrees. Trauma additions are 0.35 for player damage, 0.15 for close strike 3, 0.3 for carried guard break, 0.2 for cord cut, 0.25 for snag pull and 0.2 for valid crossing.
+- PLACEHOLDER post-processing has a 2 ms Medium target. Low mounts nothing. Medium uses SMAA, vignette offset 0.3 and darkness 0.35, plus brightness 0.02, contrast 0.05 and saturation 0.04. High adds bloom intensity 0.35, luminance threshold 0.85 and mipmap blur.
+- PLACEHOLDER footstep selection uses movement epsilon 0.05 m/s, seed 37 and the 42 m Ruin Shelf stone radius. Animation selection uses movement epsilon 0.05 m/s, walk time scale 0.4 and crossfade 0.12 s.
 
 ## 12. Audio notes
 
