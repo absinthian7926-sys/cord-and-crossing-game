@@ -28,7 +28,6 @@ import {
   effectRuntime,
   getEffectRuntimeSnapshot,
   grantStrengthFromCrossing,
-  resetEffectRuntime,
 } from './game/effects/effectRuntime'
 import {
   getHollowRuntimeSnapshot,
@@ -134,7 +133,6 @@ const saveWorldRuntimeAdapter = {
       encounterDefeated: boolean
     }
   }) => {
-    resetEffectRuntime()
     hydratePorticoRuntime(state.porticoUnlocked)
     hydrateHollowRuntime(
       state.hollow.heelstonePassDone,

@@ -117,7 +117,7 @@ The reachblade (SITE): a forearm-length leaf-shaped single-edged blade with an i
 
 ### 6.3 Utility (Slice 1)
 
-- Snag: casting at marked rope posts or loose crates pulls them 2 m (one physics puzzle in Crossing Hollow). GAME (NEW): the M6 marked post moves at a base 2 m/s; Strength doubles only that speed, not the 2 m distance.
+- Snag: casting at marked rope posts or loose crates pulls them 2 m (one physics puzzle in Crossing Hollow). GAME (NEW): the M6 marked post moves at a base 2 m/s; Strength doubles only that speed, not the 2 m distance. Ryan confirmed this rule on 2026-11-02.
 - Stop: tapping Q twice within 0.3 s instantly drops the cord tension and cancels the cast with zero recovery delay, but the blade lands at the current point and must be picked up (walk over it). Teaches "stopping and recovery".
 - A dropped blade remains in the scene where it landed and does not cross a portico with the player. The player stays unarmed in the other scene until returning to pick it up.
 - GAME (NEW): dropped blade pickup radius is 0.8 m and the moving blade hit radius is 0.6 m. The M2 rope simulation uses 16 points, 12 constraint iterations, damping 0.985, gravity 9.81 m/s2, a 0.04 m ground offset and a 0.12 m rope hit radius. The visible cut-line stub uses 5 points. Training dummies stand about 3 m, 5.2 m and 5.95 m from spawn; the 5.95 m dummy is the cord-cutter test target with a 0.38 m cutter volume.
@@ -125,15 +125,15 @@ The reachblade (SITE): a forearm-length leaf-shaped single-edged blade with an i
 ### 6.4 Effects and heelstones
 
 - Crossing (CANON): stepping fully through an active portico screen (both feet past the screen plane, tracked by a trigger volume pair) grants the effect. Partial entry grants nothing. A fresh effect needs another full crossing.
-- Slice 1 effect: Strength (CANON, matched obsidian). On the player: close damage x1.35, cast pull force x2, stagger duration x1.5. Duration 180 s (GAME, PLACEHOLDER pending Ryan; GDD 18 question 2 remains open).
+- Slice 1 effect: Strength (CANON, matched obsidian). On the player: close damage x1.35, cast pull force x2, stagger duration x1.5. Duration 180 s (GAME, decided by Ryan on 2026-11-02, GDD 18 question 2).
 - Heelstones (SITE, Ryan decided Oct 28, 2026): a small matched pair in the reachblade's ring. They never create an effect. Pressing F while holding an effect plays a 1.2 s "clear the line" animation drawing the cord through the ring. If uninterrupted, the line carries the effect: cast damage x1.35 and casts can break enemy guard. If hit during the pass, nothing carries ("a pass that stops halfway carries nothing").
 - The line holds the effect only while the bearer holds the hand end. Cut or dropped cord (Stop) makes the line plain at once.
 - Effect cap: maximum 2 active effects (SITE, proposed two-effect cap). Slice 1 only has one, but the code enforces the cap.
 
 M6 implementation defaults (all GAME (NEW), revisable unless marked otherwise):
 
-- Re-adding Strength refreshes its timer to the full configured duration and does not stack. Effects and the carried line are not saved. Reload and death clear both.
-- The heelstone pass requires the blade In Hand. During its 1.2 s the player may turn but cannot move, strike, cast or dodge. Damage interrupts it. Dodge input cancels it with nothing carried. It has no stamina cost.
+- Re-adding Strength refreshes its timer to the full configured duration and does not stack. Effects and the carried line are not saved. Reload and death clear both (Ryan confirmed 2026-11-02).
+- The heelstone pass requires the blade In Hand. During its 1.2 s the player may turn but cannot move, strike, cast or dodge. Damage interrupts it. Dodge input cancels it with nothing carried. It has no stamina cost. Ryan confirmed the 1.2 s duration and dodge-cancel rule on 2026-11-02.
 - A carried line remains carried through normal cast and recall while Strength remains active. Cut, Stop, Strength expiry or removal, and player death make it plain at once.
 
 ### 6.5 Other arms
@@ -177,7 +177,7 @@ Quest (GAME): "The Line at the Rise."
 3. Return to Hollen. He teaches the heelstone pass in dialogue (tutorial prompt for F).
 4. Go to the Ruin Shelf, use the key, and cross the portico screen. Load Crossing Hollow. Strength is granted.
 5. In the Hollow: clear the line through the heelstones, snag the rope post to open the path, defeat the final encounter.
-6. Return through the screen (no effect from a return crossing in Slice 1; GAME, PLACEHOLDER pending Ryan; GDD 18 question 2 remains open) and report to Hollen. Reward: a dyed cloth tassel cosmetic on the cord (SITE nod to dyed cloth streamers).
+6. Return through the screen (no effect from a return crossing in Slice 1; GAME, decided by Ryan on 2026-11-02) and report to Hollen. Reward: a dyed cloth tassel cosmetic on the cord (SITE nod to dyed cloth streamers).
 
 Dialogue: short, plain, under 40 words per line, no manuscript prose.
 
@@ -197,9 +197,9 @@ M5 implementation defaults (all GAME (NEW), revisable):
 M6 quest and save defaults (all GAME (NEW), revisable):
 
 - The save key is `cord-and-crossing.save.v2` with schema version 2. A valid v1 save from `cord-and-crossing.save.v1` migrates on load. The v2 record adds the exact pending key-drop position or null, permanent portico-unlocked state, current scene, Hollow pass / snag / encounter progress, and tassel-earned state. Clearing a save removes both keys.
-- A migrated v1 save that defeated the camp leader before taking the key uses the prior camp-leader anchor as its legacy key-drop fallback because v1 did not store the exact death point. Every new v2 key drop stores and restores the exact point.
+- A migrated v1 save that defeated the camp leader before taking the key uses the prior camp-leader anchor as its legacy key-drop fallback because v1 did not store the exact death point. Every new v2 key drop stores and restores the exact point (Ryan approved 2026-11-02).
 - Autosave still runs on every quest revision, every persistent portico, scene or Hollow-progress change, every 30 s while alive, and page hide. A living player restores a valid position in the saved scene. Zone fallback is (0, 8, 0); Hollow fallback is (0, 0, -3). Effects and the carried line load empty, and the cord loads In Hand.
-- The key is kept after use and the portico stays unlocked. Quest step 5 completes only after one heelstone pass has completed in the Hollow, the marked post has been pulled and all three final enemies have been defeated. The two Road brigands and one Brigand archer do not respawn after defeat.
+- The key is kept after use and the portico stays unlocked (Ryan confirmed 2026-11-02). Quest step 5 completes only after one heelstone pass has completed in the Hollow, the marked post has been pulled and all three final enemies have been defeated. The two Road brigands and one Brigand archer do not respawn after defeat.
 - Reporting at step 6 completes the quest, grants the tassel once and autosaves. Reporting at steps 1 to 5 or after completion changes nothing. The PLACEHOLDER completion line is "The work at the rise is done." The added PLACEHOLDER choice is "Say that again."; "Leave" is reused.
 - The PLACEHOLDER tassel is a 0.25 m by 0.06 m by 0.025 m cloth strip at blade-ring offset (0, -0.56, 0), color #9f493e and roughness 0.9. It has no gameplay effect.
 
@@ -215,7 +215,7 @@ M6 portico defaults (all GAME (NEW), revisable):
 - The zone portico is centered at (600, -80), with its front facing west and screen normal (-1, 0, 0). The key-use radius is 2.5 m on the zone side. "E Use key" appears only at quest step 4 with the key while the screen is locked. The key is not consumed. Returning from the Hollow places the player 3 m west of the screen on the zone side.
 - The screen is 2.4 m wide, 3.2 m high and 0.04 m thick. Trigger centers are 0.3 m from the plane and trigger depth is 0.12 m. Solid pillars remain camera blockers; all key-use and crossing sensors are excluded from camera rays.
 - The PLACEHOLDER shimmer uses pale edge #e9efe6, a 0.25 m soft edge, 0.3 m/s vertical ripple, opacity 0.45 and a 1 s fade on unlock. Its cheap shader uses ripple frequency 34, horizontal phase 5, body alpha 0.12 plus ripple alpha 0.16, and edge contribution 0.78. It is one draw call with no downloaded texture or post-processing. A dev performance sample counts it as in view only when its center is inside the camera frustum and the absolute camera-to-screen normal dot is at least 0.5.
-- The crossing flash lasts 1 s. The loading panel says "Crossing Hollow" and contains no lore text. The return screen is always active. With the PLACEHOLDER pending rule, a Hollow-to-zone return crossing does not add or refresh Strength.
+- The crossing flash lasts 1 s. The loading panel says "Crossing Hollow" and contains no lore text. The return screen is always active. With Ryan's 2026-11-02 rule, a Hollow-to-zone return crossing does not add or refresh Strength.
 
 ## 10. UI
 
@@ -351,5 +351,5 @@ M7 Polish and slice complete
 ## 18. Open questions for Ryan
 
 1. Is a mainland coast starting zone right, or should the first slice be the island (which has no combat tradition in canon)?
-2. Strength duration of 180 s and the "no effect on return crossing" rule are game-only numbers. Keep?
+2. Strength duration of 180 s and the "no effect on return crossing" rule are game-only numbers. Keep? Answered by Ryan on 2026-11-02: keep 180 s and no effect on a return crossing for Slice 1.
 3. Hero: original route runner, or a choice of peoples at character creation later?

@@ -1,5 +1,6 @@
 import { PLAYER } from '../../data/player'
 import { SAVE_CONFIG } from '../../data/quests'
+import { resetEffectRuntime } from '../effects/effectRuntime'
 import { createPlayerDeathState } from '../player/death'
 import { playerStore } from '../player/playerStore'
 import {
@@ -94,6 +95,7 @@ export function applyRuntimeSaveData(
   data: SaveDataV2,
   positionRules: HeightSampler | ScenePositionRules,
 ): void {
+  resetEffectRuntime()
   worldAdapter.hydrate(data.world)
   const player = playerStore.getState()
   const position = resolveLoadedPosition(data, positionRules)
