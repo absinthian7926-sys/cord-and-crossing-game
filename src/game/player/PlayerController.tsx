@@ -10,7 +10,7 @@ import { useEffect, useRef } from 'react'
 import { Group, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
 import { ZONE } from '../../data/zone'
-import { resetEnemiesToReturn } from '../enemies/enemyRuntime'
+import { resetEnemiesNearDeathToReturn } from '../enemies/enemyRuntime'
 import { resetWeaponToInHand } from '../weapons/weaponRuntime'
 import { heightAt } from '../world/terrain'
 import {
@@ -76,7 +76,7 @@ export function PlayerController() {
       invulnerableLeft.current = 0
       vertical.current = 0
       resetWeaponToInHand()
-      resetEnemiesToReturn()
+      resetEnemiesNearDeathToReturn(store.position.x, store.position.z)
     }
     const respawned = stepPlayerDeath(store.death, delta)
     store.invulnerable =

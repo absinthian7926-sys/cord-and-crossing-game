@@ -4,6 +4,7 @@ export const ENEMY_TYPES = {
     maxHealth: 60,
     damage: 12,
     attackCadenceSeconds: 1.1,
+    attackWindupSeconds: 0.5,
     moveSpeed: 4.2,
     attackRange: 1.8,
     collider: { radius: 0.4, height: 1.8 },
@@ -35,6 +36,7 @@ export const ENEMY_TYPES = {
     maxHealth: 35,
     damage: 8,
     attackCadenceSeconds: 0.8,
+    attackWindupSeconds: 0.35,
     moveSpeed: 7,
     attackRange: 1.4,
     collider: { radius: 0.3, length: 0.9 },
@@ -53,6 +55,7 @@ export const ENEMY_AI = {
   safeZoneRadius: 25,
   alertSeconds: 0.6,
   returnAnchorDistance: 1,
+  playerDeathResetRadius: 40,
   patrolSpeedMultiplier: 0.5,
   patrolPointCount: [3, 4],
   patrolRadius: 15,
@@ -70,6 +73,11 @@ export const ENEMY_ARROW = {
 
 export const ENEMY_PRESENTATION = {
   stagger: { angularFrequency: 80, maximumRotationRadians: 0.09 },
+  meleeWindup: {
+    tintColor: '#c9a46a',
+    brigandSwordRaiseRadians: Math.PI * 0.5,
+    houndCrouchScaleY: 0.65,
+  },
   arrow: {
     width: 0.025,
     height: 0.025,

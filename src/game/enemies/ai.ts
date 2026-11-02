@@ -35,6 +35,7 @@ export type AiInputs = {
   stateElapsedSeconds: number
   attackCooldownSeconds: number
   attackWindupSeconds: number
+  staggered?: boolean
 }
 
 export type AiStepResult = {
@@ -95,6 +96,48 @@ function setMovementIntent(result: AiStepResult, enemyType: EnemyType): void {
   }
 }
 
+function attackWindupDuration(enemyType: EnemyType): number {
+  if (enemyType === 'roadBrigand')
+    return ENEMY_TYPES.roadBrigand.attackWindupSeconds
+  if (enemyType === 'cliffHound')
+    return ENEMY_TYPES.cliffHound.attackWindupSeconds
+  return ENEMY_TYPES.brigandArcher.drawSeconds
+}
+
+function stepAttackCycle(
+  result: AiStepResult,
+  inputs: AiInputs,
+  deltaSeconds: number,
+  windupSeconds: number,
+  cadenceSeconds: number,
+): void {
+  if (inputs.staggered === true && inputs.enemyType !== 'brigandArcher') {
+    result.attackWindupSeconds = 0
+    result.attackCooldownSeconds = cadenceSeconds
+    return
+  }
+
+  if (inputs.attackCooldownSeconds > 0) {
+    result.attackWindupSeconds = Math.max(
+      0,
+      windupSeconds - result.attackCooldownSeconds,
+    )
+    if (result.attackCooldownSeconds === 0) {
+      result.attack = true
+      result.attackCooldownSeconds = cadenceSeconds
+      result.attackWindupSeconds = 0
+    }
+    return
+  }
+
+  result.attackWindupSeconds += deltaSeconds
+  if (result.attackWindupSeconds >= windupSeconds) {
+    result.attack = true
+    result.attackCooldownSeconds = cadenceSeconds
+    result.attackWindupSeconds = 0
+  }
+}
+
 export function stepAi(
   state: AiState,
   inputs: AiInputs,
@@ -109,7 +152,9 @@ export function stepAi(
       ? ENEMY_TYPES.brigandArcher.keepAway.maximumDistance
       : enemy.attackRange
   const canSeePlayer =
-    inputs.lineOfSight && inputs.distanceToPlayer <= ENEMY_AI.aggroRadius
+    inputs.playerAlive &&
+    inputs.lineOfSight &&
+    inputs.distanceToPlayer <= ENEMY_AI.aggroRadius
 
   result.state = state
   result.moveTarget = 'None'
@@ -126,7 +171,6 @@ export function stepAi(
   result.attackWindupSeconds = Math.max(0, inputs.attackWindupSeconds)
 
   if (
-    !inputs.playerAlive ||
     inputs.playerInSafeZone ||
     inputs.distanceFromAnchor > ENEMY_AI.leashRadius
   ) {
@@ -134,6 +178,19 @@ export function stepAi(
     result.healAtAnchor =
       inputs.distanceToAnchor <= ENEMY_AI.returnAnchorDistance
     setMovementIntent(result, inputs.enemyType)
+    return result
+  }
+
+  if (!inputs.playerAlive) {
+    enterState(result, state, state, elapsedSeconds)
+    result.attackWindupSeconds = 0
+    if (state === 'Patrol') {
+      result.moveTarget = 'PatrolPoint'
+    } else if (state === 'Return') {
+      result.moveTarget = 'Anchor'
+      result.healAtAnchor =
+        inputs.distanceToAnchor <= ENEMY_AI.returnAnchorDistance
+    }
     return result
   }
 
@@ -199,33 +256,14 @@ export function stepAi(
         inputs.distanceToPlayer > attackDistance
       ) {
         enterState(result, state, 'Chase', elapsedSeconds)
-      } else if (inputs.enemyType === 'brigandArcher') {
-        if (inputs.attackCooldownSeconds > 0) {
-          result.attackWindupSeconds = Math.max(
-            0,
-            ENEMY_TYPES.brigandArcher.drawSeconds -
-              result.attackCooldownSeconds,
-          )
-          if (result.attackCooldownSeconds === 0) {
-            result.attack = true
-            result.attackCooldownSeconds = enemy.attackCadenceSeconds
-            result.attackWindupSeconds = 0
-          }
-        } else {
-          result.attackWindupSeconds += deltaSeconds
-          if (
-            result.attackWindupSeconds >= ENEMY_TYPES.brigandArcher.drawSeconds
-          ) {
-            result.attack = true
-            result.attackCooldownSeconds = enemy.attackCadenceSeconds
-            result.attackWindupSeconds = 0
-          }
-        }
-      } else if (result.attackCooldownSeconds === 0) {
-        result.attack = true
-        result.attackCooldownSeconds = enemy.attackCadenceSeconds
       } else {
-        result.attackWindupSeconds = 0
+        stepAttackCycle(
+          result,
+          inputs,
+          deltaSeconds,
+          attackWindupDuration(inputs.enemyType),
+          enemy.attackCadenceSeconds,
+        )
       }
       break
     case 'Flee':
@@ -267,29 +305,39 @@ export function shouldBucklerBlock(
   )
 }
 
-export function houndBiteCutsCordSegment(
+export function houndBiteCutsSimulatedRope(
   cordState: CordState,
   houndX: number,
   houndY: number,
   houndZ: number,
-  segmentStartX: number,
-  segmentStartY: number,
-  segmentStartZ: number,
-  segmentEndX: number,
-  segmentEndY: number,
-  segmentEndZ: number,
+  ropePositions: Float32Array,
+  activePoints: number,
 ): boolean {
   if (!canCordBeCut(cordState) || cordState.mode !== 'Out') return false
-  return capsuleOverlapsPoint(
-    houndX,
-    houndY,
-    houndZ,
-    segmentStartX,
-    segmentStartY,
-    segmentStartZ,
-    segmentEndX,
-    segmentEndY,
-    segmentEndZ,
-    ENEMY_TYPES.cliffHound.cutterVolumeRadius + REACHBLADE.rope.collisionRadius,
+  const pointCount = Math.min(
+    Math.max(0, Math.floor(activePoints)),
+    Math.floor(ropePositions.length / 3),
   )
+  const combinedRadius =
+    ENEMY_TYPES.cliffHound.cutterVolumeRadius + REACHBLADE.rope.collisionRadius
+  for (let point = 0; point + 1 < pointCount; point += 1) {
+    const start = point * 3
+    const end = start + 3
+    if (
+      capsuleOverlapsPoint(
+        houndX,
+        houndY,
+        houndZ,
+        ropePositions[start],
+        ropePositions[start + 1],
+        ropePositions[start + 2],
+        ropePositions[end],
+        ropePositions[end + 1],
+        ropePositions[end + 2],
+        combinedRadius,
+      )
+    )
+      return true
+  }
+  return false
 }

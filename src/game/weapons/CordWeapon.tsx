@@ -22,7 +22,7 @@ import {
   capsuleOverlapsPoint,
   distanceSquaredPointToSegment,
 } from '../combat/hitboxes'
-import { houndBiteCutsCordSegment } from '../enemies/ai'
+import { houndBiteCutsSimulatedRope } from '../enemies/ai'
 import {
   angleFromEnemyFacing,
   damageEnemy,
@@ -160,17 +160,13 @@ export function CordWeapon() {
   const cutCordAtHoundPoint = useCallback(
     (x: number, y: number, z: number): boolean => {
       if (
-        !houndBiteCutsCordSegment(
+        !houndBiteCutsSimulatedRope(
           cord.current,
           x,
           y,
           z,
-          hand.x,
-          hand.y,
-          hand.z,
-          blade.x,
-          blade.y,
-          blade.z,
+          rope.current.positions,
+          rope.current.activePoints,
         )
       )
         return false

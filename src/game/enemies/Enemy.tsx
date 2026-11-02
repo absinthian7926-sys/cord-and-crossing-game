@@ -6,8 +6,8 @@ import {
   type RapierCollider,
   type RapierRigidBody,
 } from '@react-three/rapier'
-import { useEffect, useRef } from 'react'
-import type { Group, Mesh } from 'three'
+import { useEffect, useMemo, useRef } from 'react'
+import { Color, type Group, type Mesh, type MeshStandardMaterial } from 'three'
 import {
   ENEMY_AI,
   ENEMY_DEATH,
@@ -77,12 +77,20 @@ function canDrawBow(enemy: EnemyRecord): boolean {
 }
 
 export function Enemy({ enemy }: EnemyProps) {
+  const color = ENEMY_TYPES[enemy.type].color
+  const baseBodyColor = useMemo(() => new Color(color), [color])
+  const windupBodyColor = useMemo(
+    () => new Color(ENEMY_PRESENTATION.meleeWindup.tintColor),
+    [],
+  )
   const body = useRef<RapierRigidBody>(null)
   const collider = useRef<RapierCollider>(null)
   const visual = useRef<Group>(null)
   const healthBar = useRef<Group>(null)
   const healthFill = useRef<Mesh>(null)
   const drawBar = useRef<Mesh>(null)
+  const bodyMaterial = useRef<MeshStandardMaterial>(null)
+  const sword = useRef<Mesh>(null)
   const { world, rapier } = useRapier()
   const character = useRef<ReturnType<
     typeof world.createCharacterController
@@ -129,6 +137,7 @@ export function Enemy({ enemy }: EnemyProps) {
     const delta = Math.min(rawDelta, 1 / 30)
     const player = playerStore.getState()
 
+    const wasStaggered = enemy.staggerRemaining > 0
     enemy.healthBarRemaining = Math.max(0, enemy.healthBarRemaining - delta)
     enemy.staggerRemaining = Math.max(0, enemy.staggerRemaining - delta)
     if (healthBar.current)
@@ -249,6 +258,7 @@ export function Enemy({ enemy }: EnemyProps) {
     inputs.stateElapsedSeconds = enemy.stateElapsed
     inputs.attackCooldownSeconds = enemy.attackCooldown
     inputs.attackWindupSeconds = enemy.drawRemaining
+    inputs.staggered = wasStaggered
 
     const result = stepAi(enemy.state, inputs, delta, aiResult.current)
     enemy.state = result.state
@@ -272,6 +282,24 @@ export function Enemy({ enemy }: EnemyProps) {
         enemy.drawRemaining / ENEMY_TYPES.brigandArcher.drawSeconds,
       )
     }
+
+    const meleeWindupActive =
+      enemy.type !== 'brigandArcher' &&
+      enemy.drawRemaining > 0 &&
+      enemy.staggerRemaining === 0
+    if (bodyMaterial.current)
+      bodyMaterial.current.color.copy(
+        meleeWindupActive ? windupBodyColor : baseBodyColor,
+      )
+    if (sword.current)
+      sword.current.rotation.z =
+        enemy.type === 'roadBrigand' && meleeWindupActive
+          ? ENEMY_PRESENTATION.meleeWindup.brigandSwordRaiseRadians
+          : 0
+    enemyVisual.scale.y =
+      enemy.type === 'cliffHound' && meleeWindupActive
+        ? ENEMY_PRESENTATION.meleeWindup.houndCrouchScaleY
+        : 1
 
     if (result.attack && enemy.staggerRemaining === 0) {
       if (enemy.type === 'brigandArcher') {
@@ -391,7 +419,6 @@ export function Enemy({ enemy }: EnemyProps) {
 
   const radius = colliderRadius(enemy.type)
   const halfHeight = colliderHalfHeight(enemy.type)
-  const color = ENEMY_TYPES[enemy.type].color
   const healthY =
     bodyHeight(enemy.type) * 0.5 + ENEMY_PRESENTATION.healthBar.verticalOffset
 
@@ -418,6 +445,7 @@ export function Enemy({ enemy }: EnemyProps) {
                 ]}
               />
               <meshStandardMaterial
+                ref={bodyMaterial}
                 color={color}
                 roughness={ENEMY_PRESENTATION.hound.bodyRoughness}
               />
@@ -455,6 +483,7 @@ export function Enemy({ enemy }: EnemyProps) {
                 ]}
               />
               <meshStandardMaterial
+                ref={bodyMaterial}
                 color={color}
                 roughness={ENEMY_PRESENTATION.humanoid.bodyRoughness}
               />
@@ -462,6 +491,7 @@ export function Enemy({ enemy }: EnemyProps) {
             {enemy.type === 'roadBrigand' ? (
               <>
                 <mesh
+                  ref={sword}
                   castShadow
                   position={[
                     ENEMY_PRESENTATION.roadBrigand.swordPosition[0],

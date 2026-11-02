@@ -1,4 +1,9 @@
-import { ENEMY_DEATH, ENEMY_TYPES, type EnemyType } from '../../data/enemies'
+import {
+  ENEMY_AI,
+  ENEMY_DEATH,
+  ENEMY_TYPES,
+  type EnemyType,
+} from '../../data/enemies'
 import { heightAt } from '../world/terrain'
 import { shouldBucklerBlock, type AiState } from './ai'
 import { createArrowPool, launchArrow } from './projectiles'
@@ -288,9 +293,29 @@ export function advanceRespawn(seconds: number): void {
   }
 }
 
-export function resetEnemiesToReturn(): void {
+export function isWithinPlayerDeathResetRadius(
+  enemyX: number,
+  enemyZ: number,
+  deathX: number,
+  deathZ: number,
+): boolean {
+  const offsetX = enemyX - deathX
+  const offsetZ = enemyZ - deathZ
+  return (
+    offsetX * offsetX + offsetZ * offsetZ <=
+    ENEMY_AI.playerDeathResetRadius * ENEMY_AI.playerDeathResetRadius
+  )
+}
+
+export function resetEnemiesNearDeathToReturn(
+  deathX: number,
+  deathZ: number,
+): void {
   for (const enemy of enemyRuntime.records) {
-    if (enemy.phase === 'Alive') {
+    if (
+      enemy.phase === 'Alive' &&
+      isWithinPlayerDeathResetRadius(enemy.x, enemy.z, deathX, deathZ)
+    ) {
       enemy.state = 'Return'
       enemy.stateElapsed = 0
       enemy.drawRemaining = 0
