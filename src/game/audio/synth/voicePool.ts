@@ -78,7 +78,7 @@ function selectSlot(
   pool: SfxVoicePool,
   priority: number,
   now: number,
-): VoiceSlot {
+): VoiceSlot | null {
   let selected = pool.slots[0]
   let oldestTime = Number.POSITIVE_INFINITY
   let oldestPriority = Number.POSITIVE_INFINITY
@@ -95,8 +95,7 @@ function selectSlot(
       oldestTime = slot.startedAt
     }
   }
-  if (oldestPriority > priority) return selected
-  return selected
+  return oldestPriority > priority ? null : selected
 }
 
 function oscillator(
@@ -175,6 +174,7 @@ export function playSfxEvent(
   const now = pool.context.currentTime
   const priority = event.id === 'footstep' ? 0 : 1
   const slot = selectSlot(pool, priority, now)
+  if (slot === null) return false
   resetSlot(slot, now)
   slot.active = true
   slot.priority = priority
