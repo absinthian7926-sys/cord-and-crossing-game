@@ -686,7 +686,9 @@ export function CordWeapon() {
         blade.addScaledVector(toHand, (recallSpeed * delta) / distance)
       }
     } else if (cord.current.mode === 'Cut') {
-      updateCord(step(cord.current, { type: 'tick' }, delta))
+      // Re-tie is an elapsed-time rule, not a motion integration. Keeping the
+      // unclamped render delta prevents the 2 s timer from stretching at low FPS.
+      updateCord(step(cord.current, { type: 'tick' }, rawDelta))
       if (cord.current.retieRemaining <= 0) {
         updateCord(step(cord.current, { type: 'retieDone' }))
         blade.copy(hand)
