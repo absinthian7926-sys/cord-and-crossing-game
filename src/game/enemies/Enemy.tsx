@@ -185,10 +185,12 @@ export function Enemy({ enemy }: EnemyProps) {
     (object: Object3D, clips: readonly AnimationClip[]) => {
       destroyAnimationController(animation.current)
       animation.current = createAnimationController(object, clips)
-      const loadedBodyMaterial = firstStandardMaterial(
-        object,
-        enemy.type === 'cliffHound' ? 'body' : 'pelvis',
-      )
+      const loadedBodyMaterial =
+        firstStandardMaterial(object, 'optimized-body') ??
+        firstStandardMaterial(
+          object,
+          enemy.type === 'cliffHound' ? 'body' : 'pelvis',
+        )
       if (loadedBodyMaterial) {
         bodyMaterial.current = loadedBodyMaterial
         baseBodyColor.copy(loadedBodyMaterial.color)
