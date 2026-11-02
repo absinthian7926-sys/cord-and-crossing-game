@@ -1,5 +1,10 @@
 // PLACEHOLDER Slice 1 game-feel settings. All values are GAME (NEW).
 export const FEEL = {
+  reduceMotion: {
+    crossingFlashPeakOpacity: 0.35,
+    transitionFadeSeconds: 0.3,
+    shimmerSpeedMultiplier: 0.5,
+  },
   animation: {
     crossfadeSeconds: 0.12,
     walkTimeScale: 0.4,

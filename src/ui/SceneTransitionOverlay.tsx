@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useSyncExternalStore } from 'react'
+import { FEEL } from '../data/feel'
 import { ZONE } from '../data/zone'
 import { setGameplayInputLock } from '../game/player/input'
 import {
@@ -6,12 +7,21 @@ import {
   getSceneRuntimeSnapshot,
   subscribeSceneRuntime,
 } from '../game/scenes/sceneRuntime'
+import {
+  getSettingsRuntimeSnapshot,
+  subscribeSettingsRuntime,
+} from '../game/settings/settingsRuntime'
 
 export function SceneTransitionOverlay() {
   const snapshot = useSyncExternalStore(
     subscribeSceneRuntime,
     getSceneRuntimeSnapshot,
     getSceneRuntimeSnapshot,
+  )
+  const settings = useSyncExternalStore(
+    subscribeSettingsRuntime,
+    getSettingsRuntimeSnapshot,
+    getSettingsRuntimeSnapshot,
   )
 
   useLayoutEffect(() => {
@@ -32,10 +42,24 @@ export function SceneTransitionOverlay() {
   return (
     <>
       {snapshot.phase === 'flashing' && (
-        <div className="crossing-flash" aria-hidden="true" />
+        <div
+          className="crossing-flash"
+          aria-hidden="true"
+          style={
+            {
+              '--crossing-flash-peak': settings.reduceMotion
+                ? FEEL.reduceMotion.crossingFlashPeakOpacity
+                : 1,
+            } as React.CSSProperties
+          }
+        />
       )}
       {snapshot.phase === 'loading' && (
-        <div className="scene-loading" role="status" aria-live="polite">
+        <div
+          className={`scene-loading${settings.reduceMotion ? ' reduce-motion' : ''}`}
+          role="status"
+          aria-live="polite"
+        >
           <div className="scene-loading-panel">{ZONE.hollow.loadingText}</div>
         </div>
       )}

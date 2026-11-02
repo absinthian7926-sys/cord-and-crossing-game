@@ -17,6 +17,7 @@ import {
   Vector3,
   type Group,
 } from 'three'
+import { FEEL } from '../../data/feel'
 import { PLAYER } from '../../data/player'
 import { ZONE } from '../../data/zone'
 import { ModelSlot } from '../models/ModelSlot'
@@ -25,6 +26,7 @@ import {
   unregisterCameraExcludedCollider,
 } from '../player/cameraCollisionRegistry'
 import { getPausableDelta } from '../pause/pauseRuntime'
+import { getSettingsRuntimeSnapshot } from '../settings/settingsRuntime'
 import { playerStore } from '../player/playerStore'
 import {
   createCrossingResult,
@@ -231,6 +233,11 @@ export function Portico({
     const delta = getPausableDelta(rawDelta)
     const shader = material.current
     if (shader) {
+      shader.uniforms.uRippleSpeed.value =
+        ZONE.portico.shimmer.rippleSpeed *
+        (getSettingsRuntimeSnapshot().reduceMotion
+          ? FEEL.reduceMotion.shimmerSpeedMultiplier
+          : 1)
       shader.uniforms.uTime.value += delta
       const target = active ? 1 : 0
       const step = delta / ZONE.portico.shimmer.fadeSeconds

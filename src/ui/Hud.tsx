@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { PLAYER_DEATH } from '../data/enemies'
+import { FEEL } from '../data/feel'
 import { PLAYER } from '../data/player'
 import { QUEST_UI } from '../data/quests'
 import { ZONE } from '../data/zone'
@@ -13,6 +14,7 @@ import {
   shouldShowUseKeyPrompt,
 } from '../game/portico/porticoRuntime'
 import { weaponRuntime } from '../game/weapons/weaponRuntime'
+import { getSettingsRuntimeSnapshot } from '../game/settings/settingsRuntime'
 
 export type QuestTrackerHud = {
   readonly text: string
@@ -99,13 +101,17 @@ export function Hud({ questTracker = null }: HudProps) {
         lastDisplayed.current.cord = cord.mode
         lastDisplayed.current.retie = retie
       }
+      const deathFadeSeconds = getSettingsRuntimeSnapshot().reduceMotion
+        ? FEEL.reduceMotion.transitionFadeSeconds
+        : PLAYER_DEATH.fadeSeconds
       const deathOpacity =
         state.death.phase === 'Fading'
           ? Math.max(
               0,
               Math.min(
                 1,
-                1 - state.death.fadeRemainingSeconds / PLAYER_DEATH.fadeSeconds,
+                (PLAYER_DEATH.fadeSeconds - state.death.fadeRemainingSeconds) /
+                  deathFadeSeconds,
               ),
             )
           : 0

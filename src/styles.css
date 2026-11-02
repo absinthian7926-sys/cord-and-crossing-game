@@ -197,10 +197,21 @@ canvas {
 }
 @keyframes crossing-flash-fade {
   from {
-    opacity: 1;
+    opacity: var(--crossing-flash-peak, 1);
   }
   to {
     opacity: 0;
+  }
+}
+.scene-loading.reduce-motion {
+  animation: scene-loading-crossfade 0.3s ease-out both;
+}
+@keyframes scene-loading-crossfade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 .interaction-prompt-anchor {
