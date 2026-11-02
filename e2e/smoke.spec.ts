@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { ENEMY_DEATH, ENEMY_TYPES } from '../src/data/enemies'
 import { PLAYER } from '../src/data/player'
+import { HOLLEN, QUEST } from '../src/data/quests'
 import { REACHBLADE } from '../src/data/weapons'
 import { ZONE } from '../src/data/zone'
 
@@ -349,44 +350,290 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
   )
 
   await page.evaluate(
-    ([x, z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
-    ZONE.locations.D.center,
+    ([x, z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z + 2.4),
+    HOLLEN.position,
   )
   await page.waitForFunction(
     ([x, z]) => {
       const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
-      return Math.hypot(position.x - x, position.z - z) < 1
+      return Math.hypot(position.x - x, position.z - (z + 2.4)) < 0.5
     },
-    ZONE.locations.D.center,
+    HOLLEN.position,
     { timeout: 5_000 },
   )
-  await page.evaluate(() =>
-    window.__CORD_AND_CROSSING_DEBUG__!.aggroEnemies(40),
+  await page.keyboard.press('KeyW')
+  await expect(page.getByText(HOLLEN.prompt, { exact: true })).toBeVisible({
+    timeout: 5_000,
+  })
+  await page.keyboard.press('KeyE')
+  await expect(page.getByRole('dialog', { name: HOLLEN.name })).toBeVisible()
+  await page.keyboard.press('Digit1')
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep === 2,
+  )
+  await expect(page.locator('.quest-tracker')).toHaveText(
+    QUEST.steps[1].trackerText,
+  )
+
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('dialog', { name: QUEST.name })).toBeVisible()
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('dialog', { name: QUEST.name })).toBeHidden()
+
+  const leaderId = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.spawnCampLeader(),
+  )
+  expect(leaderId).not.toBeNull()
+  const leaderPosition = await page.evaluate((id) => {
+    const leader = window
+      .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+      .find((enemy) => enemy.id === id)
+    if (!leader) throw new Error('Camp leader did not spawn')
+    return leader.position
+  }, leaderId)
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    leaderPosition,
   )
   await page.waitForFunction(
-    () => {
-      const camp = window
-        .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
-        .filter((enemy) => enemy.id.startsWith('camp-'))
+    ({ x, z }) => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - x, position.z - z) < 0.5
+    },
+    leaderPosition,
+    { timeout: 5_000 },
+  )
+  expect(
+    await page.evaluate(
+      (id) => window.__CORD_AND_CROSSING_DEBUG__!.killEnemy(id!),
+      leaderId,
+    ),
+  ).toBe(true)
+  await expect(page.getByText('E Take key', { exact: true })).toBeVisible({
+    timeout: 5_000,
+  })
+  await page.keyboard.press('KeyE')
+  await page.waitForFunction(() => {
+    const quest = window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest
+    return quest.currentStep === 3 && quest.keyLooted
+  })
+
+  await page.evaluate(
+    ([x, z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z + 2),
+    HOLLEN.position,
+  )
+  await expect(page.getByText(HOLLEN.prompt, { exact: true })).toBeVisible({
+    timeout: 5_000,
+  })
+  await page.keyboard.press('KeyE')
+  await expect(page.getByRole('dialog', { name: HOLLEN.name })).toBeVisible()
+  await page.keyboard.press('Digit1')
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep === 4,
+  )
+  await expect(page.locator('.quest-tracker')).toHaveText(
+    QUEST.steps[3].trackerText,
+  )
+
+  await page.evaluate(() => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    debug.setPlayerVitals(73, 41)
+    if (!debug.saveGame()) throw new Error('Manual save failed')
+  })
+  const savedPosition = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition(),
+  )
+  await page.reload()
+  await expect(page.locator('canvas')).toBeVisible()
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
+  )
+  await page.waitForFunction(
+    ({ x, z }) => {
+      const debug = window.__CORD_AND_CROSSING_DEBUG__!
+      const position = debug.getPlayerPosition()
+      const quest = debug.getQuest().quest
       return (
-        camp.length === 9 &&
-        camp.every(
-          (enemy) => enemy.state === 'Chase' || enemy.state === 'Attack',
-        )
+        quest.currentStep === 4 &&
+        quest.keyLooted &&
+        Math.hypot(position.x - x, position.z - z) < 0.5
       )
     },
-    undefined,
-    { timeout: 30_000 },
+    savedPosition,
+    { timeout: 10_000 },
   )
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__!.getActiveArrowCount() > 0,
-    undefined,
-    { timeout: 30_000 },
+  const restoredVitals = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus(),
   )
-  const busyCampPerf = await page.evaluate(() =>
+  expect(restoredVitals.health).toBeCloseTo(73, 0)
+  expect(restoredVitals.stamina).toBeCloseTo(41, 0)
+
+  await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.openDialogue())
+  await expect(page.getByRole('dialog', { name: HOLLEN.name })).toBeVisible()
+  await page.waitForTimeout(350)
+  const dialoguePerf = await page.evaluate(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.getPerfStats(),
   )
+  await page.keyboard.press('Escape')
+
+  await page.evaluate(
+    ([x, , z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    ZONE.spawn,
+  )
+  await page.waitForTimeout(350)
+  const spawnPerf = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getPerfStats(),
+  )
+
+  await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.teleport(30, 0))
+  await page.waitForFunction(() => {
+    const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+    return Math.hypot(position.x - 30, position.z) < 1
+  })
+  const windupBrigand = await page.evaluate((attackRange) => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    const position = debug.getPlayerPosition()
+    return debug.spawnEnemy(
+      'roadBrigand',
+      position.x + attackRange - 0.1,
+      position.z,
+    )
+  }, ENEMY_TYPES.roadBrigand.attackRange)
+  await page.waitForFunction(
+    (id) =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getEnemyAttackPhase(id)?.windingUp ===
+      true,
+    windupBrigand,
+    { timeout: 10_000 },
+  )
+  expect(
+    await page.evaluate(
+      (id) =>
+        window
+          .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+          .find((enemy) => enemy.id === id)?.inFrustum,
+      windupBrigand,
+    ),
+  ).toBe(true)
+  const healthBeforeDodge = await page.evaluate(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().health,
+  )
+  await page.keyboard.press('KeyC')
+  await page.waitForTimeout(
+    (ENEMY_TYPES.roadBrigand.attackWindupSeconds + 0.2) * 1_000,
+  )
+  expect(
+    await page.evaluate(
+      () => window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().health,
+    ),
+  ).toBe(healthBeforeDodge)
+  await page.evaluate(
+    (id) => window.__CORD_AND_CROSSING_DEBUG__!.killEnemy(id),
+    windupBrigand,
+  )
+
+  await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.teleport(100, 0),
+  )
+  await page.waitForFunction(() => {
+    const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+    return Math.hypot(position.x - 100, position.z) < 1
+  })
+  const resetIds = await page.evaluate(() => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    const position = debug.getPlayerPosition()
+    return {
+      near: debug.spawnEnemy('roadBrigand', position.x + 39, position.z),
+      far: debug.spawnEnemy('roadBrigand', position.x + 41, position.z),
+    }
+  })
+  await page.evaluate(() => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    debug.aggroEnemies(50)
+    debug.damagePlayer(1_000)
+  })
+  await page.waitForFunction(
+    ({ near, far }) => {
+      const enemies = window.__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+      return (
+        enemies.find((enemy) => enemy.id === near)?.state === 'Return' &&
+        enemies.find((enemy) => enemy.id === far)?.state !== 'Return'
+      )
+    },
+    resetIds,
+    { timeout: 5_000 },
+  )
+  await page.evaluate(({ near, far }) => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    debug.killEnemy(near)
+    debug.killEnemy(far)
+  }, resetIds)
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getPlayerStatus().deathPhase ===
+      'Alive',
+    undefined,
+    { timeout: 30_000 },
+  )
+  expect(
+    await page.evaluate(() => {
+      const quest = window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest
+      return { currentStep: quest.currentStep, keyLooted: quest.keyLooted }
+    }),
+  ).toEqual({ currentStep: 4, keyLooted: true })
+
+  const stagedCampIds = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.stageWorstCaseCamp(),
+  )
+  expect(stagedCampIds).toHaveLength(10)
+  await page.waitForFunction(
+    (ids) => {
+      const debug = window.__CORD_AND_CROSSING_DEBUG__!
+      const enemies = debug
+        .getEnemies()
+        .filter((enemy) => ids.includes(enemy.id))
+      return (
+        enemies.length === 10 &&
+        enemies.every(
+          (enemy) =>
+            enemy.alive &&
+            enemy.inFrustum &&
+            (enemy.state === 'Chase' || enemy.state === 'Attack'),
+        ) &&
+        debug.getCampFrustumCount() === 10 &&
+        debug.getActiveArrowCount() > 0 &&
+        debug.getCordState() === 'Out'
+      )
+    },
+    stagedCampIds,
+    { timeout: 30_000 },
+  )
+  await page.waitForTimeout(350)
+  const busyCampFrame = await page.evaluate((ids) => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    const enemies = debug.getEnemies().filter((enemy) => ids.includes(enemy.id))
+    return {
+      alive: enemies.filter((enemy) => enemy.alive).length,
+      inFrustum: enemies.filter((enemy) => enemy.alive && enemy.inFrustum)
+        .length,
+      activeArrows: debug.getActiveArrowCount(),
+      cordState: debug.getCordState(),
+      perf: debug.getPerfStats(),
+    }
+  }, stagedCampIds)
+  expect(busyCampFrame).toMatchObject({
+    alive: 10,
+    inFrustum: 10,
+    cordState: 'Out',
+  })
+  expect(busyCampFrame.activeArrows).toBeGreaterThan(0)
+  const busyCampPerf = busyCampFrame.perf
   expect(busyCampPerf.drawCalls).toBeLessThan(250)
   expect(busyCampPerf.triangles).toBeLessThan(500_000)
+  console.log(
+    `perf spawn=${JSON.stringify(spawnPerf)} dialogue=${JSON.stringify(dialoguePerf)} camp=${JSON.stringify(busyCampPerf)}`,
+  )
   expect(browserErrors).toEqual([])
 })
