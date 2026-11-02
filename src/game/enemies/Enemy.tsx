@@ -9,10 +9,10 @@ import {
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   Color,
+  Mesh,
+  MeshStandardMaterial,
   type AnimationClip,
   type Group,
-  type Mesh,
-  type MeshStandardMaterial,
   type Object3D,
 } from 'three'
 import {
@@ -113,6 +113,23 @@ function canDrawBow(enemy: EnemyRecord): boolean {
   )
 }
 
+function firstStandardMaterial(
+  root: Object3D,
+  nodeName: string,
+): MeshStandardMaterial | null {
+  const named = root.getObjectByName(nodeName)
+  if (!named) return null
+  let result: MeshStandardMaterial | null = null
+  named.traverse((child) => {
+    if (result !== null || !(child instanceof Mesh)) return
+    const material = Array.isArray(child.material)
+      ? child.material[0]
+      : child.material
+    if (material instanceof MeshStandardMaterial) result = material
+  })
+  return result
+}
+
 export function Enemy({ enemy }: EnemyProps) {
   const color = ENEMY_TYPES[enemy.type].color
   const baseBodyColor = useMemo(() => new Color(color), [color])
@@ -137,7 +154,7 @@ export function Enemy({ enemy }: EnemyProps) {
   const drawBar = useRef<Mesh>(null)
   const bodyMaterial = useRef<MeshStandardMaterial>(null)
   const shieldMaterial = useRef<MeshStandardMaterial>(null)
-  const sword = useRef<Mesh>(null)
+  const sword = useRef<Object3D>(null)
   const animation = useRef<AnimationController | null>(null)
   const hitFlash = useRef(createEnemyFlashState())
   const blockFlash = useRef(createTimedFlashState())
@@ -168,19 +185,20 @@ export function Enemy({ enemy }: EnemyProps) {
     (object: Object3D, clips: readonly AnimationClip[]) => {
       destroyAnimationController(animation.current)
       animation.current = createAnimationController(object, clips)
-      const bodyNode = object.getObjectByName(
+      const loadedBodyMaterial = firstStandardMaterial(
+        object,
         enemy.type === 'cliffHound' ? 'body' : 'pelvis',
-      ) as Mesh | undefined
-      if (bodyNode) {
-        bodyMaterial.current = bodyNode.material as MeshStandardMaterial
-        baseBodyColor.copy(bodyMaterial.current.color)
+      )
+      if (loadedBodyMaterial) {
+        bodyMaterial.current = loadedBodyMaterial
+        baseBodyColor.copy(loadedBodyMaterial.color)
       }
-      const swordNode = object.getObjectByName('sword') as Mesh | undefined
+      const swordNode = object.getObjectByName('sword')
       if (swordNode) sword.current = swordNode
-      const shieldNode = object.getObjectByName('buckler') as Mesh | undefined
-      if (shieldNode) {
-        shieldMaterial.current = shieldNode.material as MeshStandardMaterial
-        baseShieldColor.copy(shieldMaterial.current.color)
+      const loadedShieldMaterial = firstStandardMaterial(object, 'buckler')
+      if (loadedShieldMaterial) {
+        shieldMaterial.current = loadedShieldMaterial
+        baseShieldColor.copy(loadedShieldMaterial.color)
       }
       const sash = object.getObjectByName('leaderSash')
       if (sash) sash.visible = enemy.variant === ENEMY_VARIANTS.campLeader
