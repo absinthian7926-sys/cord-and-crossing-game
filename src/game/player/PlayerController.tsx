@@ -257,6 +257,8 @@ export function PlayerController() {
       body.current.setNextKinematicTranslation(store.position)
       store.teleportTarget = null
       vertical.current = 0
+      dodgeLeft.current = 0
+      invulnerableLeft.current = 0
       unsafeSeconds.current = 0
       footstepState.current.elapsedSeconds = 0
       footstepState.current.wasGrounded = true
