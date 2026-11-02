@@ -76,7 +76,11 @@ export const FRAME_SHELTER_KEY = {
   presentation: {
     ringRadius: 0.18,
     tubeRadius: 0.035,
+    radialSegments: 6,
+    tubularSegments: 16,
     color: '#5d5a50',
+    metalness: 0.65,
+    roughness: 0.5,
     glowColor: '#c9a46a',
     glowIntensity: 0.4,
     glowRange: 2,

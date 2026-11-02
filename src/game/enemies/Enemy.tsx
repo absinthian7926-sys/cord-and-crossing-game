@@ -142,6 +142,19 @@ export function Enemy({ enemy }: EnemyProps) {
     const delta = Math.min(rawDelta, 1 / 30)
     const player = playerStore.getState()
 
+    if (enemy.teleportRequested) {
+      nextTranslation.current.x = enemy.x
+      nextTranslation.current.y = enemy.y
+      nextTranslation.current.z = enemy.z
+      enemyBody.setEnabled(true)
+      enemyCollider.setEnabled(true)
+      enemyBody.setTranslation(nextTranslation.current, true)
+      enemyBody.setNextKinematicTranslation(nextTranslation.current)
+      enemyVisual.visible = true
+      enemyVisual.rotation.z = 0
+      enemy.teleportRequested = false
+    }
+
     const wasStaggered = enemy.staggerRemaining > 0
     enemy.healthBarRemaining = Math.max(0, enemy.healthBarRemaining - delta)
     enemy.staggerRemaining = Math.max(0, enemy.staggerRemaining - delta)

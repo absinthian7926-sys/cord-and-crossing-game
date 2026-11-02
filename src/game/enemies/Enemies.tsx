@@ -1,6 +1,6 @@
-import { useFrame } from '@react-three/fiber'
+import { useFrame, useThree } from '@react-three/fiber'
 import { useEffect, useMemo, useReducer, useRef } from 'react'
-import { InstancedMesh, Object3D } from 'three'
+import { Frustum, InstancedMesh, Matrix4, Object3D, Vector3 } from 'three'
 import { ENEMY_ARROW, ENEMY_PRESENTATION } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
 import { applyCombatDamage } from '../combat/combat'
@@ -112,6 +112,27 @@ function EnemyProjectiles() {
   )
 }
 
+function EnemyVisibilitySampler() {
+  const { camera } = useThree()
+  const frustum = useMemo(() => new Frustum(), [])
+  const projection = useMemo(() => new Matrix4(), [])
+  const point = useMemo(() => new Vector3(), [])
+
+  useFrame(() => {
+    projection.multiplyMatrices(
+      camera.projectionMatrix,
+      camera.matrixWorldInverse,
+    )
+    frustum.setFromProjectionMatrix(projection)
+    for (const enemy of enemyRuntime.records) {
+      point.set(enemy.x, enemy.y, enemy.z)
+      enemy.inFrustum = enemy.phase === 'Alive' && frustum.containsPoint(point)
+    }
+  })
+
+  return null
+}
+
 export function Enemies() {
   const [, rerender] = useReducer((value: number) => value + 1, 0)
 
@@ -127,6 +148,7 @@ export function Enemies() {
         <Enemy key={enemy.id} enemy={enemy} />
       ))}
       <EnemyProjectiles />
+      {import.meta.env.DEV && <EnemyVisibilitySampler />}
     </>
   )
 }

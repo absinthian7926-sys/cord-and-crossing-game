@@ -21,7 +21,12 @@ import {
   stepPlayerDeath,
   WAYSTATION_RESPAWN,
 } from './death'
-import { clearInput, consumeInput, inputHeld } from './input'
+import {
+  clearInput,
+  consumeInput,
+  inputHeld,
+  isGameplayInputLocked,
+} from './input'
 import { resolveGroundSpeed } from './movement'
 import { playerStore } from './playerStore'
 import { spendDodgeStamina, updateVitals } from './vitals'
@@ -102,6 +107,10 @@ export function PlayerController() {
       return
     }
     if (isPlayerInputLocked(store.death)) {
+      clearInput()
+      return
+    }
+    if (isGameplayInputLocked()) {
       clearInput()
       return
     }

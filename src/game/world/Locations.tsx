@@ -160,8 +160,6 @@ function Waystation() {
   const halfZ = data.shelterSize[2] / 2
   const barrelX = ZONE.locations.A.center[0] + data.barrelOffset[0]
   const barrelZ = ZONE.locations.A.center[1] + data.barrelOffset[1]
-  const markerX = ZONE.locations.A.center[0] + data.npcMarkerOffset[0]
-  const markerZ = ZONE.locations.A.center[1] + data.npcMarkerOffset[1]
 
   return (
     <group name="location-a-waystation">
@@ -224,24 +222,6 @@ function Waystation() {
           args={[data.barrelRadius, data.barrelRadius, data.barrelHeight, 10]}
         />
         <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-      </mesh>
-      {/* PLACEHOLDER: empty marker for the later quest NPC. */}
-      <mesh
-        position={[
-          markerX,
-          heightAt(markerX, markerZ) + data.postRadius,
-          markerZ,
-        ]}
-      >
-        <cylinderGeometry
-          args={[
-            data.npcMarkerRadius,
-            data.npcMarkerRadius,
-            data.postRadius,
-            16,
-          ]}
-        />
-        <meshStandardMaterial color={ZONE.palette.npcMarker} roughness={1} />
       </mesh>
     </group>
   )

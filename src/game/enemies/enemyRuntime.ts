@@ -65,6 +65,8 @@ export type EnemyRecord = {
   patrolIndex: number
   stateElapsed: number
   lastDamage: number
+  inFrustum: boolean
+  teleportRequested: boolean
 }
 
 export type EnemySnapshot = {
@@ -76,6 +78,7 @@ export type EnemySnapshot = {
   position: { x: number; y: number; z: number }
   alive: boolean
   attackCooldown: number
+  inFrustum: boolean
 }
 
 export type EnemySpawnLike = {
@@ -165,6 +168,8 @@ function makeRecord(spawn: EnemySpawnLike): EnemyRecord {
     patrolIndex: 0,
     stateElapsed: 0,
     lastDamage: 0,
+    inFrustum: false,
+    teleportRequested: false,
   }
 }
 
@@ -243,6 +248,7 @@ export function getEnemySnapshots(): EnemySnapshot[] {
     position: { x: enemy.x, y: enemy.y, z: enemy.z },
     alive: enemy.phase === 'Alive',
     attackCooldown: enemy.attackCooldown,
+    inFrustum: enemy.inFrustum,
   }))
 }
 
@@ -277,6 +283,30 @@ export function spawnEnemy(type: EnemyType, x: number, z: number): string {
   debugSpawnSequence += 1
   const id = `debug-${type}-${debugSpawnSequence}`
   enemyRuntime.records.push(makeRecord({ id, type, x, z }))
+  notifyRoster()
+  return id
+}
+
+export function spawnCampLeaderForDebug(): string {
+  debugSpawnSequence += 1
+  const spawn = createCampLeaderSpawn({
+    questStep: CAMP_LEADER.minimumQuestStep,
+    keyLooted: false,
+    leaderDefeated: false,
+  })
+  if (!spawn) return ''
+  const id = `debug-camp-leader-${debugSpawnSequence}`
+  enemyRuntime.records.push(
+    makeRecord({
+      id,
+      type: spawn.enemyType,
+      variant: spawn.variant,
+      x: spawn.x,
+      z: spawn.z,
+      anchorX: spawn.anchorX,
+      anchorZ: spawn.anchorZ,
+    }),
+  )
   notifyRoster()
   return id
 }
@@ -420,4 +450,6 @@ export function resetEnemyAtAnchor(enemy: EnemyRecord): void {
   enemy.patrolIndex = 0
   enemy.stateElapsed = 0
   enemy.lastDamage = 0
+  enemy.inFrustum = false
+  enemy.teleportRequested = false
 }

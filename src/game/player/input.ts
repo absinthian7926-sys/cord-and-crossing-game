@@ -9,10 +9,13 @@ export type KeyName =
   | 'recall'
   | 'closeStrike'
   | 'aim'
+  | 'interact'
+  | 'questLog'
 
 const pressed = new Set<string>()
 const consumed = new Set<KeyName>()
 const released = new Set<KeyName>()
+let gameplayInputLocked = false
 const bindings: Record<KeyName, readonly string[]> = {
   forward: ['KeyW'],
   backward: ['KeyS'],
@@ -24,6 +27,8 @@ const bindings: Record<KeyName, readonly string[]> = {
   recall: ['KeyQ'],
   closeStrike: ['Mouse0'],
   aim: ['Mouse2'],
+  interact: ['KeyE'],
+  questLog: ['Tab'],
 }
 const boundCodes = new Set(Object.values(bindings).flat())
 
@@ -75,6 +80,16 @@ export function clearInput() {
   released.clear()
 }
 
+export function setGameplayInputLocked(locked: boolean): void {
+  if (gameplayInputLocked === locked) return
+  gameplayInputLocked = locked
+  clearInput()
+}
+
+export function isGameplayInputLocked(): boolean {
+  return gameplayInputLocked
+}
+
 export function attachInput() {
   window.addEventListener('keydown', keyDown)
   window.addEventListener('keyup', keyUp)
@@ -95,17 +110,17 @@ export function detachInput() {
 }
 
 export function inputHeld(name: KeyName) {
-  return held(name)
+  return !gameplayInputLocked && held(name)
 }
 
 export function consumeInput(name: KeyName) {
-  if (!held(name) || consumed.has(name)) return false
+  if (gameplayInputLocked || !held(name) || consumed.has(name)) return false
   consumed.add(name)
   return true
 }
 
 export function consumeReleased(name: KeyName) {
-  if (!released.has(name)) return false
+  if (gameplayInputLocked || !released.has(name)) return false
   released.delete(name)
   return true
 }
