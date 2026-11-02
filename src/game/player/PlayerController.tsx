@@ -17,6 +17,7 @@ import {
 } from '../effects/effectRuntime'
 import { resetEnemiesNearDeathToReturn } from '../enemies/enemyRuntime'
 import { getPausableDelta } from '../pause/pauseRuntime'
+import { ModelSlot } from '../models/ModelSlot'
 import { getWorldConfiguration } from '../scenes/sceneRuntime'
 import { resetWeaponToInHand } from '../weapons/weaponRuntime'
 import {
@@ -248,21 +249,32 @@ export function PlayerController() {
         args={[PLAYER.collider.halfHeight, PLAYER.collider.radius]}
       />
       <group ref={visual}>
-        <mesh castShadow position={[0, 0.2, 0]}>
-          <capsuleGeometry
-            args={[
-              PLAYER.collider.radius,
-              PLAYER.collider.halfHeight * 2,
-              8,
-              16,
-            ]}
-          />
-          <meshStandardMaterial color="#61747a" roughness={0.85} />
-        </mesh>
-        <mesh castShadow position={[0, 0.65, 0.24]}>
-          <boxGeometry args={[0.12, 0.18, 0.08]} />
-          <meshStandardMaterial color="#b66d45" />
-        </mesh>
+        <ModelSlot
+          model="hero"
+          onReady={(object) => {
+            const modelBlade = object.getObjectByName('reachblade')
+            if (modelBlade) modelBlade.visible = false
+          }}
+          fallback={
+            <>
+              <mesh castShadow position={[0, 0.2, 0]}>
+                <capsuleGeometry
+                  args={[
+                    PLAYER.collider.radius,
+                    PLAYER.collider.halfHeight * 2,
+                    8,
+                    16,
+                  ]}
+                />
+                <meshStandardMaterial color="#61747a" roughness={0.85} />
+              </mesh>
+              <mesh castShadow position={[0, 0.65, 0.24]}>
+                <boxGeometry args={[0.12, 0.18, 0.08]} />
+                <meshStandardMaterial color="#b66d45" />
+              </mesh>
+            </>
+          }
+        />
       </group>
     </RigidBody>
   )

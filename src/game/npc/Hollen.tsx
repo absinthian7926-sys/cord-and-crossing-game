@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef } from 'react'
 import type { Group } from 'three'
 import { ENEMY_PRESENTATION } from '../../data/enemies'
 import { HOLLEN } from '../../data/quests'
+import { ModelSlot } from '../models/ModelSlot'
 import {
   registerCameraExcludedCollider,
   unregisterCameraExcludedCollider,
@@ -121,21 +122,25 @@ export function Hollen({
         position={[0, HOLLEN.body.height / 2, 0]}
         rotation={[0, roadFacing, 0]}
       >
-        {/* PLACEHOLDER: Hollen uses a capsule until the M7 model pass. */}
-        <mesh castShadow receiveShadow>
-          <capsuleGeometry
-            args={[
-              HOLLEN.body.radius,
-              bodyHalfHeight * 2,
-              ENEMY_PRESENTATION.humanoid.bodyCapSegments,
-              ENEMY_PRESENTATION.humanoid.bodyRadialSegments,
-            ]}
-          />
-          <meshStandardMaterial
-            color={HOLLEN.body.color}
-            roughness={ENEMY_PRESENTATION.humanoid.bodyRoughness}
-          />
-        </mesh>
+        <ModelSlot
+          model="hollen"
+          fallback={
+            <mesh castShadow receiveShadow>
+              <capsuleGeometry
+                args={[
+                  HOLLEN.body.radius,
+                  bodyHalfHeight * 2,
+                  ENEMY_PRESENTATION.humanoid.bodyCapSegments,
+                  ENEMY_PRESENTATION.humanoid.bodyRadialSegments,
+                ]}
+              />
+              <meshStandardMaterial
+                color={HOLLEN.body.color}
+                roughness={ENEMY_PRESENTATION.humanoid.bodyRoughness}
+              />
+            </mesh>
+          }
+        />
       </group>
       {interactionEnabled && !dialogueOpen && (
         <Html

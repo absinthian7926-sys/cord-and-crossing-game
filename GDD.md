@@ -246,7 +246,15 @@ M7 settings defaults (all GAME (NEW), revisable):
   - Trade routes: https://cord-and-crossing.vercel.app/images/trade-routes.jpg
   - Island dawn (light and palette): https://cord-and-crossing.vercel.app/images/island-dawn.jpg
   - Guide home: https://cord-and-crossing.vercel.app
-- Asset pipeline: placeholder primitives first (capsule hero, boxes, cylinders). Then Tripo or Meshy generated GLB models, rigged and animated with Mixamo, compressed with gltf-transform (Draco or Meshopt, KTX2 textures).
+- Slice 1 asset pipeline, decided by Ryan on 2026-11-02: self-authored Blender scripts are the primary free pipeline, with deterministic code-built GLBs as the fallback when Blender is unavailable. M7 used the authorized code-built fallback because Blender was not present in the development environment. Source lives in `scripts/models`, compression uses weld, dedup, prune, quantize and Meshopt, and the flat-color assets use no textures. The existing primitives remain runtime fallbacks.
+
+M7 model defaults (all GAME (NEW), PLACEHOLDER art and revisable):
+
+- Each model has at most 4 materials and no downloaded textures. Hero is at most 3000 triangles. Road brigand, Brigand archer and Hollen are at most 2500 each. Cliff hound is at most 1500. Each static prop is at most 1500.
+- Hero clips are idle 2 s, run 0.7 s, dodge 0.45 s, strike 1 and 2 at 0.5 s, strike 3 at 0.64 s, cast 0.5 s, recall 0.55 s and heelstone pass 1.2 s. Walk uses run at 0.4x. The animation crossfade is 0.12 s.
+- Road brigand clips are idle 2 s, walk 0.8 s, attack 1.1 s, stagger 0.4 s and death 1 s. Brigand archer clips are idle 2 s, walk 0.8 s, draw 0.6 s and death 1 s. Cliff hound clips are idle 1.6 s, run 0.55 s, bite 0.8 s and death 1 s. Hollen clips are idle 2 s and talk 1.5 s.
+- Static model ids are waystation shelter, water barrel, cart, tent, camp fire, lookout, ruin frame post, ruin lintel, portico pillar, rope rail post, frame shelter key, practice rail, target post, snag post, Hollow gate and tassel. Rope rail posts remain instanced primitives in the world to keep their one-draw-call budget, while the generated model remains available.
+- The M7 code-built outputs total 103816 bytes. The largest file is `hero.glb` at 13128 bytes. All outputs are dedicated CC0 by the project and recorded in `public/models/CREDITS.md`.
 
 ## 12. Audio notes
 

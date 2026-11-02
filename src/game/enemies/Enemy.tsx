@@ -29,6 +29,7 @@ import {
 import { playerStore } from '../player/playerStore'
 import { getWorldConfiguration } from '../scenes/sceneRuntime'
 import { getPausableDelta } from '../pause/pauseRuntime'
+import { ModelSlot } from '../models/ModelSlot'
 import { isUnarmed } from '../weapons/cordState'
 import { weaponRuntime } from '../weapons/weaponRuntime'
 import {
@@ -457,182 +458,217 @@ export function Enemy({ enemy }: EnemyProps) {
     >
       <CapsuleCollider ref={collider} args={[halfHeight, radius]} />
       <group ref={visual}>
-        {enemy.type === 'cliffHound' ? (
-          <>
-            <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
-              <capsuleGeometry
-                args={[
-                  radius,
-                  halfHeight * 2,
-                  ENEMY_PRESENTATION.hound.bodyCapSegments,
-                  ENEMY_PRESENTATION.hound.bodyRadialSegments,
-                ]}
-              />
-              <meshStandardMaterial
-                ref={bodyMaterial}
-                color={color}
-                roughness={ENEMY_PRESENTATION.hound.bodyRoughness}
-              />
-            </mesh>
-            <mesh
-              castShadow
-              position={[
-                ENEMY_PRESENTATION.hound.headPosition[0],
-                ENEMY_PRESENTATION.hound.headPosition[1],
-                ENEMY_PRESENTATION.hound.headPosition[2],
-              ]}
-            >
-              <coneGeometry
-                args={[
-                  ENEMY_PRESENTATION.hound.headRadius,
-                  ENEMY_PRESENTATION.hound.headLength,
-                  ENEMY_PRESENTATION.hound.headSegments,
-                ]}
-              />
-              <meshStandardMaterial
-                color={color}
-                roughness={ENEMY_PRESENTATION.hound.bodyRoughness}
-              />
-            </mesh>
-          </>
-        ) : (
-          <>
-            <mesh castShadow>
-              <capsuleGeometry
-                args={[
-                  radius,
-                  halfHeight * 2,
-                  ENEMY_PRESENTATION.humanoid.bodyCapSegments,
-                  ENEMY_PRESENTATION.humanoid.bodyRadialSegments,
-                ]}
-              />
-              <meshStandardMaterial
-                ref={bodyMaterial}
-                color={color}
-                roughness={ENEMY_PRESENTATION.humanoid.bodyRoughness}
-              />
-            </mesh>
-            {enemy.type === 'roadBrigand' ? (
+        <ModelSlot
+          model={
+            enemy.type === 'cliffHound'
+              ? 'cliffHound'
+              : enemy.type === 'brigandArcher'
+                ? 'brigandArcher'
+                : 'roadBrigand'
+          }
+          loadedScale={enemy.scale}
+          uniqueMaterials
+          onReady={(object) => {
+            const bodyNode = object.getObjectByName(
+              enemy.type === 'cliffHound' ? 'body' : 'pelvis',
+            ) as Mesh | undefined
+            if (bodyNode)
+              bodyMaterial.current = bodyNode.material as MeshStandardMaterial
+            const swordNode = object.getObjectByName('sword') as
+              Mesh | undefined
+            if (swordNode) sword.current = swordNode
+            const sash = object.getObjectByName('leaderSash')
+            if (sash) sash.visible = enemy.variant === ENEMY_VARIANTS.campLeader
+          }}
+          fallback={
+            enemy.type === 'cliffHound' ? (
               <>
-                <mesh
-                  ref={sword}
-                  castShadow
-                  position={[
-                    ENEMY_PRESENTATION.roadBrigand.swordPosition[0] *
-                      enemy.scale,
-                    ENEMY_PRESENTATION.roadBrigand.swordPosition[1] *
-                      enemy.scale,
-                    ENEMY_PRESENTATION.roadBrigand.swordPosition[2] *
-                      enemy.scale,
-                  ]}
-                >
-                  <boxGeometry
+                <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
+                  <capsuleGeometry
                     args={[
-                      ENEMY_PRESENTATION.roadBrigand.swordSize[0] * enemy.scale,
-                      ENEMY_PRESENTATION.roadBrigand.swordSize[1] * enemy.scale,
-                      ENEMY_PRESENTATION.roadBrigand.swordSize[2] * enemy.scale,
+                      radius,
+                      halfHeight * 2,
+                      ENEMY_PRESENTATION.hound.bodyCapSegments,
+                      ENEMY_PRESENTATION.hound.bodyRadialSegments,
                     ]}
                   />
                   <meshStandardMaterial
-                    color={ENEMY_PRESENTATION.roadBrigand.swordColor}
-                    metalness={ENEMY_PRESENTATION.roadBrigand.swordMetalness}
+                    ref={bodyMaterial}
+                    color={color}
+                    roughness={ENEMY_PRESENTATION.hound.bodyRoughness}
                   />
                 </mesh>
-                {enemy.variant === ENEMY_VARIANTS.campLeader ? (
-                  <mesh
-                    castShadow
-                    rotation={[
-                      0,
-                      0,
-                      ENEMY_PRESENTATION.meleeWindup.brigandSwordRaiseRadians /
-                        2,
-                    ]}
-                  >
-                    <boxGeometry
-                      args={[
-                        radius * 2,
-                        ENEMY_PRESENTATION.healthBar.backgroundHeight *
-                          enemy.scale,
-                        ENEMY_PRESENTATION.roadBrigand.swordSize[2] *
-                          enemy.scale,
-                      ]}
-                    />
-                    <meshStandardMaterial color={CAMP_LEADER.sashColor} />
-                  </mesh>
-                ) : null}
                 <mesh
                   castShadow
                   position={[
-                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[0] *
-                      enemy.scale,
-                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[1] *
-                      enemy.scale,
-                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[2] *
-                      enemy.scale,
+                    ENEMY_PRESENTATION.hound.headPosition[0],
+                    ENEMY_PRESENTATION.hound.headPosition[1],
+                    ENEMY_PRESENTATION.hound.headPosition[2],
                   ]}
-                  rotation={[Math.PI / 2, 0, 0]}
                 >
-                  <cylinderGeometry
+                  <coneGeometry
                     args={[
-                      ENEMY_PRESENTATION.roadBrigand.shieldRadius * enemy.scale,
-                      ENEMY_PRESENTATION.roadBrigand.shieldRadius * enemy.scale,
-                      ENEMY_PRESENTATION.roadBrigand.shieldDepth * enemy.scale,
-                      ENEMY_PRESENTATION.roadBrigand.shieldSegments,
+                      ENEMY_PRESENTATION.hound.headRadius,
+                      ENEMY_PRESENTATION.hound.headLength,
+                      ENEMY_PRESENTATION.hound.headSegments,
                     ]}
                   />
                   <meshStandardMaterial
-                    color={ENEMY_PRESENTATION.roadBrigand.shieldColor}
-                    metalness={ENEMY_PRESENTATION.roadBrigand.shieldMetalness}
+                    color={color}
+                    roughness={ENEMY_PRESENTATION.hound.bodyRoughness}
                   />
                 </mesh>
               </>
             ) : (
               <>
-                <mesh
-                  castShadow
-                  position={[
-                    ENEMY_PRESENTATION.brigandArcher.bowPosition[0],
-                    ENEMY_PRESENTATION.brigandArcher.bowPosition[1],
-                    ENEMY_PRESENTATION.brigandArcher.bowPosition[2],
-                  ]}
-                >
-                  <torusGeometry
+                <mesh castShadow>
+                  <capsuleGeometry
                     args={[
-                      ENEMY_PRESENTATION.brigandArcher.bowRadius,
-                      ENEMY_PRESENTATION.brigandArcher.bowTubeRadius,
-                      ENEMY_PRESENTATION.brigandArcher.bowRadialSegments,
-                      ENEMY_PRESENTATION.brigandArcher.bowTubularSegments,
-                      Math.PI,
+                      radius,
+                      halfHeight * 2,
+                      ENEMY_PRESENTATION.humanoid.bodyCapSegments,
+                      ENEMY_PRESENTATION.humanoid.bodyRadialSegments,
                     ]}
                   />
                   <meshStandardMaterial
-                    color={ENEMY_PRESENTATION.brigandArcher.bowColor}
-                    roughness={ENEMY_PRESENTATION.brigandArcher.bowRoughness}
+                    ref={bodyMaterial}
+                    color={color}
+                    roughness={ENEMY_PRESENTATION.humanoid.bodyRoughness}
                   />
                 </mesh>
-                <mesh
-                  ref={drawBar}
-                  position={[
-                    0,
-                    ENEMY_PRESENTATION.brigandArcher.drawBarPositionY,
-                    0,
-                  ]}
-                  visible={false}
-                >
-                  <boxGeometry
-                    args={[
-                      ENEMY_PRESENTATION.brigandArcher.drawBarWidth,
-                      ENEMY_PRESENTATION.brigandArcher.drawBarHeight,
-                      ENEMY_PRESENTATION.brigandArcher.drawBarDepth,
-                    ]}
-                  />
-                  <meshBasicMaterial
-                    color={ENEMY_PRESENTATION.brigandArcher.drawBarColor}
-                  />
-                </mesh>
+                {enemy.type === 'roadBrigand' ? (
+                  <>
+                    <mesh
+                      ref={sword}
+                      castShadow
+                      position={[
+                        ENEMY_PRESENTATION.roadBrigand.swordPosition[0] *
+                          enemy.scale,
+                        ENEMY_PRESENTATION.roadBrigand.swordPosition[1] *
+                          enemy.scale,
+                        ENEMY_PRESENTATION.roadBrigand.swordPosition[2] *
+                          enemy.scale,
+                      ]}
+                    >
+                      <boxGeometry
+                        args={[
+                          ENEMY_PRESENTATION.roadBrigand.swordSize[0] *
+                            enemy.scale,
+                          ENEMY_PRESENTATION.roadBrigand.swordSize[1] *
+                            enemy.scale,
+                          ENEMY_PRESENTATION.roadBrigand.swordSize[2] *
+                            enemy.scale,
+                        ]}
+                      />
+                      <meshStandardMaterial
+                        color={ENEMY_PRESENTATION.roadBrigand.swordColor}
+                        metalness={
+                          ENEMY_PRESENTATION.roadBrigand.swordMetalness
+                        }
+                      />
+                    </mesh>
+                    {enemy.variant === ENEMY_VARIANTS.campLeader ? (
+                      <mesh
+                        castShadow
+                        rotation={[
+                          0,
+                          0,
+                          ENEMY_PRESENTATION.meleeWindup
+                            .brigandSwordRaiseRadians / 2,
+                        ]}
+                      >
+                        <boxGeometry
+                          args={[
+                            radius * 2,
+                            ENEMY_PRESENTATION.healthBar.backgroundHeight *
+                              enemy.scale,
+                            ENEMY_PRESENTATION.roadBrigand.swordSize[2] *
+                              enemy.scale,
+                          ]}
+                        />
+                        <meshStandardMaterial color={CAMP_LEADER.sashColor} />
+                      </mesh>
+                    ) : null}
+                    <mesh
+                      castShadow
+                      position={[
+                        ENEMY_PRESENTATION.roadBrigand.shieldPosition[0] *
+                          enemy.scale,
+                        ENEMY_PRESENTATION.roadBrigand.shieldPosition[1] *
+                          enemy.scale,
+                        ENEMY_PRESENTATION.roadBrigand.shieldPosition[2] *
+                          enemy.scale,
+                      ]}
+                      rotation={[Math.PI / 2, 0, 0]}
+                    >
+                      <cylinderGeometry
+                        args={[
+                          ENEMY_PRESENTATION.roadBrigand.shieldRadius *
+                            enemy.scale,
+                          ENEMY_PRESENTATION.roadBrigand.shieldRadius *
+                            enemy.scale,
+                          ENEMY_PRESENTATION.roadBrigand.shieldDepth *
+                            enemy.scale,
+                          ENEMY_PRESENTATION.roadBrigand.shieldSegments,
+                        ]}
+                      />
+                      <meshStandardMaterial
+                        color={ENEMY_PRESENTATION.roadBrigand.shieldColor}
+                        metalness={
+                          ENEMY_PRESENTATION.roadBrigand.shieldMetalness
+                        }
+                      />
+                    </mesh>
+                  </>
+                ) : (
+                  <>
+                    <mesh
+                      castShadow
+                      position={[
+                        ENEMY_PRESENTATION.brigandArcher.bowPosition[0],
+                        ENEMY_PRESENTATION.brigandArcher.bowPosition[1],
+                        ENEMY_PRESENTATION.brigandArcher.bowPosition[2],
+                      ]}
+                    >
+                      <torusGeometry
+                        args={[
+                          ENEMY_PRESENTATION.brigandArcher.bowRadius,
+                          ENEMY_PRESENTATION.brigandArcher.bowTubeRadius,
+                          ENEMY_PRESENTATION.brigandArcher.bowRadialSegments,
+                          ENEMY_PRESENTATION.brigandArcher.bowTubularSegments,
+                          Math.PI,
+                        ]}
+                      />
+                      <meshStandardMaterial
+                        color={ENEMY_PRESENTATION.brigandArcher.bowColor}
+                        roughness={
+                          ENEMY_PRESENTATION.brigandArcher.bowRoughness
+                        }
+                      />
+                    </mesh>
+                  </>
+                )}
               </>
-            )}
-          </>
+            )
+          }
+        />
+        {enemy.type === 'brigandArcher' && (
+          <mesh
+            ref={drawBar}
+            position={[0, ENEMY_PRESENTATION.brigandArcher.drawBarPositionY, 0]}
+            visible={false}
+          >
+            <boxGeometry
+              args={[
+                ENEMY_PRESENTATION.brigandArcher.drawBarWidth,
+                ENEMY_PRESENTATION.brigandArcher.drawBarHeight,
+                ENEMY_PRESENTATION.brigandArcher.drawBarDepth,
+              ]}
+            />
+            <meshBasicMaterial
+              color={ENEMY_PRESENTATION.brigandArcher.drawBarColor}
+            />
+          </mesh>
         )}
         <group ref={healthBar} position={[0, healthY, 0]} visible={false}>
           <mesh position={[0, 0, ENEMY_PRESENTATION.healthBar.backgroundDepth]}>

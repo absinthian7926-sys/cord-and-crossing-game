@@ -7,6 +7,7 @@ import {
 } from '@react-three/rapier'
 import { useEffect, useRef, useSyncExternalStore } from 'react'
 import { FRAME_SHELTER_KEY } from '../../data/quests'
+import { ModelSlot } from '../models/ModelSlot'
 import {
   registerCameraExcludedCollider,
   unregisterCameraExcludedCollider,
@@ -91,29 +92,33 @@ export function FrameShelterKey() {
           }
         }}
       />
-      {/* PLACEHOLDER: plain iron ring key until the M7 model pass. */}
-      <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
-        <torusGeometry
-          args={[
-            FRAME_SHELTER_KEY.presentation.ringRadius,
-            FRAME_SHELTER_KEY.presentation.tubeRadius,
-            FRAME_SHELTER_KEY.presentation.radialSegments,
-            FRAME_SHELTER_KEY.presentation.tubularSegments,
-          ]}
-        />
-        <meshStandardMaterial
-          color={FRAME_SHELTER_KEY.presentation.color}
-          metalness={FRAME_SHELTER_KEY.presentation.metalness}
-          roughness={FRAME_SHELTER_KEY.presentation.roughness}
-          emissive={FRAME_SHELTER_KEY.presentation.glowColor}
-          emissiveIntensity={FRAME_SHELTER_KEY.presentation.glowIntensity}
-        />
-        <pointLight
-          color={FRAME_SHELTER_KEY.presentation.glowColor}
-          intensity={FRAME_SHELTER_KEY.presentation.glowIntensity}
-          distance={FRAME_SHELTER_KEY.presentation.glowRange}
-        />
-      </mesh>
+      <ModelSlot
+        model="frameShelterKey"
+        fallback={
+          <mesh castShadow rotation={[Math.PI / 2, 0, 0]}>
+            <torusGeometry
+              args={[
+                FRAME_SHELTER_KEY.presentation.ringRadius,
+                FRAME_SHELTER_KEY.presentation.tubeRadius,
+                FRAME_SHELTER_KEY.presentation.radialSegments,
+                FRAME_SHELTER_KEY.presentation.tubularSegments,
+              ]}
+            />
+            <meshStandardMaterial
+              color={FRAME_SHELTER_KEY.presentation.color}
+              metalness={FRAME_SHELTER_KEY.presentation.metalness}
+              roughness={FRAME_SHELTER_KEY.presentation.roughness}
+              emissive={FRAME_SHELTER_KEY.presentation.glowColor}
+              emissiveIntensity={FRAME_SHELTER_KEY.presentation.glowIntensity}
+            />
+          </mesh>
+        }
+      />
+      <pointLight
+        color={FRAME_SHELTER_KEY.presentation.glowColor}
+        intensity={FRAME_SHELTER_KEY.presentation.glowIntensity}
+        distance={FRAME_SHELTER_KEY.presentation.glowRange}
+      />
       <Html
         center
         position={[0, FRAME_SHELTER_KEY.pickupRadius, 0]}

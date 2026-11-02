@@ -19,6 +19,7 @@ import {
 } from 'three'
 import { PLAYER } from '../../data/player'
 import { ZONE } from '../../data/zone'
+import { ModelSlot } from '../models/ModelSlot'
 import {
   registerCameraExcludedCollider,
   unregisterCameraExcludedCollider,
@@ -313,20 +314,29 @@ export function Portico({
       {[-1, 1].map((side) => {
         const offset = (side * ZONE.portico.pillarSpacing) / 2
         return (
-          <mesh
+          <ModelSlot
             key={side}
-            castShadow
-            receiveShadow
+            model="porticoPillar"
             position={[
               center[0] + lateralX * offset,
-              center[1] + pillarHalfHeight,
+              center[1],
               center[2] + lateralZ * offset,
             ]}
             rotation={[0, yaw, 0]}
-          >
-            <boxGeometry args={ZONE.placeholders.ruin.pillarSize} />
-            <meshStandardMaterial color={ZONE.palette.stone} roughness={1} />
-          </mesh>
+            fallback={
+              <mesh
+                castShadow
+                receiveShadow
+                position={[0, pillarHalfHeight, 0]}
+              >
+                <boxGeometry args={ZONE.placeholders.ruin.pillarSize} />
+                <meshStandardMaterial
+                  color={ZONE.palette.stone}
+                  roughness={1}
+                />
+              </mesh>
+            }
+          />
         )
       })}
 

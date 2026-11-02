@@ -5,6 +5,7 @@ import {
   BufferGeometry,
   Line,
   LineBasicMaterial,
+  Group,
   Mesh,
   Vector3,
 } from 'three'
@@ -28,6 +29,7 @@ import {
   distanceSquaredPointToSegment,
 } from '../combat/hitboxes'
 import { houndBiteCutsSimulatedRope } from '../enemies/ai'
+import { ModelSlot } from '../models/ModelSlot'
 import {
   angleFromEnemyFacing,
   damageEnemy,
@@ -132,7 +134,7 @@ function bladeOverlapsEnemy(enemy: EnemyRecord): boolean {
 export function CordWeapon() {
   const { camera } = useThree()
   const bladeMesh = useRef<Mesh>(null)
-  const tasselMesh = useRef<Mesh>(null)
+  const tasselMesh = useRef<Group>(null)
   const passHighlight = useRef<Mesh>(null)
   const cord = useRef<CordState>(weaponRuntime.cord)
   const combo = useRef(initialComboState())
@@ -792,20 +794,26 @@ export function CordWeapon() {
             roughness={0.4}
           />
         </mesh>
-        <mesh ref={tasselMesh} position={TASSEL_REWARD.offset} visible={false}>
-          {/* PLACEHOLDER: dyed cloth tassel cosmetic. */}
-          <boxGeometry
-            args={[
-              TASSEL_REWARD.width,
-              TASSEL_REWARD.length,
-              TASSEL_REWARD.depth,
-            ]}
+        <group ref={tasselMesh} position={TASSEL_REWARD.offset} visible={false}>
+          <ModelSlot
+            model="tassel"
+            fallback={
+              <mesh>
+                <boxGeometry
+                  args={[
+                    TASSEL_REWARD.width,
+                    TASSEL_REWARD.length,
+                    TASSEL_REWARD.depth,
+                  ]}
+                />
+                <meshStandardMaterial
+                  color={TASSEL_REWARD.color}
+                  roughness={TASSEL_REWARD.roughness}
+                />
+              </mesh>
+            }
           />
-          <meshStandardMaterial
-            color={TASSEL_REWARD.color}
-            roughness={TASSEL_REWARD.roughness}
-          />
-        </mesh>
+        </group>
       </mesh>
       <primitive object={ropeObject} />
       <primitive object={aimObject} />

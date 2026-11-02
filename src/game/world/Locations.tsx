@@ -14,6 +14,7 @@ import {
   Vector3,
 } from 'three'
 import { ZONE } from '../../data/zone'
+import { ModelSlot } from '../models/ModelSlot'
 import { ROAD_LENGTH, roadPointAt, sampleRoad } from './road'
 import { heightAt } from './terrain'
 
@@ -182,47 +183,67 @@ function Waystation() {
           )),
         )}
       </RigidBody>
-      <mesh
-        castShadow
-        receiveShadow
-        position={[centerX, ground + data.shelterSize[1], centerZ]}
-      >
-        <boxGeometry
-          args={[data.shelterSize[0], data.postRadius * 2, data.shelterSize[2]]}
-        />
-        <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-      </mesh>
-      {[-1, 1].flatMap((xSign) =>
-        [-1, 1].map((zSign) => (
-          <mesh
-            key={`${xSign}-${zSign}`}
-            castShadow
-            position={[
-              centerX + xSign * halfX,
-              ground + halfY,
-              centerZ + zSign * halfZ,
-            ]}
-          >
+      <ModelSlot
+        model="waystationShelter"
+        position={[centerX, ground, centerZ]}
+        fallback={
+          <>
+            <mesh
+              castShadow
+              receiveShadow
+              position={[0, data.shelterSize[1], 0]}
+            >
+              <boxGeometry
+                args={[
+                  data.shelterSize[0],
+                  data.postRadius * 2,
+                  data.shelterSize[2],
+                ]}
+              />
+              <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
+            </mesh>
+            {[-1, 1].flatMap((xSign) =>
+              [-1, 1].map((zSign) => (
+                <mesh
+                  key={`${xSign}-${zSign}`}
+                  castShadow
+                  position={[xSign * halfX, halfY, zSign * halfZ]}
+                >
+                  <cylinderGeometry
+                    args={[
+                      data.postRadius,
+                      data.postRadius,
+                      data.shelterSize[1],
+                      6,
+                    ]}
+                  />
+                  <meshStandardMaterial
+                    color={ZONE.palette.wood}
+                    roughness={1}
+                  />
+                </mesh>
+              )),
+            )}
+          </>
+        }
+      />
+      <ModelSlot
+        model="waterBarrel"
+        position={[barrelX, heightAt(barrelX, barrelZ), barrelZ]}
+        fallback={
+          <mesh castShadow position={[0, data.barrelHeight / 2, 0]}>
             <cylinderGeometry
-              args={[data.postRadius, data.postRadius, data.shelterSize[1], 6]}
+              args={[
+                data.barrelRadius,
+                data.barrelRadius,
+                data.barrelHeight,
+                10,
+              ]}
             />
             <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
           </mesh>
-        )),
-      )}
-      <mesh
-        castShadow
-        position={[
-          barrelX,
-          heightAt(barrelX, barrelZ) + data.barrelHeight / 2,
-          barrelZ,
-        ]}
-      >
-        <cylinderGeometry
-          args={[data.barrelRadius, data.barrelRadius, data.barrelHeight, 10]}
-        />
-        <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-      </mesh>
+        }
+      />
     </group>
   )
 }
@@ -252,25 +273,40 @@ function WreckedCart({ distance }: { distance: number }) {
       <RigidBody type="fixed" colliders={false}>
         <CuboidCollider args={half} position={[0, half[1], 0]} />
       </RigidBody>
-      <mesh castShadow receiveShadow position={[0, half[1], 0]}>
-        <boxGeometry args={cart.bodySize} />
-        <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-      </mesh>
-      {[-1, 1].flatMap((xSign) =>
-        [-1, 1].map((zSign) => (
-          <mesh
-            key={`${xSign}-${zSign}`}
-            castShadow
-            position={[xSign * wheelX, cart.wheelRadius, zSign * half[2]]}
-            rotation={[Math.PI / 2, 0, 0]}
-          >
-            <cylinderGeometry
-              args={[cart.wheelRadius, cart.wheelRadius, cart.wheelWidth, 10]}
-            />
-            <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-          </mesh>
-        )),
-      )}
+      <ModelSlot
+        model="cart"
+        fallback={
+          <>
+            <mesh castShadow receiveShadow position={[0, half[1], 0]}>
+              <boxGeometry args={cart.bodySize} />
+              <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
+            </mesh>
+            {[-1, 1].flatMap((xSign) =>
+              [-1, 1].map((zSign) => (
+                <mesh
+                  key={`${xSign}-${zSign}`}
+                  castShadow
+                  position={[xSign * wheelX, cart.wheelRadius, zSign * half[2]]}
+                  rotation={[Math.PI / 2, 0, 0]}
+                >
+                  <cylinderGeometry
+                    args={[
+                      cart.wheelRadius,
+                      cart.wheelRadius,
+                      cart.wheelWidth,
+                      10,
+                    ]}
+                  />
+                  <meshStandardMaterial
+                    color={ZONE.palette.wood}
+                    roughness={1}
+                  />
+                </mesh>
+              )),
+            )}
+          </>
+        }
+      />
     </group>
   )
 }
@@ -299,14 +335,44 @@ function BrigandCamp() {
               args={halfTent}
               position={[x, y + halfTent[1], z]}
             />
-            <mesh castShadow position={[x, y + halfTent[1], z]}>
-              <boxGeometry args={camp.tentSize} />
-              <meshStandardMaterial color={ZONE.palette.tent} roughness={1} />
-            </mesh>
+            <ModelSlot
+              model="tent"
+              position={[x, y, z]}
+              fallback={
+                <mesh castShadow position={[0, halfTent[1], 0]}>
+                  <boxGeometry args={camp.tentSize} />
+                  <meshStandardMaterial
+                    color={ZONE.palette.tent}
+                    roughness={1}
+                  />
+                </mesh>
+              }
+            />
           </RigidBody>
         )
       })}
-      <mesh
+      <ModelSlot
+        model="campFire"
+        position={[
+          center[0] + camp.fireOffset[0],
+          heightAt(
+            center[0] + camp.fireOffset[0],
+            center[1] + camp.fireOffset[1],
+          ),
+          center[1] + camp.fireOffset[1],
+        ]}
+        fallback={
+          <mesh position={[0, camp.fireRadius, 0]}>
+            <coneGeometry args={[camp.fireRadius, camp.fireRadius * 2, 6]} />
+            <meshStandardMaterial
+              color={ZONE.palette.fire}
+              emissive={ZONE.palette.fire}
+              emissiveIntensity={1}
+            />
+          </mesh>
+        }
+      />
+      <pointLight
         position={[
           center[0] + camp.fireOffset[0],
           heightAt(
@@ -315,19 +381,10 @@ function BrigandCamp() {
           ) + camp.fireRadius,
           center[1] + camp.fireOffset[1],
         ]}
-      >
-        <coneGeometry args={[camp.fireRadius, camp.fireRadius * 2, 6]} />
-        <meshStandardMaterial
-          color={ZONE.palette.fire}
-          emissive={ZONE.palette.fire}
-          emissiveIntensity={1}
-        />
-        <pointLight
-          color={ZONE.palette.fire}
-          intensity={1}
-          distance={camp.glowRange}
-        />
-      </mesh>
+        color={ZONE.palette.fire}
+        intensity={1}
+        distance={camp.glowRange}
+      />
       <RigidBody type="fixed" colliders={false}>
         <CuboidCollider
           args={[
@@ -341,17 +398,16 @@ function BrigandCamp() {
             lookoutZ,
           ]}
         />
-        <mesh
-          castShadow
-          position={[
-            lookoutX,
-            lookoutGround + camp.lookoutSize[1] / 2,
-            lookoutZ,
-          ]}
-        >
-          <boxGeometry args={camp.lookoutSize} />
-          <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-        </mesh>
+        <ModelSlot
+          model="lookout"
+          position={[lookoutX, lookoutGround, lookoutZ]}
+          fallback={
+            <mesh castShadow position={[0, camp.lookoutSize[1] / 2, 0]}>
+              <boxGeometry args={camp.lookoutSize} />
+              <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
+            </mesh>
+          }
+        />
       </RigidBody>
     </group>
   )
@@ -380,10 +436,23 @@ function RuinShelf() {
               ]}
               position={framePosition}
             />
-            <mesh castShadow position={framePosition}>
-              <boxGeometry args={ruin.frameSize} />
-              <meshStandardMaterial color={ZONE.palette.stone} roughness={1} />
-            </mesh>
+            <ModelSlot
+              model="ruinFramePost"
+              position={[
+                framePosition[0],
+                framePosition[1] - ruin.frameSize[1] / 2,
+                framePosition[2],
+              ]}
+              fallback={
+                <mesh castShadow position={[0, ruin.frameSize[1] / 2, 0]}>
+                  <boxGeometry args={ruin.frameSize} />
+                  <meshStandardMaterial
+                    color={ZONE.palette.stone}
+                    roughness={1}
+                  />
+                </mesh>
+              }
+            />
           </RigidBody>
         )
       })}
@@ -400,17 +469,20 @@ function RuinShelf() {
             center[1] + ruin.frameOffsets[2][1],
           ]}
         />
-        <mesh
-          castShadow
+        <ModelSlot
+          model="ruinLintel"
           position={[
             center[0],
             ground + ruin.frameSize[1],
             center[1] + ruin.frameOffsets[2][1],
           ]}
-        >
-          <boxGeometry args={ruin.lintelSize} />
-          <meshStandardMaterial color={ZONE.palette.stone} roughness={1} />
-        </mesh>
+          fallback={
+            <mesh castShadow>
+              <boxGeometry args={ruin.lintelSize} />
+              <meshStandardMaterial color={ZONE.palette.stone} roughness={1} />
+            </mesh>
+          }
+        />
       </RigidBody>
     </group>
   )
