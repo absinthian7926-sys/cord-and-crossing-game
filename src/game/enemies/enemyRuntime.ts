@@ -18,6 +18,8 @@ import {
 
 export type EnemyPhase = 'Alive' | 'Dying' | 'Dead'
 
+export type EnemyScene = 'zone' | 'hollow'
+
 export type EnemyHitKind = 'close' | 'cast' | 'arc' | 'shove'
 
 export type EnemyHitMeta = {
@@ -93,6 +95,7 @@ export type EnemySpawnLike = {
   patrolStartZ?: number
   patrolEndX?: number
   patrolEndZ?: number
+  respawns?: boolean
 }
 
 type RosterListener = () => void
@@ -107,8 +110,36 @@ type CampLeaderDefeatedHandler = (
 const rosterListeners = new Set<RosterListener>()
 let houndBiteHandler: HoundBiteHandler | null = null
 let campLeaderDefeatedHandler: CampLeaderDefeatedHandler | null = null
-let debugSpawnSequence = 0
-let randomState = 0x51_4f_4e_45
+let enemyHeightSampler: (x: number, z: number) => number = heightAt
+const INITIAL_RANDOM_STATE = 0x51_4f_4e_45
+
+type EnemySceneState = {
+  readonly records: EnemyRecord[]
+  readonly arrows: ReturnType<typeof createArrowPool>
+  initialized: boolean
+  debugSpawnSequence: number
+  randomState: number
+}
+
+function createEnemySceneState(): EnemySceneState {
+  return {
+    records: [],
+    arrows: createArrowPool(),
+    initialized: false,
+    debugSpawnSequence: 0,
+    randomState: INITIAL_RANDOM_STATE,
+  }
+}
+
+const enemyScenes: Record<EnemyScene, EnemySceneState> = {
+  zone: createEnemySceneState(),
+  hollow: createEnemySceneState(),
+}
+let activeEnemyScene: EnemyScene = 'zone'
+
+function activeSceneState(): EnemySceneState {
+  return enemyScenes[activeEnemyScene]
+}
 
 function notifyRoster(): void {
   for (const listener of rosterListeners) listener()
@@ -124,12 +155,14 @@ function groundedY(
     type === 'cliffHound'
       ? ENEMY_TYPES.cliffHound.collider.length
       : ENEMY_TYPES[type].collider.height
-  return heightAt(x, z) + bodyHeight * scale * 0.5
+  return enemyHeightSampler(x, z) + bodyHeight * scale * 0.5
 }
 
 function nextRandom(): number {
-  randomState = (Math.imul(randomState, 1_664_525) + 1_013_904_223) >>> 0
-  return randomState / 4_294_967_296
+  const state = activeSceneState()
+  state.randomState =
+    (Math.imul(state.randomState, 1_664_525) + 1_013_904_223) >>> 0
+  return state.randomState / 4_294_967_296
 }
 
 function makeRecord(spawn: EnemySpawnLike): EnemyRecord {
@@ -143,7 +176,7 @@ function makeRecord(spawn: EnemySpawnLike): EnemyRecord {
     type: spawn.type,
     variant,
     scale,
-    respawns: isCampLeader ? CAMP_LEADER.respawns : true,
+    respawns: isCampLeader ? CAMP_LEADER.respawns : (spawn.respawns ?? true),
     state: 'Idle',
     hp: maxHealth,
     maxHp: maxHealth,
@@ -174,18 +207,66 @@ function makeRecord(spawn: EnemySpawnLike): EnemyRecord {
 }
 
 export const enemyRuntime = {
-  records: [] as EnemyRecord[],
-  arrows: createArrowPool(),
+  records: enemyScenes.zone.records,
+  arrows: enemyScenes.zone.arrows,
   campLeaderDefeated: false,
 }
 
-export function initializeEnemyRoster(spawns: readonly EnemySpawnLike[]): void {
-  enemyRuntime.records.length = 0
-  for (const spawn of spawns) enemyRuntime.records.push(makeRecord(spawn))
-  debugSpawnSequence = 0
-  randomState = 0x51_4f_4e_45
-  enemyRuntime.arrows.active.fill(0)
+export function getActiveEnemyScene(): EnemyScene {
+  return activeEnemyScene
+}
+
+export function activateEnemyScene(scene: EnemyScene): boolean {
+  if (scene === activeEnemyScene) return false
+  activeEnemyScene = scene
+  const state = activeSceneState()
+  enemyRuntime.records = state.records
+  enemyRuntime.arrows = state.arrows
+  notifyRoster()
+  return true
+}
+
+export function isEnemySceneInitialized(
+  scene: EnemyScene = activeEnemyScene,
+): boolean {
+  return enemyScenes[scene].initialized
+}
+
+export function resetEnemySceneRosters(): void {
+  for (const scene of ['zone', 'hollow'] as const) {
+    const state = enemyScenes[scene]
+    state.records.length = 0
+    state.arrows.active.fill(0)
+    state.initialized = false
+    state.debugSpawnSequence = 0
+    state.randomState = INITIAL_RANDOM_STATE
+  }
+  activeEnemyScene = 'zone'
+  enemyRuntime.records = enemyScenes.zone.records
+  enemyRuntime.arrows = enemyScenes.zone.arrows
   enemyRuntime.campLeaderDefeated = false
+  notifyRoster()
+}
+
+export function setEnemyHeightSampler(
+  sampleHeight: (x: number, z: number) => number,
+): void {
+  enemyHeightSampler = sampleHeight
+}
+
+export function sampleEnemyGroundHeight(x: number, z: number): number {
+  return enemyHeightSampler(x, z)
+}
+
+export function initializeEnemyRoster(spawns: readonly EnemySpawnLike[]): void {
+  const state = activeSceneState()
+  state.records.length = 0
+  for (const spawn of spawns) state.records.push(makeRecord(spawn))
+  state.initialized = true
+  state.debugSpawnSequence = 0
+  state.randomState = INITIAL_RANDOM_STATE
+  state.arrows.active.fill(0)
+  if (activeEnemyScene === 'zone') enemyRuntime.campLeaderDefeated = false
   notifyRoster()
 }
 
@@ -280,22 +361,24 @@ export function ensureCampLeaderSpawned(
 }
 
 export function spawnEnemy(type: EnemyType, x: number, z: number): string {
-  debugSpawnSequence += 1
-  const id = `debug-${type}-${debugSpawnSequence}`
+  const scene = activeSceneState()
+  scene.debugSpawnSequence += 1
+  const id = `debug-${type}-${scene.debugSpawnSequence}`
   enemyRuntime.records.push(makeRecord({ id, type, x, z }))
   notifyRoster()
   return id
 }
 
 export function spawnCampLeaderForDebug(): string {
-  debugSpawnSequence += 1
+  const scene = activeSceneState()
+  scene.debugSpawnSequence += 1
   const spawn = createCampLeaderSpawn({
     questStep: CAMP_LEADER.minimumQuestStep,
     keyLooted: false,
     leaderDefeated: false,
   })
   if (!spawn) return ''
-  const id = `debug-camp-leader-${debugSpawnSequence}`
+  const id = `debug-camp-leader-${scene.debugSpawnSequence}`
   enemyRuntime.records.push(
     makeRecord({
       id,

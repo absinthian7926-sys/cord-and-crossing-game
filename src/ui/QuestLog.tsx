@@ -14,6 +14,7 @@ export type QuestLogProps = {
   readonly steps: readonly QuestLogStep[]
   readonly keyName: string
   readonly hasKey: boolean
+  readonly keyUsed?: boolean
   readonly onClose: () => void
 }
 
@@ -23,6 +24,7 @@ export function QuestLog({
   steps,
   keyName,
   hasKey,
+  keyUsed = false,
   onClose,
 }: QuestLogProps) {
   useEffect(() => {
@@ -80,7 +82,7 @@ export function QuestLog({
       <div className="quest-key-slot">
         <span>{keyName}</span>
         <strong aria-label={hasKey ? 'Key held' : 'Key not held'}>
-          {hasKey ? '✓' : '○'}
+          {hasKey ? (keyUsed ? 'Used' : '✓') : '○'}
         </strong>
       </div>
     </section>

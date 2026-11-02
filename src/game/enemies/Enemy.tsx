@@ -27,9 +27,9 @@ import {
   unregisterCameraExcludedCollider,
 } from '../player/cameraCollisionRegistry'
 import { playerStore } from '../player/playerStore'
+import { getWorldConfiguration } from '../scenes/sceneRuntime'
 import { isUnarmed } from '../weapons/cordState'
 import { weaponRuntime } from '../weapons/weaponRuntime'
-import { heightAt } from '../world/terrain'
 import {
   createAiStepResult,
   stepAi,
@@ -41,6 +41,7 @@ import {
   fireEnemyArrow,
   requestHoundCordBite,
   resetEnemyAtAnchor,
+  sampleEnemyGroundHeight,
   type EnemyRecord,
 } from './enemyRuntime'
 import { advanceRespawnElapsed, canRespawnFromElapsed } from './spawns'
@@ -272,8 +273,9 @@ export function Enemy({ enemy }: EnemyProps) {
     inputs.lineOfSight = lineOfSight
     inputs.playerAlive = player.vitals.health > 0
     inputs.playerInSafeZone =
-      playerSafeDistance <= ENEMY_AI.safeZoneRadius ||
-      enemySafeDistance <= ENEMY_AI.safeZoneRadius
+      getWorldConfiguration().safeZoneEnabled &&
+      (playerSafeDistance <= ENEMY_AI.safeZoneRadius ||
+        enemySafeDistance <= ENEMY_AI.safeZoneRadius)
     inputs.stateElapsedSeconds = enemy.stateElapsed
     inputs.attackCooldownSeconds = enemy.attackCooldown
     inputs.attackWindupSeconds = enemy.drawRemaining
@@ -424,7 +426,8 @@ export function Enemy({ enemy }: EnemyProps) {
         const corrected = controller.computedMovement()
         enemy.x += corrected.x
         enemy.z += corrected.z
-        enemy.y = heightAt(enemy.x, enemy.z) + bodyHeight(enemy) * 0.5
+        enemy.y =
+          sampleEnemyGroundHeight(enemy.x, enemy.z) + bodyHeight(enemy) * 0.5
         nextTranslation.current.x = enemy.x
         nextTranslation.current.y = enemy.y
         nextTranslation.current.z = enemy.z

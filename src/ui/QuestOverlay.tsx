@@ -13,7 +13,18 @@ import {
   subscribeQuestRuntime,
   toggleQuestLog,
 } from '../game/quest/questRuntime'
-import { setGameplayInputLocked } from '../game/player/input'
+import {
+  isGameplayInputLocked,
+  setGameplayInputLock,
+} from '../game/player/input'
+import {
+  canUsePorticoKey,
+  tryUsePorticoKey,
+} from '../game/portico/porticoGameplay'
+import {
+  getPorticoRuntimeSnapshot,
+  subscribePorticoRuntime,
+} from '../game/portico/porticoRuntime'
 import { Dialogue } from './Dialogue'
 import { Hud } from './Hud'
 import { QuestLog } from './QuestLog'
@@ -24,18 +35,24 @@ export function QuestOverlay() {
     getQuestRuntimeSnapshot,
     getQuestRuntimeSnapshot,
   )
+  const portico = useSyncExternalStore(
+    subscribePorticoRuntime,
+    getPorticoRuntimeSnapshot,
+    getPorticoRuntimeSnapshot,
+  )
   const dialogueNode = currentDialogueNode(snapshot.dialogue)
   const dialogueOpen = dialogueNode !== null
 
   useEffect(() => {
-    setGameplayInputLocked(dialogueOpen)
+    setGameplayInputLock('dialogue', dialogueOpen)
     if (dialogueOpen && document.pointerLockElement) document.exitPointerLock()
-    return () => setGameplayInputLocked(false)
+    return () => setGameplayInputLock('dialogue', false)
   }, [dialogueOpen])
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.repeat) return
+      if (isGameplayInputLocked()) return
       if (event.code === 'Tab' && !dialogueOpen) {
         event.preventDefault()
         toggleQuestLog()
@@ -48,6 +65,9 @@ export function QuestOverlay() {
       } else if (isKeyNearby()) {
         event.preventDefault()
         lootFrameShelterKey()
+      } else if (canUsePorticoKey()) {
+        event.preventDefault()
+        tryUsePorticoKey()
       }
     }
     window.addEventListener('keydown', onKeyDown)
@@ -93,6 +113,7 @@ export function QuestOverlay() {
         steps={logSteps}
         keyName={FRAME_SHELTER_KEY.name}
         hasKey={snapshot.quest.keyLooted}
+        keyUsed={portico.phase !== 'locked'}
         onClose={closeQuestLog}
       />
     </>

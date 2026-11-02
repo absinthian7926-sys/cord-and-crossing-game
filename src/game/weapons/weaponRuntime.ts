@@ -1,5 +1,7 @@
 import { initialCordState, type CordState } from './cordState'
 
+export type WeaponScene = 'zone' | 'hollow'
+
 export type DamageLogEntry = {
   dummyId: string
   damage: number
@@ -13,11 +15,26 @@ const damageListeners = new Set<DamageListener>()
 let forceCutHandler: (() => void) | null = null
 let resetWeaponHandler: (() => void) | null = null
 let holdCordOutHandler: ((enabled: boolean) => void) | null = null
+let debugDropBladeHandler: (() => boolean) | null = null
 
 export const weaponRuntime = {
   cord: initialCordState(),
+  droppedScene: null as WeaponScene | null,
   damageLog: [] as DamageLogEntry[],
   minimumCameraDistanceWhileOut: null as number | null,
+  tasselVisible: false,
+}
+
+export function setDroppedBladeScene(scene: WeaponScene | null): void {
+  weaponRuntime.droppedScene = scene
+}
+
+export function isWeaponPresentInScene(
+  mode: CordState['mode'],
+  currentScene: WeaponScene,
+  droppedScene: WeaponScene | null,
+): boolean {
+  return mode !== 'Dropped' || currentScene === droppedScene
 }
 
 export function setCordState(state: CordState): void {
@@ -71,8 +88,18 @@ export function holdCordOutForPerf(enabled: boolean): void {
   holdCordOutHandler?.(enabled)
 }
 
+export function registerDebugDropBlade(handler: (() => boolean) | null): void {
+  debugDropBladeHandler = handler
+}
+
+export function dropBladeForDebug(): boolean {
+  return debugDropBladeHandler?.() ?? false
+}
+
 export function resetWeaponRuntime(): void {
   weaponRuntime.cord = initialCordState()
+  weaponRuntime.droppedScene = null
   weaponRuntime.damageLog.length = 0
   weaponRuntime.minimumCameraDistanceWhileOut = null
+  weaponRuntime.tasselVisible = false
 }

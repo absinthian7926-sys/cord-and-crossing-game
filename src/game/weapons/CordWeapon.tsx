@@ -8,11 +8,16 @@ import {
   Mesh,
   Vector3,
 } from 'three'
+import { EFFECTS } from '../../data/effects'
 import { ENEMY_ATTACK, ENEMY_TYPES } from '../../data/enemies'
+import { TASSEL_REWARD } from '../../data/quests'
 import { REACHBLADE, TRAINING_DUMMIES } from '../../data/weapons'
+import { ZONE } from '../../data/zone'
 import {
   initialComboState,
   isTargetInArc,
+  createOutgoingHitResult,
+  resolveStrengthHit,
   selectFlatArcTargets,
   shoveDamage,
   tryStartCloseAttack,
@@ -31,6 +36,18 @@ import {
   type EnemyRecord,
 } from '../enemies/enemyRuntime'
 import {
+  effectRuntime,
+  getEffectMultipliers,
+  hasStrength,
+  isHeelstonePassRunning,
+  lineCarriesEffect,
+  makeCarriedLinePlain,
+} from '../effects/effectRuntime'
+import {
+  getHollowRuntimeSnapshot,
+  hitMarkedSnagPost,
+} from '../hollow/hollowRuntime'
+import {
   consumeInput,
   consumeReleased,
   inputHeld,
@@ -38,8 +55,9 @@ import {
   isDoubleTap,
 } from '../player/input'
 import { playerStore } from '../player/playerStore'
+import { getQuestRuntimeSnapshot } from '../quest/questRuntime'
+import { getWorldConfiguration } from '../scenes/sceneRuntime'
 import { spendStamina } from '../player/vitals'
-import { heightAt } from '../world/terrain'
 import {
   canCloseStrike,
   canCordBeCut,
@@ -53,8 +71,11 @@ import {
   registerHoldCordOutForPerf,
   registerWeaponReset,
   recordDummyDamage,
-  resetWeaponRuntime,
+  isWeaponPresentInScene,
+  setDroppedBladeScene,
+  registerDebugDropBlade,
   setCordState,
+  weaponRuntime,
 } from './weaponRuntime'
 import {
   createVerletRope,
@@ -71,6 +92,7 @@ const blade = new Vector3(0, 1.35, 0)
 const aimDirection = new Vector3(0, 0, -1)
 const castDirection = new Vector3(0, 0, -1)
 const toHand = new Vector3()
+const outgoingHit = createOutgoingHitResult()
 const arcTargets = TRAINING_DUMMIES.map((dummy) => ({
   id: dummy.id,
   x: dummy.position[0],
@@ -105,7 +127,9 @@ function bladeOverlapsEnemy(enemy: EnemyRecord): boolean {
 export function CordWeapon() {
   const { camera } = useThree()
   const bladeMesh = useRef<Mesh>(null)
-  const cord = useRef<CordState>(initialCordState())
+  const tasselMesh = useRef<Mesh>(null)
+  const passHighlight = useRef<Mesh>(null)
+  const cord = useRef<CordState>(weaponRuntime.cord)
   const combo = useRef(initialComboState())
   const pending = useRef<PendingAction | null>(null)
   const lastQTap = useRef(Number.NEGATIVE_INFINITY)
@@ -156,8 +180,16 @@ export function CordWeapon() {
   }, [aimGeometry])
 
   const updateCord = useCallback((next: CordState) => {
+    const previousMode = cord.current.mode
     cord.current = next
     setCordState(next)
+    if (previousMode !== next.mode && next.mode === 'Dropped')
+      setDroppedBladeScene(getWorldConfiguration().scene)
+    else if (next.mode === 'InHand') setDroppedBladeScene(null)
+    if (previousMode !== next.mode && next.mode === 'Cut')
+      makeCarriedLinePlain('cut')
+    else if (previousMode !== next.mode && next.mode === 'Dropped')
+      makeCarriedLinePlain('stop')
   }, [])
 
   const cutCordAtHoundPoint = useCallback(
@@ -203,21 +235,23 @@ export function CordWeapon() {
     comboIndex?: number,
   ) => {
     const position = playerStore.getState().position
-    for (const dummy of TRAINING_DUMMIES) {
-      if (
-        isTargetInArc(
-          position.x,
-          position.z,
-          aimDirection.x,
-          aimDirection.z,
-          dummy.position[0],
-          dummy.position[2],
-          reach,
-          arcDegrees,
-        )
-      ) {
-        damageDummy(dummy.id, damage, staggerSeconds, nowSeconds)
-        return
+    if (getWorldConfiguration().trainingDummiesEnabled) {
+      for (const dummy of TRAINING_DUMMIES) {
+        if (
+          isTargetInArc(
+            position.x,
+            position.z,
+            aimDirection.x,
+            aimDirection.z,
+            dummy.position[0],
+            dummy.position[2],
+            reach,
+            arcDegrees,
+          )
+        ) {
+          damageDummy(dummy.id, damage, staggerSeconds, nowSeconds)
+          return
+        }
       }
     }
     for (const enemy of enemyRuntime.records) {
@@ -245,7 +279,6 @@ export function CordWeapon() {
   }
 
   useEffect(() => {
-    resetWeaponRuntime()
     setCordState(cord.current)
     registerForceCut(() => {
       updateCord(step(cord.current, { type: 'cut' }))
@@ -283,11 +316,33 @@ export function CordWeapon() {
       aimObject.visible = false
       if (bladeMesh.current) bladeMesh.current.position.copy(blade)
     })
+    if (import.meta.env.DEV)
+      registerDebugDropBlade(() => {
+        debugHoldOut.current = false
+        pending.current = null
+        camera.getWorldDirection(castDirection)
+        castDirection.y = 0
+        castDirection.normalize()
+        blade
+          .copy(hand)
+          .addScaledVector(
+            castDirection,
+            REACHBLADE.stop.pickupRadius + REACHBLADE.bladeHitRadius,
+          )
+        updateCord(
+          step(step(initialCordState(), { type: 'castRelease' }), {
+            type: 'stopDoubleTap',
+          }),
+        )
+        droppedVelocity.current = 0
+        return true
+      })
     return () => {
       registerForceCut(null)
       registerHoundBiteHandler(null)
       registerHoldCordOutForPerf(null)
       registerWeaponReset(null)
+      if (import.meta.env.DEV) registerDebugDropBlade(null)
       ropeGeometry.dispose()
       aimGeometry.dispose()
       ;(ropeObject.material as LineBasicMaterial).dispose()
@@ -312,11 +367,21 @@ export function CordWeapon() {
     )
     const now = clock.elapsedTime
     const player = playerStore.getState()
+    const worldConfiguration = getWorldConfiguration()
+    const weaponPresent = isWeaponPresentInScene(
+      cord.current.mode,
+      worldConfiguration.scene,
+      weaponRuntime.droppedScene,
+    )
     if (player.death.phase !== 'Alive') return
     if (isGameplayInputLocked()) {
       pending.current = null
       aimObject.visible = false
       return
+    }
+    if (isHeelstonePassRunning()) {
+      pending.current = null
+      aimObject.visible = false
     }
     camera.getWorldDirection(aimDirection)
     aimDirection.y = 0
@@ -332,7 +397,7 @@ export function CordWeapon() {
       blade.copy(hand).addScaledVector(castDirection, REACHBLADE.maxCordLength)
     }
 
-    if (consumeInput('recall')) {
+    if (!isHeelstonePassRunning() && consumeInput('recall')) {
       if (
         isDoubleTap(
           lastQTap.current,
@@ -347,7 +412,8 @@ export function CordWeapon() {
       lastQTap.current = now
     }
 
-    const closePressed = consumeInput('closeStrike')
+    const closePressed =
+      !isHeelstonePassRunning() && consumeInput('closeStrike')
     if (closePressed && inputHeld('aim') && cord.current.mode === 'InHand') {
       if (spendStamina(player.vitals, REACHBLADE.flatArc.staminaCost)) {
         pending.current = {
@@ -388,7 +454,7 @@ export function CordWeapon() {
       }
     }
 
-    if (consumeReleased('aim')) {
+    if (!isHeelstonePassRunning() && consumeReleased('aim')) {
       if (skipAimRelease.current) {
         skipAimRelease.current = false
       } else if (cord.current.mode === 'InHand' && pending.current === null) {
@@ -409,13 +475,21 @@ export function CordWeapon() {
         const action = pending.current
         pending.current = null
         if (action.kind === 'close') {
+          resolveStrengthHit(
+            action.attack.damage,
+            REACHBLADE.cast.staggerSeconds,
+            'close',
+            hasStrength(),
+            lineCarriesEffect(),
+            outgoingHit,
+          )
           closeActiveRemaining.current = action.attack.activeSeconds
           strikeNearest(
-            action.attack.damage,
+            outgoingHit.damage,
             REACHBLADE.close.arcDegrees,
             REACHBLADE.close.reach,
             now,
-            REACHBLADE.cast.staggerSeconds,
+            outgoingHit.staggerSeconds,
             'close',
             action.attack.index,
           )
@@ -433,22 +507,29 @@ export function CordWeapon() {
                 REACHBLADE.flatArc.maximumRadius) /
                 2,
             )
-            const selected = selectFlatArcTargets(
-              arcTargets,
-              player.position.x,
-              player.position.z,
-              castDirection.x,
-              castDirection.z,
-            )
             let hitCount = 0
-            for (const target of selected) {
-              damageDummy(
-                target.id,
-                REACHBLADE.flatArc.damage,
-                REACHBLADE.cast.staggerSeconds,
-                now,
+            resolveStrengthHit(
+              REACHBLADE.flatArc.damage,
+              REACHBLADE.cast.staggerSeconds,
+              'cast',
+              hasStrength(),
+              lineCarriesEffect(),
+              outgoingHit,
+            )
+            const arcDamage = outgoingHit.damage
+            const arcStagger = outgoingHit.staggerSeconds
+            if (worldConfiguration.trainingDummiesEnabled) {
+              const selected = selectFlatArcTargets(
+                arcTargets,
+                player.position.x,
+                player.position.z,
+                castDirection.x,
+                castDirection.z,
               )
-              hitCount += 1
+              for (const target of selected) {
+                damageDummy(target.id, arcDamage, arcStagger, now)
+                hitCount += 1
+              }
             }
             for (const enemy of enemyRuntime.records) {
               if (hitCount >= REACHBLADE.flatArc.maximumTargets) break
@@ -466,10 +547,12 @@ export function CordWeapon() {
                   REACHBLADE.flatArc.minimumRadius,
                 )
               ) {
-                damageEnemy(enemy.id, REACHBLADE.flatArc.damage, {
+                damageEnemy(enemy.id, arcDamage, {
                   kind: 'arc',
-                  breaksGuard: ENEMY_ATTACK.breaksGuardByDefault,
-                  staggerSeconds: REACHBLADE.cast.staggerSeconds,
+                  breaksGuard:
+                    ENEMY_ATTACK.breaksGuardByDefault ||
+                    outgoingHit.breaksGuard,
+                  staggerSeconds: arcStagger,
                 })
                 hitCount += 1
               }
@@ -490,34 +573,63 @@ export function CordWeapon() {
       blade.addScaledVector(castDirection, REACHBLADE.cast.travelSpeed * delta)
       const distance = blade.distanceTo(hand)
       let hitTarget = false
-      for (const dummy of TRAINING_DUMMIES) {
-        const dx = blade.x - dummy.position[0]
-        const dz = blade.z - dummy.position[2]
-        if (dx * dx + dz * dz <= REACHBLADE.bladeHitRadius ** 2) {
-          damageDummy(
-            dummy.id,
-            REACHBLADE.cast.damage,
-            REACHBLADE.cast.staggerSeconds,
-            now,
+      const multipliers = getEffectMultipliers()
+      resolveStrengthHit(
+        REACHBLADE.cast.damage,
+        REACHBLADE.cast.staggerSeconds,
+        'cast',
+        hasStrength(),
+        lineCarriesEffect(),
+        outgoingHit,
+      )
+      const castDamage = outgoingHit.damage
+      const castStagger = outgoingHit.staggerSeconds
+      if (worldConfiguration.trainingDummiesEnabled) {
+        for (const dummy of TRAINING_DUMMIES) {
+          const dx = blade.x - dummy.position[0]
+          const dz = blade.z - dummy.position[2]
+          if (dx * dx + dz * dz <= REACHBLADE.bladeHitRadius ** 2) {
+            damageDummy(dummy.id, castDamage, castStagger, now)
+            updateCord(step(cord.current, { type: 'hit' }))
+            hitTarget = true
+            break
+          }
+        }
+      }
+      if (!hitTarget && worldConfiguration.scene === 'hollow') {
+        const snag = getHollowRuntimeSnapshot().snag
+        const snagX = blade.x - snag.postX
+        const snagZ = blade.z - snag.postZ
+        const snagRadius =
+          REACHBLADE.bladeHitRadius +
+          ZONE.hollow.presentation.snagPost.bottomRadius
+        if (
+          snagX * snagX + snagZ * snagZ <= snagRadius * snagRadius &&
+          hitMarkedSnagPost(
+            player.position.x,
+            player.position.z,
+            ZONE.hollow.snagBasePullSpeed,
+            multipliers.castPullForce,
           )
+        ) {
           updateCord(step(cord.current, { type: 'hit' }))
           hitTarget = true
-          break
         }
       }
       if (!hitTarget) {
         for (const enemy of enemyRuntime.records) {
           if (enemy.phase !== 'Alive') continue
           if (bladeOverlapsEnemy(enemy)) {
-            damageEnemy(enemy.id, REACHBLADE.cast.damage, {
+            damageEnemy(enemy.id, castDamage, {
               kind: 'cast',
               angleFromFacingDegrees: angleFromEnemyFacing(
                 enemy,
                 player.position.x,
                 player.position.z,
               ),
-              breaksGuard: ENEMY_ATTACK.breaksGuardByDefault,
-              staggerSeconds: REACHBLADE.cast.staggerSeconds,
+              breaksGuard:
+                ENEMY_ATTACK.breaksGuardByDefault || outgoingHit.breaksGuard,
+              staggerSeconds: castStagger,
             })
             updateCord(step(cord.current, { type: 'hit' }))
             hitTarget = true
@@ -534,25 +646,30 @@ export function CordWeapon() {
     }
 
     if (cord.current.mode === 'Out' || cord.current.mode === 'Returning') {
-      for (const dummy of TRAINING_DUMMIES) {
-        if (
-          dummy.cordCutter &&
-          capsuleOverlapsPoint(
-            dummy.position[0],
-            heightAt(dummy.position[0], dummy.position[2]) + dummy.position[1],
-            dummy.position[2],
-            hand.x,
-            hand.y,
-            hand.z,
-            blade.x,
-            blade.y,
-            blade.z,
-            REACHBLADE.rope.collisionRadius + REACHBLADE.cutterVolumeRadius,
-          ) &&
-          canCordBeCut(cord.current)
-        ) {
-          updateCord(step(cord.current, { type: 'cut' }))
-          break
+      if (worldConfiguration.trainingDummiesEnabled) {
+        for (const dummy of TRAINING_DUMMIES) {
+          if (
+            dummy.cordCutter &&
+            capsuleOverlapsPoint(
+              dummy.position[0],
+              worldConfiguration.sampleHeight(
+                dummy.position[0],
+                dummy.position[2],
+              ) + dummy.position[1],
+              dummy.position[2],
+              hand.x,
+              hand.y,
+              hand.z,
+              blade.x,
+              blade.y,
+              blade.z,
+              REACHBLADE.rope.collisionRadius + REACHBLADE.cutterVolumeRadius,
+            ) &&
+            canCordBeCut(cord.current)
+          ) {
+            updateCord(step(cord.current, { type: 'cut' }))
+            break
+          }
         }
       }
     }
@@ -574,12 +691,12 @@ export function CordWeapon() {
         updateCord(step(cord.current, { type: 'retieDone' }))
         blade.copy(hand)
       }
-    } else if (cord.current.mode === 'Dropped') {
+    } else if (cord.current.mode === 'Dropped' && weaponPresent) {
       droppedVelocity.current = stepDroppedBlade(
         blade,
         droppedVelocity.current,
         delta,
-        heightAt,
+        worldConfiguration.sampleHeight,
       )
       const pickupX = blade.x - player.position.x
       const pickupZ = blade.z - player.position.z
@@ -594,14 +711,15 @@ export function CordWeapon() {
       droppedVelocity.current = 0
     }
 
-    stepVerletRope(
-      rope.current,
-      delta,
-      hand,
-      blade,
-      cord.current.mode,
-      heightAt,
-    )
+    if (weaponPresent)
+      stepVerletRope(
+        rope.current,
+        delta,
+        hand,
+        blade,
+        cord.current.mode,
+        worldConfiguration.sampleHeight,
+      )
     if (cord.current.mode === 'Out')
       recordCameraDistanceWhileOut(player.cameraDistance)
     const ropeAttribute = ropeGeometry.getAttribute(
@@ -609,8 +727,27 @@ export function CordWeapon() {
     ) as BufferAttribute
     ropeAttribute.needsUpdate = true
     ropeGeometry.setDrawRange(0, rope.current.activePoints)
-    ropeObject.visible = cord.current.mode !== 'InHand'
-    if (bladeMesh.current) bladeMesh.current.position.copy(blade)
+    ropeObject.visible =
+      weaponPresent &&
+      (cord.current.mode !== 'InHand' || effectRuntime.pass.mode === 'Passing')
+    if (bladeMesh.current) {
+      bladeMesh.current.position.copy(blade)
+      bladeMesh.current.visible = weaponPresent
+    }
+    weaponRuntime.tasselVisible = getQuestRuntimeSnapshot().tasselEarned
+    if (tasselMesh.current)
+      tasselMesh.current.visible = weaponRuntime.tasselVisible
+    if (passHighlight.current) {
+      const passing = effectRuntime.pass.mode === 'Passing'
+      passHighlight.current.visible = passing
+      if (passing) {
+        const progress =
+          1 -
+          effectRuntime.pass.remainingSeconds /
+            EFFECTS.heelstonePass.durationSeconds
+        passHighlight.current.position.copy(hand).lerp(blade, progress)
+      }
+    }
 
     const aiming =
       !debugHoldOut.current &&
@@ -647,9 +784,28 @@ export function CordWeapon() {
             roughness={0.4}
           />
         </mesh>
+        <mesh ref={tasselMesh} position={TASSEL_REWARD.offset} visible={false}>
+          {/* PLACEHOLDER: dyed cloth tassel cosmetic. */}
+          <boxGeometry
+            args={[
+              TASSEL_REWARD.width,
+              TASSEL_REWARD.length,
+              TASSEL_REWARD.depth,
+            ]}
+          />
+          <meshStandardMaterial
+            color={TASSEL_REWARD.color}
+            roughness={TASSEL_REWARD.roughness}
+          />
+        </mesh>
       </mesh>
       <primitive object={ropeObject} />
       <primitive object={aimObject} />
+      <mesh ref={passHighlight} visible={false}>
+        {/* PLACEHOLDER: moving heelstone-pass highlight. */}
+        <sphereGeometry args={[0.055, 8, 6]} />
+        <meshBasicMaterial color="#e9efe6" />
+      </mesh>
     </>
   )
 }
