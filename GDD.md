@@ -227,6 +227,13 @@ M6 portico defaults (all GAME (NEW), revisable):
 
 M6 UI implementation (GAME (NEW), revisable): effect slots sit above the existing vitals and are sampled at 10 Hz with whole-second timers. The exact M6 action prompts are "E Use key" and "F Clear the line". The PLACEHOLDER loading panel uses the existing parchment and ink colors with the text "Crossing Hollow". M6 adds no compass, pause menu, settings UI or downloaded web fonts; those remain M7.
 
+M7 settings defaults (all GAME (NEW), revisable):
+
+- Settings use schema version 1 under `cord-and-crossing.settings.v1`, separate from the game save. Writes are debounced 250 ms. The saved fields are the four volume values, quality, whether quality was chosen by hand, reduce motion, whether reduce motion was chosen by hand, mouse sensitivity and invert Y.
+- Quality defaults to Medium. Mouse sensitivity ranges from 0.5x to 2.0x and defaults to 1.0x. Invert Y defaults off. Reduce motion follows `prefers-reduced-motion` until the player chooses it by hand.
+- Low, Medium and High apply live. Their device pixel ratios are 1, [1, 1.5] and [1, 2]. Restart keeps settings.
+- The compass is 360 px wide, shows a 120 degree span and samples transient heading and marker data at 10 Hz.
+
 ## 11. Art direction
 
 - Look: painterly realism, parchment and ink-wash concept language from the guide site, rendered as stylized low-to-mid poly with soft lighting. Think weathered coastal: gray stone, salt-bleached wood, hemp rope, iron rings, muted wool, one accent color from dyed cloth.
@@ -312,6 +319,8 @@ M7 explicit build budgets (all GAME (NEW), revisable):
 - The Hollow chunk remains at most 5 MB. All GLB files in `public/models` total at most 1.5 MB on disk, with no single GLB over 400 kB.
 - Initial download is at most 4 MB gzip for `index.html`, entry JavaScript and CSS, static imports, and zone GLBs loaded before first playable. The existing 15 MB cap remains.
 - `npm run build` reads the Vite manifest, prints the measured budget table and fails when any limit is exceeded.
+- M7 quality profiles apply live: Low, Medium and High use scatter density 0.5x, 1x and 1.5x; draw distance 450 m, 650 m and 850 m; device pixel ratio 1, [1, 1.5] and [1, 2]; and shadow maps 1024, 1024 and 2048.
+- While active play remains below 45 fps for 8 continuous seconds, automatic quality fallback drops one tier and shows a 4 s notice. It drops at most once from each tier in a page session. A player-selected tier disables the fallback.
 
 ## 16. Milestones and acceptance criteria
 

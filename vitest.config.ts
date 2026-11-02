@@ -14,6 +14,8 @@ export default defineConfig({
         'src/game/effects/effects.ts',
         'src/game/effects/heelstonePass.ts',
         'src/game/portico/crossing.ts',
+        'src/game/settings/quality.ts',
+        'src/game/settings/settings.ts',
         'src/ui/perfStats.ts',
         'scripts/bundleBudget.mjs',
       ],
@@ -41,6 +43,18 @@ export default defineConfig({
         'src/game/effects/effects.ts': { branches: 100 },
         'src/game/effects/heelstonePass.ts': { branches: 100 },
         'src/game/portico/crossing.ts': { branches: 100 },
+        'src/game/settings/quality.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        'src/game/settings/settings.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
         'src/ui/perfStats.ts': {
           branches: 100,
           functions: 100,

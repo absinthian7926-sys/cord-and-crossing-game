@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { MathUtils, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
 import { getPausableDelta } from '../pause/pauseRuntime'
+import { getSettingsRuntimeSnapshot } from '../settings/settingsRuntime'
 import { cameraRayFilterPredicate } from './cameraCollisionRegistry'
 import { applyShoulderOffset, resolveCameraDistance } from './cameraMath'
 import { playerStore } from './playerStore'
@@ -49,9 +50,13 @@ export function CameraRig() {
         !orbit.current.fallbackDragging
       )
         return
-      orbit.current.yaw -= event.movementX * 0.004
+      const settings = getSettingsRuntimeSnapshot()
+      const sensitivity = settings.mouseSensitivity
+      const verticalDirection = settings.invertY ? -1 : 1
+      orbit.current.yaw -= event.movementX * 0.004 * sensitivity
       orbit.current.pitch = MathUtils.clamp(
-        orbit.current.pitch - event.movementY * 0.003,
+        orbit.current.pitch -
+          event.movementY * 0.003 * sensitivity * verticalDirection,
         0.12,
         Math.PI * 0.48,
       )

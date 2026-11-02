@@ -1,6 +1,7 @@
-import { Canvas, useFrame } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
 import { Suspense, useEffect, useSyncExternalStore } from 'react'
+import type { PerspectiveCamera } from 'three'
 import {
   ENEMY_ARROW,
   ENEMY_TYPES,
@@ -71,6 +72,12 @@ import {
   saveRuntimeState,
 } from './game/save/saveRuntime'
 import { SceneManager } from './game/scenes/SceneManager'
+import { qualityProfile } from './game/settings/quality'
+import {
+  getSettingsRuntimeSnapshot,
+  initializeSettingsRuntime,
+  subscribeSettingsRuntime,
+} from './game/settings/settingsRuntime'
 import {
   getSceneRuntimeSnapshot,
   getWorldConfiguration,
@@ -101,7 +108,11 @@ import {
   type DamageLogEntry,
 } from './game/weapons/weaponRuntime'
 import { PerfOverlayGate, PerfSamplerGate } from './ui/PerfReadoutGate'
-import { getPerfStats, type PerfStats } from './ui/perfRuntime'
+import {
+  getPerfStats,
+  setPerfQualityTier,
+  type PerfStats,
+} from './ui/perfRuntime'
 import { QuestOverlay } from './ui/QuestOverlay'
 import { SceneTransitionOverlay } from './ui/SceneTransitionOverlay'
 
@@ -133,6 +144,20 @@ function PausableClockDriver() {
     if (getPauseRuntimeSnapshot().pending)
       requestPause({ type: 'blockersCleared' }, readPauseContext())
   }, -100)
+  return null
+}
+
+function LiveRendererSettings({
+  drawDistance,
+}: {
+  readonly drawDistance: number
+}) {
+  const { camera } = useThree()
+  useEffect(() => {
+    const perspectiveCamera = camera as PerspectiveCamera
+    perspectiveCamera.far = drawDistance
+    perspectiveCamera.updateProjectionMatrix()
+  }, [camera, drawDistance])
   return null
 }
 
@@ -269,17 +294,39 @@ declare global {
   }
 }
 export default function App() {
+  const settingsRuntime = initializeSettingsRuntime(
+    window.localStorage,
+    window,
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
+  const settings = useSyncExternalStore(
+    subscribeSettingsRuntime,
+    getSettingsRuntimeSnapshot,
+    getSettingsRuntimeSnapshot,
+  )
+  const quality = qualityProfile(settings.quality)
   useSyncExternalStore(
     subscribePauseRuntime,
     getPauseRuntimeRevision,
     getPauseRuntimeRevision,
   )
   const pause = getPauseRuntimeSnapshot()
+  useEffect(() => setPerfQualityTier(settings.quality), [settings.quality])
   useEffect(() => {
     configureSaveWorldRuntimeAdapter(saveWorldRuntimeAdapter)
     attachInput()
     loadRuntimeSave(window.localStorage, SCENE_POSITION_RULES)
     const stopAutosave = installRuntimeAutosave(window.localStorage, window)
+    const flushSettings = () => settingsRuntime.flush()
+    const reduceMotionQuery = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    )
+    const onReduceMotionPreference = (event: MediaQueryListEvent) => {
+      const runtimeSettings = settingsRuntime.store.getState()
+      if (!runtimeSettings.reduceMotionSetByHand) {
+        runtimeSettings.setReduceMotion(event.matches)
+      }
+    }
     const onEscape = (event: KeyboardEvent) => {
       if (event.code !== 'Escape' || event.repeat) return
       const action = requestPause({ type: 'escape' }, readPauseContext())
@@ -294,6 +341,8 @@ export default function App() {
         requestPause({ type: 'pointerLockLost' }, readPauseContext())
     }
     window.addEventListener('keydown', onEscape, true)
+    window.addEventListener('pagehide', flushSettings)
+    reduceMotionQuery.addEventListener('change', onReduceMotionPreference)
     document.addEventListener('pointerlockchange', onPointerLockChange)
     if (import.meta.env.DEV) {
       const DEBUG_ONLY_INVULNERABLE = 'CORD_DEBUG_ONLY_INVULNERABLE'
@@ -605,6 +654,9 @@ export default function App() {
     }
     return () => {
       window.removeEventListener('keydown', onEscape, true)
+      window.removeEventListener('pagehide', flushSettings)
+      reduceMotionQuery.removeEventListener('change', onReduceMotionPreference)
+      settingsRuntime.flush()
       document.removeEventListener('pointerlockchange', onPointerLockChange)
       stopAutosave()
       detachInput()
@@ -612,7 +664,7 @@ export default function App() {
       configureSaveWorldRuntimeAdapter(null)
       if (import.meta.env.DEV) delete window.__CORD_AND_CROSSING_DEBUG__
     }
-  }, [])
+  }, [settingsRuntime])
   return (
     <main className="game-shell">
       <Canvas
@@ -621,10 +673,11 @@ export default function App() {
           position: [PLAYER.camera.shoulderOffset, 2.8, PLAYER.camera.distance],
           fov: 52,
           near: 0.1,
-          far: ZONE.drawDistanceByQuality[ZONE.quality.default],
+          far: quality.drawDistance,
         }}
-        dpr={[1, 1.5]}
+        dpr={quality.dpr as number | [number, number]}
       >
+        <LiveRendererSettings drawDistance={quality.drawDistance} />
         <PerfSamplerGate />
         <PausableClockDriver />
         <Suspense fallback={null}>

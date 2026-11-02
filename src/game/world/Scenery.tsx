@@ -1,5 +1,5 @@
 import { BallCollider, RigidBody } from '@react-three/rapier'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import {
   ConeGeometry,
   DodecahedronGeometry,
@@ -12,7 +12,11 @@ import {
   Vector3,
   type BufferGeometry,
 } from 'three'
-import { ZONE } from '../../data/zone'
+import { ZONE, type QualityLevel } from '../../data/zone'
+import {
+  getSettingsRuntimeSnapshot,
+  subscribeSettingsRuntime,
+} from '../settings/settingsRuntime'
 import { distanceToCliffPath, distanceToRoad } from './road'
 import {
   generateScatter,
@@ -37,8 +41,9 @@ function buildScatterMeshes(
   kind: ScatterKind,
   variantCount: number,
   colors: readonly string[],
+  quality: QualityLevel,
 ): ScatterMeshes {
-  const buffer = generateScatter(kind)
+  const buffer = generateScatter(kind, quality)
   const counts = new Uint32Array(variantCount)
   for (let index = 0; index < buffer.count; index += 1)
     counts[buffer.variants[index]] += 1
@@ -95,14 +100,20 @@ function buildScatterMeshes(
 }
 
 export function Scenery() {
+  const quality = useSyncExternalStore(
+    subscribeSettingsRuntime,
+    getSettingsRuntimeSnapshot,
+    getSettingsRuntimeSnapshot,
+  ).quality
   const rocks = useMemo(
     () =>
       buildScatterMeshes(
         'rocks',
         ZONE.scatter.variants.rocks,
         ZONE.palette.rock,
+        quality,
       ),
-    [],
+    [quality],
   )
   const scrub = useMemo(
     () =>
@@ -110,8 +121,9 @@ export function Scenery() {
         'scrub',
         ZONE.scatter.variants.scrub,
         ZONE.palette.scrub,
+        quality,
       ),
-    [],
+    [quality],
   )
   const largeRockColliders = useMemo(() => {
     const colliders: { x: number; y: number; z: number; radius: number }[] = []
