@@ -305,6 +305,14 @@ Core systems: Input, CameraRig, PlayerController, CordWeapon (state machine plus
 - JS main bundle under 1.5 MB gzip. Physics step fixed 60 Hz.
 - Instancing for rocks, grass and scrub; LOD for terrain chunks; shadows only from sun, 2048 map on High.
 
+M7 explicit build budgets (all GAME (NEW), revisable):
+
+- Main entry JavaScript is at most 1300 kB gzip. The existing 1.5 MB hard cap remains.
+- The lazy audio engine chunk is at most 40 kB gzip, the lazy performance readout chunk is at most 10 kB gzip, and the lazy post-processing chunk is at most 60 kB gzip. None is a static import of the main entry.
+- The Hollow chunk remains at most 5 MB. All GLB files in `public/models` total at most 1.5 MB on disk, with no single GLB over 400 kB.
+- Initial download is at most 4 MB gzip for `index.html`, entry JavaScript and CSS, static imports, and zone GLBs loaded before first playable. The existing 15 MB cap remains.
+- `npm run build` reads the Vite manifest, prints the measured budget table and fails when any limit is exceeded.
+
 ## 16. Milestones and acceptance criteria
 
 Build one milestone at a time. Each ends with a runnable build, passing tests and a Vercel preview.

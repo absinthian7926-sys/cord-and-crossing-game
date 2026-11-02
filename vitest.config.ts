@@ -13,6 +13,7 @@ export default defineConfig({
         'src/game/effects/effects.ts',
         'src/game/effects/heelstonePass.ts',
         'src/game/portico/crossing.ts',
+        'scripts/bundleBudget.mjs',
       ],
       thresholds: {
         'src/game/weapons/cordState.ts': { branches: 100 },
@@ -32,6 +33,12 @@ export default defineConfig({
         'src/game/effects/effects.ts': { branches: 100 },
         'src/game/effects/heelstonePass.ts': { branches: 100 },
         'src/game/portico/crossing.ts': { branches: 100 },
+        'scripts/bundleBudget.mjs': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
       },
     },
   },
