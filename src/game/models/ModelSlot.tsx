@@ -1,6 +1,6 @@
 import { useGLTF } from '@react-three/drei'
 import type { ThreeElements } from '@react-three/fiber'
-import { Suspense, useEffect, useMemo, type ReactNode } from 'react'
+import { Component, Suspense, useEffect, useMemo, type ReactNode } from 'react'
 import {
   BufferGeometry,
   Color,
@@ -14,10 +14,15 @@ import {
 } from 'three'
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
 import { MODEL_ASSETS, type ModelId } from '../../data/models'
-import { useModelAvailability } from './modelAvailability'
+import {
+  recordModelLoaded,
+  reportModelFailure,
+  useModelAvailability,
+} from './modelAvailability'
 
 const EMPTY_GEOMETRY = new BufferGeometry()
 const mergedCharacterGeometry = new Map<ModelId, BufferGeometry>()
+const mergedCharacterMaterial = new Map<ModelId, MeshStandardMaterial>()
 const bodyColor = new Color()
 const inverseRoot = new Matrix4()
 const relativeTransform = new Matrix4()
@@ -84,18 +89,22 @@ function optimizeEnemyModel(object: Object3D, model: ModelId): void {
   const sourceMaterial = Array.isArray(bodyMeshes[0].material)
     ? bodyMeshes[0].material[0]
     : bodyMeshes[0].material
-  const material = new MeshStandardMaterial({
-    color: 0xffffff,
-    metalness:
-      sourceMaterial instanceof MeshStandardMaterial
-        ? sourceMaterial.metalness
-        : undefined,
-    roughness:
-      sourceMaterial instanceof MeshStandardMaterial
-        ? sourceMaterial.roughness
-        : undefined,
-    vertexColors: true,
-  })
+  let material = mergedCharacterMaterial.get(model)
+  if (!material) {
+    material = new MeshStandardMaterial({
+      color: 0xffffff,
+      metalness:
+        sourceMaterial instanceof MeshStandardMaterial
+          ? sourceMaterial.metalness
+          : undefined,
+      roughness:
+        sourceMaterial instanceof MeshStandardMaterial
+          ? sourceMaterial.roughness
+          : undefined,
+      vertexColors: true,
+    })
+    mergedCharacterMaterial.set(model, material)
+  }
   const body = new Mesh(geometry, material)
   body.name = 'optimized-body'
   body.castShadow = true
@@ -103,28 +112,16 @@ function optimizeEnemyModel(object: Object3D, model: ModelId): void {
   animationRoot.add(body)
 }
 
-function cloneMaterial(material: Material | Material[]): Material | Material[] {
-  return Array.isArray(material)
-    ? material.map((entry) => entry.clone())
-    : material.clone()
-}
-
 type LoadedModelProps = {
   readonly model: ModelId
   readonly path: string
-  readonly uniqueMaterials: boolean
   readonly onReady?: (
     object: Object3D,
     animations: readonly AnimationClip[],
   ) => void
 }
 
-function LoadedModel({
-  model,
-  path,
-  uniqueMaterials,
-  onReady,
-}: LoadedModelProps) {
+function LoadedModel({ model, path, onReady }: LoadedModelProps) {
   const { scene, animations } = useGLTF(path, false, true)
   const object = useMemo(() => {
     const clone = scene.clone(true)
@@ -132,13 +129,15 @@ function LoadedModel({
       if (!(child instanceof Mesh)) return
       child.castShadow = true
       child.receiveShadow = true
-      if (uniqueMaterials) child.material = cloneMaterial(child.material)
     })
     optimizeEnemyModel(clone, model)
     return clone
-  }, [model, scene, uniqueMaterials])
+  }, [model, scene])
 
-  useEffect(() => onReady?.(object, animations), [animations, object, onReady])
+  useEffect(() => {
+    recordModelLoaded(model)
+    onReady?.(object, animations)
+  }, [animations, model, object, onReady])
   return <primitive object={object} dispose={null} />
 }
 
@@ -146,18 +145,43 @@ export type ModelSlotProps = Omit<ThreeElements['group'], 'children'> & {
   readonly model: ModelId
   readonly fallback: ReactNode
   readonly loadedScale?: number
-  readonly uniqueMaterials?: boolean
   readonly onReady?: (
     object: Object3D,
     animations: readonly AnimationClip[],
   ) => void
 }
 
+type ModelErrorBoundaryProps = {
+  readonly path: string
+  readonly fallback: ReactNode
+  readonly children: ReactNode
+}
+
+type ModelErrorBoundaryState = { readonly failed: boolean }
+
+class ModelErrorBoundary extends Component<
+  ModelErrorBoundaryProps,
+  ModelErrorBoundaryState
+> {
+  state: ModelErrorBoundaryState = { failed: false }
+
+  static getDerivedStateFromError(): ModelErrorBoundaryState {
+    return { failed: true }
+  }
+
+  componentDidCatch(): void {
+    reportModelFailure(this.props.path)
+  }
+
+  render(): ReactNode {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
+}
+
 export function ModelSlot({
   model,
   fallback,
   loadedScale = 1,
-  uniqueMaterials = false,
   onReady,
   ...groupProps
 }: ModelSlotProps) {
@@ -167,23 +191,28 @@ export function ModelSlot({
   return (
     <group {...groupProps} name={`model-${definition.id}`}>
       {availability === 'ready' ? (
-        <Suspense fallback={fallback}>
-          <group
-            position={[
-              definition.offset[0] * loadedScale,
-              definition.offset[1] * loadedScale,
-              definition.offset[2] * loadedScale,
-            ]}
-            scale={definition.scale * loadedScale}
-          >
-            <LoadedModel
-              model={model}
-              path={definition.path}
-              uniqueMaterials={uniqueMaterials}
-              onReady={onReady}
-            />
-          </group>
-        </Suspense>
+        <ModelErrorBoundary
+          key={definition.path}
+          path={definition.path}
+          fallback={fallback}
+        >
+          <Suspense fallback={fallback}>
+            <group
+              position={[
+                definition.offset[0] * loadedScale,
+                definition.offset[1] * loadedScale,
+                definition.offset[2] * loadedScale,
+              ]}
+              scale={definition.scale * loadedScale}
+            >
+              <LoadedModel
+                model={model}
+                path={definition.path}
+                onReady={onReady}
+              />
+            </group>
+          </Suspense>
+        </ModelErrorBoundary>
       ) : (
         fallback
       )}

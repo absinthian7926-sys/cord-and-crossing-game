@@ -1,6 +1,7 @@
 import { AUDIO } from '../../data/audio'
 import { ZONE } from '../../data/zone'
 import { enemyRuntime } from '../enemies/enemyRuntime'
+import type { FootstepSurface } from '../feel/footsteps'
 import { getPauseRuntimeSnapshot } from '../pause/pauseRuntime'
 import { playerStore } from '../player/playerStore'
 import { getPorticoRuntimeSnapshot } from '../portico/porticoRuntime'
@@ -10,9 +11,11 @@ import { distanceToCliffPath } from '../world/road'
 import {
   createAmbientMix,
   createPorticoProximity,
+  isNearZoneRope,
   resolveAmbientMix,
   resolvePorticoProximity,
 } from './audioCues'
+import { isAudioCreditsOpen } from './audioPresentationRuntime'
 import {
   audioBus,
   createAudioEvent,
@@ -57,6 +60,8 @@ export type AudioEngineSnapshot = {
   ambientGain: number
   musicLayer: MusicLayer
   lastCueIds: string[]
+  lastFootstepSurface: FootstepSurface | null
+  lastFootstepSequence: number
 }
 
 type AudioEngine = {
@@ -96,6 +101,8 @@ const runtimeSnapshot: AudioEngineSnapshot = {
   ambientGain: 0,
   musicLayer: 'explore',
   lastCueIds: [],
+  lastFootstepSurface: null,
+  lastFootstepSequence: 0,
 }
 
 function recordCue(id: string): void {
@@ -201,8 +208,18 @@ function handleEvent(
   if (paused || event.id === 'scene-change') return
   if (event.id === 'portico-bell')
     current.duckRemainingSeconds = startMusicDuck()
-  if (playSfxEvent(current.voicePool, event, current.noiseBuffer))
+  if (playSfxEvent(current.voicePool, event, current.noiseBuffer)) {
+    if (event.id === 'footstep') {
+      runtimeSnapshot.lastFootstepSurface =
+        event.value0 === AUDIO.footsteps.surfaces.stone
+          ? 'stone'
+          : event.value0 === AUDIO.footsteps.surfaces.wood
+            ? 'wood'
+            : 'dirt'
+      runtimeSnapshot.lastFootstepSequence = event.sequence
+    }
     recordCue(event.id)
+  }
 }
 
 function update(current: AudioEngine, frameSeconds: number): void {
@@ -252,7 +269,11 @@ function update(current: AudioEngine, frameSeconds: number): void {
   const nearRope =
     scene === 'hollow'
       ? nearHollowRope(player.x, player.z)
-      : distanceToCliffPath(player.x, player.z) <= AUDIO.ambient.ropeCreakRadius
+      : isNearZoneRope(
+          player.x,
+          player.z,
+          distanceToCliffPath(player.x, player.z),
+        )
   const nearWaystation =
     scene === 'zone' &&
     Math.hypot(player.x, player.z) <= AUDIO.ambient.waystationRadius
@@ -270,12 +291,15 @@ function update(current: AudioEngine, frameSeconds: number): void {
     porticoProximity,
   )
   stepMusicDirector(musicDirector, enemyInCombat(), paused, deltaSeconds)
+  const presentedMusicLayer = isAudioCreditsOpen()
+    ? 'explore'
+    : musicDirector.layer
   updateContinuousSynth(
     current.continuous,
     current.context,
     ambientMix,
     porticoProximity,
-    musicDirector.layer,
+    presentedMusicLayer,
     mixerFrame.musicGainMultiplier,
     mixerFrame.ambientGainMultiplier,
     pause.titleOpen,
@@ -288,7 +312,7 @@ function update(current: AudioEngine, frameSeconds: number): void {
   runtimeSnapshot.musicGain = music * mixerFrame.musicGainMultiplier
   runtimeSnapshot.sfxGain = sfx
   runtimeSnapshot.ambientGain = ambient * mixerFrame.ambientGainMultiplier
-  runtimeSnapshot.musicLayer = musicDirector.layer
+  runtimeSnapshot.musicLayer = presentedMusicLayer
 }
 
 function tick(timestampMilliseconds: number): void {
@@ -335,6 +359,8 @@ export async function disposeAudioEngine(): Promise<void> {
   runtimeSnapshot.loaded = false
   runtimeSnapshot.contextState = 'not-loaded'
   runtimeSnapshot.activeVoiceCount = 0
+  runtimeSnapshot.lastFootstepSurface = null
+  runtimeSnapshot.lastFootstepSequence = 0
 }
 
 export function getAudioEngineSnapshot(): AudioEngineSnapshot {
@@ -353,5 +379,7 @@ export function getAudioEngineSnapshot(): AudioEngineSnapshot {
     ambientGain: runtimeSnapshot.ambientGain,
     musicLayer: runtimeSnapshot.musicLayer,
     lastCueIds: history,
+    lastFootstepSurface: runtimeSnapshot.lastFootstepSurface,
+    lastFootstepSequence: runtimeSnapshot.lastFootstepSequence,
   }
 }

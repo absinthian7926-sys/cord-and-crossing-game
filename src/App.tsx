@@ -24,6 +24,8 @@ import {
   getLazyAudioSnapshot,
   loadAndStartAudioEngine,
 } from './game/audio/AudioEngineGate'
+import { setAudioCreditsOpen } from './game/audio/audioPresentationRuntime'
+import { audioBus, emitAudioEvent } from './game/audio/audioBus'
 import { getAnimationRuntimeSnapshot } from './game/animation/animationRuntime'
 import {
   advanceRespawn as advanceEnemyRespawn,
@@ -53,8 +55,11 @@ import {
 import { PostEffectsGate } from './game/feel/PostEffectsGate'
 import {
   getFeelDebugSnapshot,
+  recordBlockFlash,
   type FeelDebugSnapshot,
 } from './game/feel/feelRuntime'
+import { setPostEnabledOverride } from './game/feel/postOverrideRuntime'
+import { getLoadedModelIds } from './game/models/modelAvailability'
 import {
   attachInput,
   detachInput,
@@ -141,6 +146,7 @@ import { PauseMenu } from './ui/PauseMenu'
 import { PlayerHitVignette } from './ui/PlayerHitVignette'
 import {
   getPerfStats,
+  requestPerfStatsReset,
   setPerfQualityTier,
   type PerfStats,
 } from './ui/perfRuntime'
@@ -349,6 +355,11 @@ declare global {
       getAnimationState: () => ReturnType<typeof getAnimationRuntimeSnapshot>
       getFeelState: () => FeelDebugSnapshot
       forceFps: (value: number) => void
+      getLoadedModels: () => string[]
+      forceBucklerBlockFeedback: () => void
+      resetPerfStats: () => void
+      setPostEnabled: (enabled: boolean | null) => void
+      prepareHollowEncounter: () => void
     }
   }
 }
@@ -377,6 +388,7 @@ export default function App() {
   )
   const pause = getPauseRuntimeSnapshot()
   useLayoutEffect(() => setTitleScreenOpen(titleOpen), [titleOpen])
+  useEffect(() => setAudioCreditsOpen(creditsOpen), [creditsOpen])
   useEffect(() => setPerfQualityTier(settings.quality), [settings.quality])
   const beginAudio = useCallback(() => {
     void loadAndStartAudioEngine().catch(() => {
@@ -485,6 +497,12 @@ export default function App() {
       const DEBUG_ONLY_GET_ANIMATION = 'CORD_DEBUG_ONLY_GET_ANIMATION'
       const DEBUG_ONLY_GET_FEEL = 'CORD_DEBUG_ONLY_GET_FEEL'
       const DEBUG_ONLY_FORCE_FPS = 'CORD_DEBUG_ONLY_FORCE_FPS'
+      const DEBUG_ONLY_GET_LOADED_MODELS = 'CORD_DEBUG_ONLY_GET_LOADED_MODELS'
+      const DEBUG_ONLY_FORCE_BLOCK_FEEDBACK =
+        'CORD_DEBUG_ONLY_FORCE_BLOCK_FEEDBACK'
+      const DEBUG_ONLY_RESET_PERF = 'CORD_DEBUG_ONLY_RESET_PERF'
+      const DEBUG_ONLY_SET_POST = 'CORD_DEBUG_ONLY_SET_POST'
+      const DEBUG_ONLY_PREPARE_HOLLOW = 'CORD_DEBUG_ONLY_PREPARE_HOLLOW'
       window.__CORD_AND_CROSSING_DEBUG__ = {
         getPlayerPosition: () => ({ ...playerStore.getState().position }),
         getCordState: () => weaponRuntime.cord.mode,
@@ -871,6 +889,27 @@ export default function App() {
           void DEBUG_ONLY_FORCE_FPS
           setForcedQualityFps(value)
         },
+        getLoadedModels: () => {
+          void DEBUG_ONLY_GET_LOADED_MODELS
+          return getLoadedModelIds()
+        },
+        forceBucklerBlockFeedback: () => {
+          void DEBUG_ONLY_FORCE_BLOCK_FEEDBACK
+          emitAudioEvent(audioBus, 'hit-block')
+          recordBlockFlash()
+        },
+        resetPerfStats: () => {
+          void DEBUG_ONLY_RESET_PERF
+          requestPerfStatsReset()
+        },
+        setPostEnabled: (enabled) => {
+          void DEBUG_ONLY_SET_POST
+          setPostEnabledOverride(enabled)
+        },
+        prepareHollowEncounter: () => {
+          void DEBUG_ONLY_PREPARE_HOLLOW
+          hydrateHollowRuntime(true, true, false)
+        },
       }
     }
     return () => {
@@ -881,6 +920,7 @@ export default function App() {
       stopAutosave()
       detachInput()
       resetPauseRuntime()
+      setPostEnabledOverride(null)
       disposeSettingsRuntime()
       void disposeLazyAudioEngine()
       configureSaveWorldRuntimeAdapter(null)

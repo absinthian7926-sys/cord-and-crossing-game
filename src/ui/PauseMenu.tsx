@@ -43,6 +43,8 @@ export function PauseMenu({
   const [panel, setPanel] = useState<PausePanel>('root')
   const [confirmRestart, setConfirmRestart] = useState(false)
   const dialog = useRef<HTMLElement>(null)
+  const resume = useRef(onResume)
+  resume.current = onResume
 
   useEffect(() => {
     if (!open) {
@@ -63,7 +65,7 @@ export function PauseMenu({
         event.stopImmediatePropagation()
         if (confirmRestart) setConfirmRestart(false)
         else if (panel !== 'root') setPanel('root')
-        else onResume()
+        else resume.current()
         return
       }
       if (event.code !== 'Tab') return
@@ -73,19 +75,16 @@ export function PauseMenu({
       if (!activeScope) return
       const current = focusableElements(activeScope)
       if (current.length === 0) return
-      const first = current[0]
-      const last = current[current.length - 1]
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault()
-        last.focus()
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault()
-        first.focus()
-      }
+      event.preventDefault()
+      const activeIndex = current.indexOf(document.activeElement as HTMLElement)
+      const direction = event.shiftKey ? -1 : 1
+      const nextIndex =
+        (activeIndex + direction + current.length) % current.length
+      current[nextIndex].focus()
     }
     document.addEventListener('keydown', trapFocus, true)
     return () => document.removeEventListener('keydown', trapFocus, true)
-  }, [confirmRestart, onResume, open, panel])
+  }, [confirmRestart, open, panel])
 
   if (!open) return null
 

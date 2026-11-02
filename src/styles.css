@@ -184,6 +184,12 @@ canvas {
   display: grid;
   place-items: center;
   background: #172127;
+  visibility: hidden;
+  opacity: 0;
+}
+.scene-loading.is-visible {
+  visibility: visible;
+  opacity: 1;
 }
 .scene-loading-panel {
   padding: 1rem 1.35rem;
@@ -204,15 +210,12 @@ canvas {
   }
 }
 .scene-loading.reduce-motion {
-  animation: scene-loading-crossfade 0.3s ease-out both;
+  transition:
+    opacity 0.3s ease-out,
+    visibility 0s linear 0.3s;
 }
-@keyframes scene-loading-crossfade {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+.scene-loading.reduce-motion.is-visible {
+  transition: opacity 0.3s ease-out;
 }
 .interaction-prompt-anchor {
   pointer-events: none;

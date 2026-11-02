@@ -54,15 +54,14 @@ export function SceneTransitionOverlay() {
           }
         />
       )}
-      {snapshot.phase === 'loading' && (
-        <div
-          className={`scene-loading${settings.reduceMotion ? ' reduce-motion' : ''}`}
-          role="status"
-          aria-live="polite"
-        >
-          <div className="scene-loading-panel">{ZONE.hollow.loadingText}</div>
-        </div>
-      )}
+      <div
+        className={`scene-loading${settings.reduceMotion ? ' reduce-motion' : ''}${snapshot.phase === 'loading' ? ' is-visible' : ''}`}
+        role={snapshot.phase === 'loading' ? 'status' : undefined}
+        aria-live={snapshot.phase === 'loading' ? 'polite' : undefined}
+        aria-hidden={snapshot.phase !== 'loading'}
+      >
+        <div className="scene-loading-panel">{ZONE.hollow.loadingText}</div>
+      </div>
     </>
   )
 }

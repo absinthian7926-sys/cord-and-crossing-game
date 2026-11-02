@@ -14,11 +14,11 @@ describe('post-processing quality', () => {
     })
   })
 
-  it('uses SMAA, vignette and color grade at Medium', () => {
+  it('uses SMAA only at Medium after the measured cost fallback', () => {
     expect(shouldMountPostProcessing('Medium')).toBe(true)
     expect(postQualityForTier('Medium')).toMatchObject({
       enabled: true,
-      effects: ['SMAA', 'Vignette', 'ColorGrade'],
+      effects: ['SMAA'],
       bloom: null,
     })
   })

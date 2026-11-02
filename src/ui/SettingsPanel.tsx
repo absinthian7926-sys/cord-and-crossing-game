@@ -101,6 +101,7 @@ export function SettingsPanel({
               </span>
               <input
                 type="range"
+                aria-label={VOLUME_LABELS[bus]}
                 min={SETTINGS.volume.minimum}
                 max={SETTINGS.volume.maximum}
                 step="1"

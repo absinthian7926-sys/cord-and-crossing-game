@@ -38,6 +38,11 @@ export function createPerfSummary(): PerfSummary {
   }
 }
 
+export function resetPerfFrameBuffer(buffer: PerfFrameBuffer): void {
+  buffer.head = 0
+  buffer.count = 0
+}
+
 export function pushFrameTime(
   buffer: PerfFrameBuffer,
   frameTimeMs: number,
@@ -115,7 +120,6 @@ export function samplePerfStats(
     index += 1
   )
     slowFrameMilliseconds += buffer.sortScratchMs[index]
-  output.onePercentLowFps =
-    (slowFrameCount * 1_000) / slowFrameMilliseconds
+  output.onePercentLowFps = (slowFrameCount * 1_000) / slowFrameMilliseconds
   return output
 }

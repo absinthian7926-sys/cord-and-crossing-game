@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef } from 'react'
 import { Color, Group, MeshStandardMaterial } from 'three'
 import { AUDIO } from '../../data/audio'
 import { FEEL } from '../../data/feel'
-import { REACHBLADE } from '../../data/weapons'
 import { audioBus, emitAudioEvent } from '../audio/audioBus'
 import {
   createEnemyFlashState,
@@ -53,7 +52,7 @@ export function TrainingDummy({
             audioBus,
             'hit-flesh',
             0,
-            entry.damage === REACHBLADE.close.damage[2]
+            entry.strikeThree === true
               ? AUDIO.hits.strikeThreeGainMultiplier
               : 1,
           )

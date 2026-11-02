@@ -6,9 +6,10 @@ import {
   createPerfFrameBuffer,
   createPerfSummary,
   pushFrameTime,
+  resetPerfFrameBuffer,
   samplePerfStats,
 } from './perfStats'
-import { perfRuntime } from './perfRuntime'
+import { getPerfStatsResetRevision, perfRuntime } from './perfRuntime'
 
 function queryRequestsPerf(): boolean {
   return new URLSearchParams(window.location.search).get('perf') === '1'
@@ -31,8 +32,29 @@ export function PerfSampler() {
   const summary = useRef(createPerfSummary())
   const sampleElapsedSeconds = useRef(0)
   const renderer = useMemo(() => readRenderer(gl.getContext()), [gl])
+  const lastDrawCalls = useRef(0)
+  const lastTriangles = useRef(0)
+  const seenResetRevision = useRef(getPerfStatsResetRevision())
+
+  useEffect(() => {
+    const previousAutoReset = gl.info.autoReset
+    gl.info.autoReset = false
+    return () => {
+      gl.info.autoReset = previousAutoReset
+      gl.info.reset()
+    }
+  }, [gl])
 
   useFrame((state, deltaSeconds) => {
+    const resetRevision = getPerfStatsResetRevision()
+    if (seenResetRevision.current !== resetRevision) {
+      resetPerfFrameBuffer(buffer.current)
+      sampleElapsedSeconds.current = 0
+      seenResetRevision.current = resetRevision
+    }
+    lastDrawCalls.current = gl.info.render.calls
+    lastTriangles.current = gl.info.render.triangles
+    gl.info.reset()
     const nowSeconds = state.clock.elapsedTime
     pushFrameTime(buffer.current, deltaSeconds * 1_000, nowSeconds)
     sampleElapsedSeconds.current += deltaSeconds
@@ -44,8 +66,8 @@ export function PerfSampler() {
     perfRuntime.frameTimeMeanMs = summary.current.frameTimeMeanMs
     perfRuntime.frameTimeP95Ms = summary.current.frameTimeP95Ms
     perfRuntime.onePercentLowFps = summary.current.onePercentLowFps
-    perfRuntime.drawCalls = gl.info.render.calls
-    perfRuntime.triangles = gl.info.render.triangles
+    perfRuntime.drawCalls = lastDrawCalls.current
+    perfRuntime.triangles = lastTriangles.current
     perfRuntime.devicePixelRatio = gl.getPixelRatio()
     perfRuntime.scene = getSceneRuntimeSnapshot().currentScene
     perfRuntime.renderer = renderer

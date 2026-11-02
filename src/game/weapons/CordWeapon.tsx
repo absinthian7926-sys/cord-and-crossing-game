@@ -282,12 +282,14 @@ export function CordWeapon() {
     damage: number,
     staggerSeconds: number,
     nowSeconds: number,
+    strikeThree = false,
   ) => {
     recordDummyDamage({
       dummyId,
       damage,
       staggerSeconds,
       atSeconds: nowSeconds,
+      strikeThree,
     })
   }
 
@@ -315,7 +317,13 @@ export function CordWeapon() {
             arcDegrees,
           )
         ) {
-          damageDummy(dummy.id, damage, staggerSeconds, nowSeconds)
+          damageDummy(
+            dummy.id,
+            damage,
+            staggerSeconds,
+            nowSeconds,
+            comboIndex === 2,
+          )
           if (comboIndex === 2)
             addFeelTrauma(FEEL.shake.trauma.closeStrikeThree)
           return
@@ -888,7 +896,9 @@ export function CordWeapon() {
     setHeroWeaponAnimationState(
       strikePhase,
       animationComboIndex.current,
-      pendingAction?.kind === 'cast' || pendingAction?.kind === 'arc',
+      pendingAction?.kind === 'cast' ||
+        pendingAction?.kind === 'arc' ||
+        cord.current.mode === 'Out',
       aiming,
       cord.current.mode === 'Returning',
     )

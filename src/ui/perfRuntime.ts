@@ -27,6 +27,8 @@ export const perfRuntime: PerfStats = {
   renderer: 'unknown',
 }
 
+let resetRevision = 0
+
 export function getPerfStats(): PerfStats {
   return {
     fps: perfRuntime.fps,
@@ -44,4 +46,12 @@ export function getPerfStats(): PerfStats {
 
 export function setPerfQualityTier(qualityTier: QualityLevel): void {
   perfRuntime.qualityTier = qualityTier
+}
+
+export function requestPerfStatsReset(): void {
+  resetRevision += 1
+}
+
+export function getPerfStatsResetRevision(): number {
+  return resetRevision
 }

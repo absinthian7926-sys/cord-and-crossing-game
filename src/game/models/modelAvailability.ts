@@ -5,6 +5,7 @@ export type ModelAvailability = 'checking' | 'ready' | 'failed'
 
 const availabilityRequests = new Map<string, Promise<boolean>>()
 const warnedPaths = new Set<string>()
+const loadedModels = new Set<ModelId>()
 
 function requestAvailability(path: string): Promise<boolean> {
   const existing = availabilityRequests.get(path)
@@ -16,10 +17,18 @@ function requestAvailability(path: string): Promise<boolean> {
   return request
 }
 
-function warnOnce(path: string): void {
+export function reportModelFailure(path: string): void {
   if (warnedPaths.has(path)) return
   warnedPaths.add(path)
   console.warn(`Model unavailable, using primitive fallback: ${path}`)
+}
+
+export function recordModelLoaded(model: ModelId): void {
+  loadedModels.add(model)
+}
+
+export function getLoadedModelIds(): ModelId[] {
+  return [...loadedModels]
 }
 
 export function useModelAvailability(model: ModelId): ModelAvailability {
@@ -31,7 +40,7 @@ export function useModelAvailability(model: ModelId): ModelAvailability {
     let current = true
     void requestAvailability(definition.path).then((available) => {
       if (!current) return
-      if (!available) warnOnce(definition.path)
+      if (!available) reportModelFailure(definition.path)
       setAvailability(available ? 'ready' : 'failed')
     })
     return () => {

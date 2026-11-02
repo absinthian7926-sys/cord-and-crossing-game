@@ -1,6 +1,7 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { lazy, Suspense, useEffect, useSyncExternalStore } from 'react'
 import type { QualityLevel } from '../../data/zone'
 import { setPostProcessingState } from './feelRuntime'
+import { getPostOverride, subscribePostOverride } from './postOverrideRuntime'
 import { postQualityForTier } from './postQuality'
 
 const LazyPostEffects = lazy(async () => {
@@ -14,11 +15,17 @@ export function PostEffectsGate({
   readonly quality: QualityLevel
 }) {
   const profile = postQualityForTier(quality)
+  const override = useSyncExternalStore(
+    subscribePostOverride,
+    getPostOverride,
+    getPostOverride,
+  )
+  const enabled = override ?? profile.enabled
   useEffect(() => {
-    setPostProcessingState(quality, profile.effects)
-  }, [profile.effects, quality])
+    setPostProcessingState(quality, enabled ? profile.effects : [])
+  }, [enabled, profile.effects, quality])
 
-  if (!profile.enabled) return null
+  if (!enabled || quality === 'Low') return null
   return (
     <Suspense fallback={null}>
       <LazyPostEffects quality={quality} />

@@ -20,6 +20,7 @@ export type ContinuousSynth = {
   readonly porticoFilter: BiquadFilterNode
   readonly porticoOscillators: readonly OscillatorNode[]
   readonly exploreGain: GainNode
+  readonly phraseGain: GainNode
   readonly combatGain: GainNode
   readonly stringOne: OscillatorNode
   readonly stringTwo: OscillatorNode
@@ -34,6 +35,8 @@ export type ContinuousSynth = {
   nextGullTime: number
   nextCreakTime: number
   nextWoodTime: number
+  surfSwellStartedTime: number
+  surfSwellSeconds: number
 }
 
 function gainNode(
@@ -69,6 +72,7 @@ export function createContinuousSynth(
   musicOutput: AudioNode,
   noiseBuffer: AudioBuffer,
 ): ContinuousSynth {
+  const musicState = new Uint32Array([AUDIO.music.seed])
   const noiseSource = context.createBufferSource()
   noiseSource.buffer = noiseBuffer
   noiseSource.loop = true
@@ -141,6 +145,7 @@ export function createContinuousSynth(
   )
 
   const exploreGain = gainNode(context, musicOutput, AUDIO.music.exploreGain)
+  const phraseGain = gainNode(context, exploreGain, AUDIO.synthesis.silenceGain)
   const combatGain = gainNode(context, musicOutput, 0)
   const stringOne = context.createOscillator()
   const stringTwo = context.createOscillator()
@@ -155,7 +160,7 @@ export function createContinuousSynth(
   const fluteBreathGain = filteredNoiseBranch(
     context,
     noiseSource,
-    exploreGain,
+    phraseGain,
     'highpass',
     AUDIO.music.fluteBreathFilterHz,
   )
@@ -176,8 +181,8 @@ export function createContinuousSynth(
   drum.frequency.value = AUDIO.music.drumEndHz
   stringOne.connect(stringFilter)
   stringTwo.connect(stringFilter)
-  stringFilter.connect(exploreGain)
-  flute.connect(exploreGain)
+  stringFilter.connect(phraseGain)
+  flute.connect(phraseGain)
   drum.connect(combatGain)
   noiseSource.connect(drumNoiseGain)
 
@@ -208,6 +213,7 @@ export function createContinuousSynth(
     porticoFilter,
     porticoOscillators,
     exploreGain,
+    phraseGain,
     combatGain,
     stringOne,
     stringTwo,
@@ -216,13 +222,19 @@ export function createContinuousSynth(
     fluteVibratoGain,
     drum,
     drumNoiseGain,
-    musicState: new Uint32Array([AUDIO.music.seed]),
+    musicState,
     nextPhraseTime: context.currentTime,
     nextDrumTime: context.currentTime,
     nextGullTime: context.currentTime + AUDIO.ambient.gullMinimumSeconds,
     nextCreakTime: context.currentTime + AUDIO.ambient.ropeCreakMinimumSeconds,
     nextWoodTime:
       context.currentTime + AUDIO.ambient.synthesis.woodMinimumSeconds,
+    surfSwellStartedTime: context.currentTime,
+    surfSwellSeconds:
+      AUDIO.ambient.surfSwellMinimumSeconds +
+      nextSeededUnit(musicState) *
+        (AUDIO.ambient.surfSwellMaximumSeconds -
+          AUDIO.ambient.surfSwellMinimumSeconds),
   }
 }
 
@@ -258,9 +270,19 @@ export function updateContinuousSynth(
       ambientMultiplier,
     now,
   )
+  if (now >= synth.surfSwellStartedTime + synth.surfSwellSeconds) {
+    synth.surfSwellStartedTime = now
+    synth.surfSwellSeconds =
+      AUDIO.ambient.surfSwellMinimumSeconds +
+      nextSeededUnit(synth.musicState) *
+        (AUDIO.ambient.surfSwellMaximumSeconds -
+          AUDIO.ambient.surfSwellMinimumSeconds)
+  }
+  const surfProgress =
+    (now - synth.surfSwellStartedTime) / synth.surfSwellSeconds
   const surfSwell =
     AUDIO.ambient.synthesis.surfSwellBase +
-    Math.sin((now * Math.PI * 2) / AUDIO.ambient.synthesis.surfSwellSeconds) *
+    Math.sin(surfProgress * Math.PI * 2) *
       AUDIO.ambient.synthesis.surfSwellAmplitude
   target(
     synth.surfGain.gain,
@@ -385,25 +407,6 @@ export function updateContinuousSynth(
   )
 
   if (now >= synth.nextPhraseTime) {
-    const note = Math.floor(
-      nextSeededUnit(synth.musicState) * AUDIO.music.scaleFrequenciesHz.length,
-    )
-    const frequency = AUDIO.music.scaleFrequenciesHz[note]
-    synth.stringOne.frequency.setTargetAtTime(
-      frequency * AUDIO.music.stringOctaveMultiplier,
-      now,
-      AUDIO.music.phraseStringRampSeconds,
-    )
-    synth.stringTwo.frequency.setTargetAtTime(
-      frequency * AUDIO.music.stringOctaveMultiplier,
-      now,
-      AUDIO.music.phraseStringRampSeconds,
-    )
-    synth.flute.frequency.setTargetAtTime(
-      frequency * AUDIO.music.fluteOctaveMultiplier,
-      now,
-      AUDIO.music.phraseFluteRampSeconds,
-    )
     const notes =
       AUDIO.music.phraseNoteMinimum +
       Math.floor(
@@ -417,7 +420,45 @@ export function updateContinuousSynth(
           (AUDIO.music.restBeatMaximum - AUDIO.music.restBeatMinimum + 1),
       )
     const beatSeconds = 60 / AUDIO.music.tempoBpm
-    synth.nextPhraseTime = now + (notes + rests) * beatSeconds
+    for (let noteIndex = 0; noteIndex < notes; noteIndex += 1) {
+      const scaleIndex = Math.floor(
+        nextSeededUnit(synth.musicState) *
+          AUDIO.music.scaleFrequenciesHz.length,
+      )
+      const frequency = AUDIO.music.scaleFrequenciesHz[scaleIndex]
+      const noteTime = now + noteIndex * beatSeconds
+      synth.stringOne.frequency.setTargetAtTime(
+        frequency * AUDIO.music.stringOctaveMultiplier,
+        noteTime,
+        AUDIO.music.phraseStringRampSeconds,
+      )
+      synth.stringTwo.frequency.setTargetAtTime(
+        frequency * AUDIO.music.stringOctaveMultiplier,
+        noteTime,
+        AUDIO.music.phraseStringRampSeconds,
+      )
+      synth.flute.frequency.setTargetAtTime(
+        frequency * AUDIO.music.fluteOctaveMultiplier,
+        noteTime,
+        AUDIO.music.phraseFluteRampSeconds,
+      )
+    }
+    const phraseEnd = now + notes * beatSeconds
+    synth.phraseGain.gain.cancelScheduledValues(now)
+    synth.phraseGain.gain.setValueAtTime(AUDIO.synthesis.silenceGain, now)
+    synth.phraseGain.gain.linearRampToValueAtTime(
+      AUDIO.music.phraseGain,
+      now + AUDIO.music.phraseAttackSeconds,
+    )
+    synth.phraseGain.gain.setValueAtTime(
+      AUDIO.music.phraseGain,
+      phraseEnd - AUDIO.music.phraseReleaseSeconds,
+    )
+    synth.phraseGain.gain.linearRampToValueAtTime(
+      AUDIO.synthesis.silenceGain,
+      phraseEnd,
+    )
+    synth.nextPhraseTime = phraseEnd + rests * beatSeconds
   }
 
   if (musicLayer === 'combat' && now >= synth.nextDrumTime) {

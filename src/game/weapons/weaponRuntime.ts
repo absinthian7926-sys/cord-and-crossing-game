@@ -7,6 +7,7 @@ export type DamageLogEntry = {
   damage: number
   staggerSeconds: number
   atSeconds: number
+  strikeThree?: boolean
 }
 
 type DamageListener = (entry: DamageLogEntry) => void

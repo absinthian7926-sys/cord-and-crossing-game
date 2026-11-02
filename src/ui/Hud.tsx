@@ -46,6 +46,7 @@ export function Hud({ questTracker = null }: HudProps) {
     cord: '',
     retie: -1,
     deathOpacity: -1,
+    deathPhase: '',
     effectOne: '',
     effectTwo: '',
     showUseKey: false,
@@ -101,11 +102,15 @@ export function Hud({ questTracker = null }: HudProps) {
         lastDisplayed.current.cord = cord.mode
         lastDisplayed.current.retie = retie
       }
-      const deathFadeSeconds = getSettingsRuntimeSnapshot().reduceMotion
+      const reduceMotion = getSettingsRuntimeSnapshot().reduceMotion
+      const deathFadeSeconds = reduceMotion
         ? FEEL.reduceMotion.transitionFadeSeconds
         : PLAYER_DEATH.fadeSeconds
-      const deathOpacity =
-        state.death.phase === 'Fading'
+      const deathOpacity = reduceMotion
+        ? state.death.phase === 'Fading'
+          ? 1
+          : 0
+        : state.death.phase === 'Fading'
           ? Math.max(
               0,
               Math.min(
@@ -115,6 +120,15 @@ export function Hud({ questTracker = null }: HudProps) {
               ),
             )
           : 0
+      if (
+        deathFade.current &&
+        state.death.phase !== lastDisplayed.current.deathPhase
+      ) {
+        deathFade.current.style.transition = reduceMotion
+          ? `opacity ${FEEL.reduceMotion.transitionFadeSeconds}s ease-out`
+          : 'none'
+        lastDisplayed.current.deathPhase = state.death.phase
+      }
       if (deathOpacity !== lastDisplayed.current.deathOpacity) {
         if (deathFade.current)
           deathFade.current.style.opacity = deathOpacity.toFixed(3)
@@ -242,7 +256,11 @@ export function Hud({ questTracker = null }: HudProps) {
           {questTracker.text}
         </div>
       )}
-      <div ref={deathFade} className="death-fade" aria-hidden="true" />
+      <div
+        ref={deathFade}
+        className="death-fade player-death-fade"
+        aria-hidden="true"
+      />
     </div>
   )
 }

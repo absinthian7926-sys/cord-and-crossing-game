@@ -5,6 +5,8 @@ import { Document, NodeIO } from '@gltf-transform/core'
 import { ALL_EXTENSIONS } from '@gltf-transform/extensions'
 import {
   dedup,
+  flatten,
+  join,
   meshopt,
   prune,
   quantize,
@@ -193,33 +195,289 @@ function createBuilder(name) {
   return { document, buffer, root, part }
 }
 
-function addAnimation(document, buffer, target, name, duration, index) {
+function addRotationTrack(
+  document,
+  buffer,
+  animation,
+  target,
+  clipName,
+  trackName,
+  timesSeconds,
+  rotations,
+) {
   const times = document
-    .createAccessor(`${name}-times`, buffer)
+    .createAccessor(`${clipName}-${trackName}-times`, buffer)
     .setType('SCALAR')
-    .setArray(new Float32Array([0, duration * 0.5, duration]))
-  const amount = 0.08 + (index % 4) * 0.035
+    .setArray(new Float32Array(timesSeconds))
   const values = document
-    .createAccessor(`${name}-rotation`, buffer)
+    .createAccessor(`${clipName}-${trackName}-rotation`, buffer)
     .setType('VEC4')
     .setArray(
-      new Float32Array([
-        ...quaternionFromEuler(0, 0, 0),
-        ...quaternionFromEuler(0, amount, index % 2 === 0 ? amount : -amount),
-        ...quaternionFromEuler(0, 0, 0),
-      ]),
+      new Float32Array(
+        rotations.flatMap((rotation) => quaternionFromEuler(...rotation)),
+      ),
     )
   const sampler = document
-    .createAnimationSampler(`${name}-sampler`)
+    .createAnimationSampler(`${clipName}-${trackName}-sampler`)
     .setInput(times)
     .setOutput(values)
     .setInterpolation('LINEAR')
   const channel = document
-    .createAnimationChannel(`${name}-channel`)
+    .createAnimationChannel(`${clipName}-${trackName}-channel`)
     .setTargetNode(target)
     .setTargetPath('rotation')
     .setSampler(sampler)
-  document.createAnimation(name).addSampler(sampler).addChannel(channel)
+  animation.addSampler(sampler).addChannel(channel)
+}
+
+function addHumanAnimation(builder, nodes, name, duration) {
+  const animation = builder.document.createAnimation(name)
+  const track = (target, trackName, times, rotations) =>
+    addRotationTrack(
+      builder.document,
+      builder.buffer,
+      animation,
+      target,
+      name,
+      trackName,
+      times,
+      rotations,
+    )
+  const neutral = [0, 0, 0]
+
+  if (name === 'idle') {
+    track(
+      nodes.pelvis,
+      'pelvis',
+      [0, duration / 2, duration],
+      [neutral, [0, 0.035, 0.025], neutral],
+    )
+    return
+  }
+  if (name === 'run' || name === 'walk') {
+    const times = [
+      0,
+      duration * 0.25,
+      duration * 0.5,
+      duration * 0.75,
+      duration,
+    ]
+    const swing = name === 'run' ? 0.85 : 0.48
+    track(nodes.upperLegLeft, 'upper-leg-left', times, [
+      [swing, 0, 0],
+      neutral,
+      [-swing, 0, 0],
+      neutral,
+      [swing, 0, 0],
+    ])
+    track(nodes.upperLegRight, 'upper-leg-right', times, [
+      [-swing, 0, 0],
+      neutral,
+      [swing, 0, 0],
+      neutral,
+      [-swing, 0, 0],
+    ])
+    track(nodes.upperArmLeft, 'upper-arm-left', times, [
+      [-swing * 0.7, 0, 0],
+      neutral,
+      [swing * 0.7, 0, 0],
+      neutral,
+      [-swing * 0.7, 0, 0],
+    ])
+    track(nodes.upperArmRight, 'upper-arm-right', times, [
+      [swing * 0.7, 0, 0],
+      neutral,
+      [-swing * 0.7, 0, 0],
+      neutral,
+      [swing * 0.7, 0, 0],
+    ])
+    return
+  }
+  if (name === 'dodge') {
+    track(
+      nodes.pelvis,
+      'pelvis',
+      [0, duration * 0.45, duration],
+      [neutral, [-0.9, 0, -1.15], [0, 0, -Math.PI * 2]],
+    )
+    return
+  }
+  if (name.startsWith('strike')) {
+    const windup = name === 'strike3' ? 0.32 : 0.18
+    const direction = name === 'strike2' ? -1 : 1
+    const weight = name === 'strike3' ? 1.3 : 1
+    track(
+      nodes.upperArmRight,
+      'weapon-arm',
+      [0, windup, windup + 0.08, duration],
+      [
+        neutral,
+        [-0.45 * weight, 0, direction * 1.15 * weight],
+        [0.35 * weight, 0, direction * -1.25 * weight],
+        neutral,
+      ],
+    )
+    track(
+      nodes.pelvis,
+      'pelvis',
+      [0, windup, duration],
+      [neutral, [0, direction * -0.38 * weight, 0], neutral],
+    )
+    return
+  }
+  if (name === 'cast') {
+    track(
+      nodes.upperArmRight,
+      'cast-arm',
+      [0, 0.25, duration],
+      [neutral, [-1.15, 0, -0.35], [-1.15, 0, -0.35]],
+    )
+    track(
+      nodes.lowerArmRight,
+      'cast-forearm',
+      [0, 0.25, duration],
+      [neutral, [0, 0, -0.45], [0, 0, -0.45]],
+    )
+    return
+  }
+  if (name === 'recall') {
+    track(
+      nodes.upperArmRight,
+      'recall-arm',
+      [0, duration * 0.55, duration],
+      [[-1.1, 0, -0.35], [0.45, 0, 0.8], neutral],
+    )
+    return
+  }
+  if (name === 'heelstonePass') {
+    track(
+      nodes.upperArmRight,
+      'blade-arm',
+      [0, duration],
+      [
+        [-0.75, 0, -0.55],
+        [-0.75, 0, -0.55],
+      ],
+    )
+    track(
+      nodes.lowerArmLeft,
+      'free-forearm',
+      [0, 0.4, 0.8, duration],
+      [
+        [0, 0, 0.65],
+        [0.25, 0, -0.2],
+        [-0.2, 0, -0.8],
+        [0, 0, 0.65],
+      ],
+    )
+    return
+  }
+  if (name === 'attack') {
+    track(
+      nodes.upperArmRight,
+      'weapon-arm',
+      [0, 0.5, 0.58, duration],
+      [neutral, [-0.5, 0, 1.15], [0.45, 0, -1.2], neutral],
+    )
+    return
+  }
+  if (name === 'stagger') {
+    track(
+      nodes.pelvis,
+      'pelvis',
+      [0, duration * 0.35, duration],
+      [neutral, [0.15, 0, -0.35], neutral],
+    )
+    return
+  }
+  if (name === 'draw') {
+    track(
+      nodes.upperArmLeft,
+      'bow-arm',
+      [0, duration],
+      [neutral, [-0.85, 0, 0.25]],
+    )
+    track(
+      nodes.upperArmRight,
+      'draw-arm',
+      [0, duration],
+      [neutral, [-0.65, 0, -1.05]],
+    )
+    return
+  }
+  if (name === 'talk') {
+    track(
+      nodes.lowerArmRight,
+      'talk-forearm',
+      [0, duration / 2, duration],
+      [neutral, [0, 0, -0.8], neutral],
+    )
+    return
+  }
+  if (name === 'death') {
+    track(nodes.pelvis, 'pelvis', [0, duration], [neutral, [0, 0, Math.PI / 2]])
+    return
+  }
+
+  track(nodes.pelvis, 'pelvis', [0, duration], [neutral, neutral])
+}
+
+function addHoundAnimation(builder, nodes, name, duration) {
+  const animation = builder.document.createAnimation(name)
+  const track = (target, trackName, times, rotations) =>
+    addRotationTrack(
+      builder.document,
+      builder.buffer,
+      animation,
+      target,
+      name,
+      trackName,
+      times,
+      rotations,
+    )
+  const neutral = [0, 0, 0]
+  if (name === 'idle') {
+    track(
+      nodes.head,
+      'head',
+      [0, duration / 2, duration],
+      [neutral, [0, 0.12, 0.08], neutral],
+    )
+  } else if (name === 'run') {
+    const times = [
+      0,
+      duration * 0.25,
+      duration * 0.5,
+      duration * 0.75,
+      duration,
+    ]
+    track(nodes.body, 'body', times, [
+      [0, 0, 0.08],
+      neutral,
+      [0, 0, -0.08],
+      neutral,
+      [0, 0, 0.08],
+    ])
+    for (let index = 0; index < nodes.legs.length; index += 1) {
+      const direction = index % 2 === 0 ? 1 : -1
+      track(nodes.legs[index], `leg-${index}`, times, [
+        [direction * 0.65, 0, 0],
+        neutral,
+        [direction * -0.65, 0, 0],
+        neutral,
+        [direction * 0.65, 0, 0],
+      ])
+    }
+  } else if (name === 'bite') {
+    track(
+      nodes.head,
+      'head',
+      [0, 0.35, 0.45, duration],
+      [neutral, [0, 0, -0.55], [0, 0, 0.42], neutral],
+    )
+  } else if (name === 'death') {
+    track(nodes.body, 'body', [0, duration], [neutral, [0, 0, Math.PI / 2]])
+  }
 }
 
 function buildHuman(name, role) {
@@ -234,42 +492,76 @@ function buildHuman(name, role) {
     [0, 0.92, 0],
     [0.42, 0.28, 0.26],
   )
+  const nodes = {
+    pelvis,
+    upperArmLeft: null,
+    upperArmRight: null,
+    lowerArmLeft: null,
+    lowerArmRight: null,
+    upperLegLeft: null,
+    upperLegRight: null,
+  }
   part(pelvis, 'torso', 'box', coat, [0, 0.54, 0], [0.64, 0.8, 0.34])
   part(pelvis, 'head', 'capsule', 'skin', [0, 1.18, 0], [0.8, 0.8, 0.8])
   for (const side of [-1, 1]) {
     const upperArm = part(
       pelvis,
-      side < 0 ? 'arm.L' : 'arm.R',
+      side < 0 ? 'upperArm.L' : 'upperArm.R',
       'capsule',
       coat,
       [side * 0.47, 0.58, 0],
-      [0.55, 0.78, 0.55],
+      [0.55, 0.52, 0.55],
       [0, 0, side * 0.08],
     )
-    part(
+    const lowerArm = part(
       upperArm,
+      side < 0 ? 'lowerArm.L' : 'lowerArm.R',
+      'capsule',
+      coat,
+      [0, -0.38, 0],
+      [0.48, 0.52, 0.48],
+    )
+    part(
+      lowerArm,
       side < 0 ? 'hand.L' : 'hand.R',
       'capsule',
       'skin',
-      [0, -0.5, 0],
+      [0, -0.34, 0],
       [0.45, 0.48, 0.45],
     )
-    const leg = part(
+    const upperLeg = part(
       pelvis,
-      side < 0 ? 'leg.L' : 'leg.R',
+      side < 0 ? 'upperLeg.L' : 'upperLeg.R',
       'capsule',
       'cloth',
       [side * 0.19, -0.52, 0],
-      [0.62, 1.12, 0.62],
+      [0.62, 0.72, 0.62],
+    )
+    const lowerLeg = part(
+      upperLeg,
+      side < 0 ? 'lowerLeg.L' : 'lowerLeg.R',
+      'capsule',
+      'cloth',
+      [0, -0.42, 0],
+      [0.56, 0.68, 0.56],
     )
     part(
-      leg,
+      lowerLeg,
       side < 0 ? 'foot.L' : 'foot.R',
       'box',
       'iron',
-      [0, -0.54, 0.11],
+      [0, -0.4, 0.11],
       [0.24, 0.18, 0.42],
     )
+    if (side < 0) {
+      nodes.upperArmLeft = upperArm
+      nodes.lowerArmLeft = lowerArm
+      nodes.upperLegLeft = upperLeg
+    } else {
+      nodes.upperArmRight = upperArm
+      nodes.lowerArmRight = lowerArm
+      nodes.upperLegRight = upperLeg
+    }
   }
   if (role === 'brigand') {
     part(
@@ -329,15 +621,8 @@ function buildHuman(name, role) {
       [0, 0, -0.5],
     )
   }
-  for (const [index, [clip, duration]] of CHARACTER_CLIPS[name].entries())
-    addAnimation(
-      builder.document,
-      builder.buffer,
-      pelvis,
-      clip,
-      duration,
-      index,
-    )
+  for (const [clip, duration] of CHARACTER_CLIPS[name])
+    addHumanAnimation(builder, nodes, clip, duration)
   return builder.document
 }
 
@@ -353,7 +638,7 @@ function buildHound() {
     [1.45, 0.84, 0.72],
     [0, 0, Math.PI / 2],
   )
-  part(
+  const head = part(
     body,
     'head',
     'capsule',
@@ -371,26 +656,31 @@ function buildHound() {
     [0.25, 0.4, 0.25],
     [0, 0, -Math.PI / 2],
   )
+  const legs = []
   for (const side of [-1, 1]) {
-    part(
-      body,
-      `frontLeg.${side}`,
-      'capsule',
-      'hound',
-      [0.38, -0.42, side * 0.23],
-      [0.35, 0.75, 0.35],
+    legs.push(
+      part(
+        body,
+        `frontLeg.${side}`,
+        'capsule',
+        'hound',
+        [0.38, -0.42, side * 0.23],
+        [0.35, 0.75, 0.35],
+      ),
     )
-    part(
-      body,
-      `backLeg.${side}`,
-      'capsule',
-      'hound',
-      [-0.4, -0.42, side * 0.23],
-      [0.35, 0.75, 0.35],
+    legs.push(
+      part(
+        body,
+        `backLeg.${side}`,
+        'capsule',
+        'hound',
+        [-0.4, -0.42, side * 0.23],
+        [0.35, 0.75, 0.35],
+      ),
     )
   }
-  for (const [index, [clip, duration]] of CHARACTER_CLIPS.cliffHound.entries())
-    addAnimation(builder.document, builder.buffer, body, clip, duration, index)
+  for (const [clip, duration] of CHARACTER_CLIPS.cliffHound)
+    addHoundAnimation(builder, { body, head, legs }, clip, duration)
   return builder.document
 }
 
@@ -596,13 +886,25 @@ const io = new NodeIO()
 
 for (const name of MODEL_NAMES) {
   const document = buildModel(name)
-  await document.transform(
-    weld(),
-    dedup(),
-    prune(),
-    quantize({ quantizePosition: 14, quantizeNormal: 10 }),
-    meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
-  )
+  const animated = Object.hasOwn(CHARACTER_CLIPS, name)
+  if (animated)
+    await document.transform(
+      weld(),
+      dedup(),
+      prune(),
+      quantize({ quantizePosition: 14, quantizeNormal: 10 }),
+      meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
+    )
+  else
+    await document.transform(
+      dedup(),
+      flatten(),
+      join({ keepNamed: false }),
+      weld(),
+      prune(),
+      quantize({ quantizePosition: 14, quantizeNormal: 10 }),
+      meshopt({ encoder: MeshoptEncoder, level: 'medium' }),
+    )
   await io.write(resolve(OUTPUT, `${name}.glb`), document)
   console.log(`built public/models/${name}.glb`)
 }

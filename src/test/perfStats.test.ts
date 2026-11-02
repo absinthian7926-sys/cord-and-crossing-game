@@ -3,6 +3,7 @@ import {
   createPerfFrameBuffer,
   createPerfSummary,
   pushFrameTime,
+  resetPerfFrameBuffer,
   samplePerfStats,
 } from '../ui/perfStats'
 
@@ -39,6 +40,15 @@ describe('performance rolling statistics', () => {
     expect(output.frameTimeMeanMs).toBeCloseTo(20)
     expect(output.frameTimeP95Ms).toBe(30)
     expect(output.onePercentLowFps).toBeCloseTo(1000 / 30)
+  })
+
+  it('resets a populated ring in place', () => {
+    const buffer = createPerfFrameBuffer(3)
+    pushFrameTime(buffer, 16, 1)
+    pushFrameTime(buffer, 17, 2)
+    resetPerfFrameBuffer(buffer)
+    expect(buffer.head).toBe(0)
+    expect(buffer.count).toBe(0)
   })
 
   it('wraps the full ring and excludes samples outside each window', () => {

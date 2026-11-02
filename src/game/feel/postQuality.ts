@@ -17,7 +17,7 @@ const LOW: PostQuality = {
 
 const MEDIUM: PostQuality = {
   enabled: true,
-  effects: ['SMAA', 'Vignette', 'ColorGrade'],
+  effects: ['SMAA'],
   bloom: null,
 }
 

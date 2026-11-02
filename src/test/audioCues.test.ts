@@ -3,6 +3,7 @@ import {
   createAmbientMix,
   createHitCueDecision,
   createPorticoProximity,
+  isNearZoneRope,
   resolveAmbientMix,
   resolveCrossingCue,
   resolveHeelstoneCue,
@@ -93,6 +94,13 @@ describe('audio cue decisions', () => {
     })
     resolveAmbientMix('hollow', 0, false, false, output)
     expect(output.ropeCreak).toBe(0)
+  })
+
+  it('enables rope creaks by the cliff path and waystation shelter', () => {
+    expect(isNearZoneRope(200, 200, 0)).toBe(true)
+    expect(isNearZoneRope(-7, 3, 100)).toBe(true)
+    expect(isNearZoneRope(8, 3, 100)).toBe(true)
+    expect(isNearZoneRope(9, 3, 100)).toBe(false)
   })
 
   it.each([

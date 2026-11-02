@@ -32,15 +32,21 @@ function EnabledPostEffects({
   return (
     <EffectComposer multisampling={0} enableNormalPass={false}>
       <primitive object={smaa} dispose={null} />
-      <Vignette
-        offset={FEEL.post.vignette.offset}
-        darkness={FEEL.post.vignette.darkness}
-      />
-      <BrightnessContrast
-        brightness={FEEL.post.colorGrade.brightness}
-        contrast={FEEL.post.colorGrade.contrast}
-      />
-      <HueSaturation saturation={FEEL.post.colorGrade.saturation} />
+      {profile.effects.includes('Vignette') ? (
+        <Vignette
+          offset={FEEL.post.vignette.offset}
+          darkness={FEEL.post.vignette.darkness}
+        />
+      ) : null}
+      {profile.effects.includes('ColorGrade') ? (
+        <>
+          <BrightnessContrast
+            brightness={FEEL.post.colorGrade.brightness}
+            contrast={FEEL.post.colorGrade.contrast}
+          />
+          <HueSaturation saturation={FEEL.post.colorGrade.saturation} />
+        </>
+      ) : null}
       {profile.bloom ? (
         <Bloom
           intensity={profile.bloom.intensity}

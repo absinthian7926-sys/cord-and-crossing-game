@@ -1,4 +1,5 @@
 import { AUDIO } from '../../data/audio'
+import { ZONE } from '../../data/zone'
 import type { GameScene } from '../scenes/sceneRuntime'
 
 export type AudioCueId =
@@ -116,6 +117,19 @@ export function surfGainAtX(x: number): number {
 
 export function createAmbientMix(): AmbientMix {
   return { wind: 0, surf: 0, gulls: 0, ropeCreak: 0, waystation: 0 }
+}
+
+export function isNearZoneRope(
+  x: number,
+  z: number,
+  cliffPathDistance: number,
+): boolean {
+  if (cliffPathDistance <= AUDIO.ambient.ropeCreakRadius) return true
+  const shelterX =
+    ZONE.locations.A.center[0] + ZONE.placeholders.waystation.shelterCenter[0]
+  const shelterZ =
+    ZONE.locations.A.center[1] + ZONE.placeholders.waystation.shelterCenter[1]
+  return Math.hypot(x - shelterX, z - shelterZ) <= AUDIO.ambient.ropeCreakRadius
 }
 
 export function resolveAmbientMix(

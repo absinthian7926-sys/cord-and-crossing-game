@@ -29,6 +29,7 @@ export function PlayerHitVignette() {
   return (
     <div
       ref={element}
+      className="player-hit-vignette"
       aria-hidden="true"
       style={{
         position: 'fixed',

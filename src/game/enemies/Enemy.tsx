@@ -113,21 +113,25 @@ function canDrawBow(enemy: EnemyRecord): boolean {
   )
 }
 
-function firstStandardMaterial(
-  root: Object3D,
-  nodeName: string,
-): MeshStandardMaterial | null {
+function firstStandardMesh(root: Object3D, nodeName: string): Mesh | null {
   const named = root.getObjectByName(nodeName)
   if (!named) return null
-  let result: MeshStandardMaterial | null = null
+  let result: Mesh | null = null
   named.traverse((child) => {
     if (result !== null || !(child instanceof Mesh)) return
     const material = Array.isArray(child.material)
       ? child.material[0]
       : child.material
-    if (material instanceof MeshStandardMaterial) result = material
+    if (material instanceof MeshStandardMaterial) result = child
   })
   return result
+}
+
+function standardMaterial(mesh: Mesh): MeshStandardMaterial {
+  const material = Array.isArray(mesh.material)
+    ? mesh.material[0]
+    : mesh.material
+  return material as MeshStandardMaterial
 }
 
 export function Enemy({ enemy }: EnemyProps) {
@@ -154,6 +158,10 @@ export function Enemy({ enemy }: EnemyProps) {
   const drawBar = useRef<Mesh>(null)
   const bodyMaterial = useRef<MeshStandardMaterial>(null)
   const shieldMaterial = useRef<MeshStandardMaterial>(null)
+  const bodyRenderColor = useRef(new Color(color))
+  const shieldRenderColor = useRef(
+    new Color(ENEMY_PRESENTATION.roadBrigand.shieldColor),
+  )
   const sword = useRef<Object3D>(null)
   const animation = useRef<AnimationController | null>(null)
   const hitFlash = useRef(createEnemyFlashState())
@@ -185,22 +193,38 @@ export function Enemy({ enemy }: EnemyProps) {
     (object: Object3D, clips: readonly AnimationClip[]) => {
       destroyAnimationController(animation.current)
       animation.current = createAnimationController(object, clips)
-      const loadedBodyMaterial =
-        firstStandardMaterial(object, 'optimized-body') ??
-        firstStandardMaterial(
+      const loadedBodyMesh =
+        firstStandardMesh(object, 'optimized-body') ??
+        firstStandardMesh(
           object,
           enemy.type === 'cliffHound' ? 'body' : 'pelvis',
         )
-      if (loadedBodyMaterial) {
-        bodyMaterial.current = loadedBodyMaterial
+      if (loadedBodyMesh) {
+        const loadedBodyMaterial = standardMaterial(loadedBodyMesh)
+        bodyMaterial.current = null
         baseBodyColor.copy(loadedBodyMaterial.color)
+        bodyRenderColor.current.copy(baseBodyColor)
+        loadedBodyMesh.onBeforeRender = () => {
+          loadedBodyMaterial.color.copy(bodyRenderColor.current)
+        }
+        loadedBodyMesh.onAfterRender = () => {
+          loadedBodyMaterial.color.copy(baseBodyColor)
+        }
       }
       const swordNode = object.getObjectByName('sword')
       if (swordNode) sword.current = swordNode
-      const loadedShieldMaterial = firstStandardMaterial(object, 'buckler')
-      if (loadedShieldMaterial) {
-        shieldMaterial.current = loadedShieldMaterial
+      const loadedShieldMesh = firstStandardMesh(object, 'buckler')
+      if (loadedShieldMesh) {
+        const loadedShieldMaterial = standardMaterial(loadedShieldMesh)
+        shieldMaterial.current = null
         baseShieldColor.copy(loadedShieldMaterial.color)
+        shieldRenderColor.current.copy(baseShieldColor)
+        loadedShieldMesh.onBeforeRender = () => {
+          loadedShieldMaterial.color.copy(shieldRenderColor.current)
+        }
+        loadedShieldMesh.onAfterRender = () => {
+          loadedShieldMaterial.color.copy(baseShieldColor)
+        }
       }
       const sash = object.getObjectByName('leaderSash')
       if (sash) sash.visible = enemy.variant === ENEMY_VARIANTS.campLeader
@@ -420,19 +444,18 @@ export function Enemy({ enemy }: EnemyProps) {
       recordBlockFlash()
     }
     const hitMix = stepEnemyHitFlash(hitFlash.current, delta, meleeWindupActive)
-    if (bodyMaterial.current) {
-      bodyMaterial.current.color.copy(
-        meleeWindupActive ? windupBodyColor : baseBodyColor,
-      )
-      if (!meleeWindupActive && hitMix > 0)
-        bodyMaterial.current.color.lerp(hitBodyColor, hitMix)
-    }
+    bodyRenderColor.current.copy(
+      meleeWindupActive ? windupBodyColor : baseBodyColor,
+    )
+    if (!meleeWindupActive && hitMix > 0)
+      bodyRenderColor.current.lerp(hitBodyColor, hitMix)
+    if (bodyMaterial.current)
+      bodyMaterial.current.color.copy(bodyRenderColor.current)
     const blockMix = stepBlockFlash(blockFlash.current, delta)
-    if (shieldMaterial.current) {
-      shieldMaterial.current.color.copy(baseShieldColor)
-      if (blockMix > 0)
-        shieldMaterial.current.color.lerp(blockShieldColor, blockMix)
-    }
+    shieldRenderColor.current.copy(baseShieldColor)
+    if (blockMix > 0) shieldRenderColor.current.lerp(blockShieldColor, blockMix)
+    if (shieldMaterial.current)
+      shieldMaterial.current.color.copy(shieldRenderColor.current)
     enemyVisual.scale.y =
       enemy.type === 'cliffHound' && meleeWindupActive
         ? ENEMY_PRESENTATION.meleeWindup.houndCrouchScaleY
@@ -611,7 +634,6 @@ export function Enemy({ enemy }: EnemyProps) {
                 : 'roadBrigand'
           }
           loadedScale={enemy.scale}
-          uniqueMaterials
           onReady={modelReady}
           fallback={
             enemy.type === 'cliffHound' ? (

@@ -74,4 +74,79 @@ describe('Slice 1 model assets', () => {
     )
     expect(clip?.durationSeconds).toBeCloseTo(1.2, 3)
   })
+
+  it('keeps the hero segmented and gives gameplay clips distinct poses', async () => {
+    const document = await loadModel(MODEL_ASSETS.hero.path)
+    const rootDefinition = document.getRoot()
+    const nodeNames = new Set(
+      rootDefinition.listNodes().map((node) => node.getName()),
+    )
+    for (const name of [
+      'upperArm.L',
+      'lowerArm.L',
+      'hand.L',
+      'upperArm.R',
+      'lowerArm.R',
+      'hand.R',
+      'upperLeg.L',
+      'lowerLeg.L',
+      'foot.L',
+      'upperLeg.R',
+      'lowerLeg.R',
+      'foot.R',
+    ])
+      expect(nodeNames.has(name), name).toBe(true)
+
+    const signatures = new Set<string>()
+    const clips = new Map(
+      rootDefinition
+        .listAnimations()
+        .map((animation) => [animation.getName(), animation] as const),
+    )
+    for (const expected of MODEL_ASSETS.hero.clips) {
+      const clip = clips.get(expected.name)!
+      signatures.add(
+        clip
+          .listChannels()
+          .map((channel) => {
+            const values = channel.getSampler()?.getOutput()?.getArray()
+            return `${channel.getTargetNode()?.getName()}:${channel.getTargetPath()}:${values ? [...values].join(',') : ''}`
+          })
+          .join('|'),
+      )
+    }
+    expect(signatures.size).toBe(MODEL_ASSETS.hero.clips.length)
+
+    const cast = clips.get('cast')!
+    const castArm = cast
+      .listChannels()
+      .find((channel) => channel.getTargetNode()?.getName() === 'upperArm.R')!
+    const castTimes = castArm.getSampler()?.getInput()?.getArray()
+    const castValues = castArm.getSampler()?.getOutput()?.getArray()
+    expect(castTimes ? [...castTimes] : []).toEqual([0, 0.25, 0.5])
+    expect(castValues ? [...castValues.slice(-8, -4)] : []).toEqual(
+      castValues ? [...castValues.slice(-4)] : [],
+    )
+    expect(
+      clips
+        .get('heelstonePass')!
+        .listChannels()
+        .some((channel) => channel.getTargetNode()?.getName() === 'lowerArm.L'),
+    ).toBe(true)
+  })
+
+  it('merges static model parts by material to protect draw calls', async () => {
+    for (const model of Object.values(MODEL_ASSETS).filter(
+      (candidate) => candidate.clips.length === 0,
+    )) {
+      const document = await loadModel(model.path)
+      const rootDefinition = document.getRoot()
+      const primitiveCount = rootDefinition
+        .listMeshes()
+        .reduce((total, mesh) => total + mesh.listPrimitives().length, 0)
+      expect(primitiveCount, model.id).toBeLessThanOrEqual(
+        rootDefinition.listMaterials().length,
+      )
+    }
+  })
 })

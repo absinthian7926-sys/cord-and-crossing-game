@@ -15,6 +15,8 @@ const unloadedSnapshot: AudioEngineSnapshot = {
   ambientGain: 0,
   musicLayer: 'explore',
   lastCueIds: [],
+  lastFootstepSurface: null,
+  lastFootstepSequence: 0,
 }
 
 export async function loadAndStartAudioEngine(): Promise<void> {
