@@ -752,6 +752,15 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   await page.waitForFunction(
     () => window.__CORD_AND_CROSSING_DEBUG__!.getPortico().phase === 'active',
   )
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('dialog', { name: QUEST.name })).toBeVisible()
+  await expect(page.locator('.quest-key-slot')).toContainText('Used')
+  await page.keyboard.press('Tab')
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.setSetting('reduceMotion', true),
+    ),
+  ).toBe(true)
   await page.locator('canvas').dispatchEvent('pointerdown', { button: 1 })
   await page.evaluate(() =>
     window.dispatchEvent(
@@ -779,6 +788,14 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   expect(porticoPerf.drawCalls).toBeLessThan(250)
   expect(porticoPerf.triangles).toBeLessThan(500_000)
 
+  const audioBeforePartial = await page.evaluate(() => {
+    const audio = window.__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+    return {
+      bells: audio.lastCueIds.filter((cue) => cue === 'portico-bell').length,
+      musicGain: audio.musicGain,
+    }
+  })
+
   await page.evaluate(
     ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
     { x: ZONE.portico.center[0], z: ZONE.portico.center[1] },
@@ -795,6 +812,14 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
       step: window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep,
     })),
   ).toEqual({ effects: 0, step: 4 })
+  expect(
+    await page.evaluate(
+      () =>
+        window
+          .__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+          .lastCueIds.filter((cue) => cue === 'portico-bell').length,
+    ),
+  ).toBe(audioBeforePartial.bells)
 
   await page.evaluate(
     ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
@@ -805,6 +830,15 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
     { x: ZONE.portico.center[0] + 1, z: ZONE.portico.center[1] },
   )
+  const reducedFlash = page.locator('.crossing-flash')
+  await expect(reducedFlash).toBeVisible()
+  expect(
+    await reducedFlash.evaluate((element) =>
+      Number.parseFloat(
+        getComputedStyle(element).getPropertyValue('--crossing-flash-peak'),
+      ),
+    ),
+  ).toBeCloseTo(0.35, 4)
   await page.waitForFunction(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.getInputLocked(),
   )
@@ -820,6 +854,18 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     undefined,
     { timeout: 2_000 },
   )
+  expect(
+    await page
+      .locator('.scene-loading')
+      .evaluate((element) => getComputedStyle(element).transitionDuration),
+  ).toContain('0.3s')
+  await page.waitForFunction(({ bells, musicGain }) => {
+    const audio = window.__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+    return (
+      audio.lastCueIds.filter((cue) => cue === 'portico-bell').length > bells &&
+      audio.musicGain < musicGain
+    )
+  }, audioBeforePartial)
   expect(hollowChunkRequests.length).toBeGreaterThan(0)
   await page.waitForFunction(
     () =>
@@ -854,14 +900,40 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   expect(hollowArrivalPerf.drawCalls).toBeLessThan(250)
   expect(hollowArrivalPerf.triangles).toBeLessThan(500_000)
 
-  await page.keyboard.press('KeyF')
+  const hollowStepSequence = await page.evaluate(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getAudioState().lastFootstepSequence,
+  )
+  await page.keyboard.down('KeyW')
+  await page.waitForFunction((before) => {
+    const audio = window.__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+    return (
+      audio.lastFootstepSequence > before &&
+      audio.lastFootstepSurface === 'stone'
+    )
+  }, hollowStepSequence)
+  await page.keyboard.up('KeyW')
+
+  const chimesBeforePass = await page.evaluate(
+    () =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+        .lastCueIds.filter((cue) => cue === 'heelstone-chime').length,
+  )
+  await page.keyboard.down('KeyF')
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().passMode ===
+      'Passing',
+  )
+  await page.keyboard.up('KeyF')
   await page.waitForFunction(
     () =>
       window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().passMode ===
         'Carried' &&
       window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().lineCarrying,
     undefined,
-    { timeout: 3_000 },
+    { timeout: 5_000 },
   )
   expect(
     await page.evaluate(
@@ -870,6 +942,13 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
           .heelstonePassDone,
     ),
   ).toBe(true)
+  await page.waitForFunction(
+    (before) =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+        .lastCueIds.filter((cue) => cue === 'heelstone-chime').length > before,
+    chimesBeforePass,
+  )
 
   await page.evaluate(() =>
     window.dispatchEvent(
@@ -948,7 +1027,13 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     timeout: 5_000,
   })
   await page.waitForTimeout(500)
-  await page.keyboard.press('KeyF')
+  const chimesBeforeInterrupt = await page.evaluate(
+    () =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+        .lastCueIds.filter((cue) => cue === 'heelstone-chime').length,
+  )
+  await page.keyboard.down('KeyF')
   await page.waitForFunction(
     () =>
       window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().passMode ===
@@ -956,6 +1041,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     undefined,
     { timeout: 3_000 },
   )
+  await page.keyboard.up('KeyF')
   await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.damagePlayer(1))
   await page.waitForFunction(
     () =>
@@ -963,6 +1049,15 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
         'Idle' &&
       !window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().lineCarrying,
   )
+  await page.waitForTimeout(250)
+  expect(
+    await page.evaluate(
+      () =>
+        window
+          .__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+          .lastCueIds.filter((cue) => cue === 'heelstone-chime').length,
+    ),
+  ).toBe(chimesBeforeInterrupt)
 
   await page.evaluate(
     ([x, z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z + 6),
