@@ -2,7 +2,15 @@ import { readdir, readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const distDirectory = resolve(process.cwd(), 'dist')
-const debugHook = Buffer.from('__CORD_AND_CROSSING_DEBUG__')
+const forbiddenMarkers = [
+  '__CORD_AND_CROSSING_DEBUG__',
+  'CORD_DEBUG_ONLY_INVULNERABLE',
+  'CORD_DEBUG_ONLY_GRANT_EFFECT',
+  'CORD_DEBUG_ONLY_FORCE_CROSSING',
+  'CORD_DEBUG_ONLY_SCENE_LOAD',
+  'CORD_DEBUG_ONLY_PORTICO_VIEW',
+  'CORD_DEBUG_ONLY_DROP_BLADE',
+].map((marker) => Buffer.from(marker))
 const pendingDirectories = [distDirectory]
 const matches = []
 
@@ -14,17 +22,20 @@ while (pendingDirectories.length > 0) {
     const path = resolve(directory, entry.name)
     if (entry.isDirectory()) {
       pendingDirectories.push(path)
-    } else if ((await readFile(path)).includes(debugHook)) {
-      matches.push(path)
+    } else {
+      const content = await readFile(path)
+      for (const marker of forbiddenMarkers) {
+        if (content.includes(marker)) matches.push(`${path} (${marker})`)
+      }
     }
   }
 }
 
 if (matches.length > 0) {
   console.error(
-    `Production debug hook found in built files: ${matches.join(', ')}`,
+    `Production debug-only marker found in built files: ${matches.join(', ')}`,
   )
   process.exitCode = 1
 } else {
-  console.log('Production build contains no debug hook.')
+  console.log('Production build contains no debug-only markers.')
 }

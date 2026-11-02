@@ -7,18 +7,20 @@ import { applyCombatDamage } from '../combat/combat'
 import { playerStore } from '../player/playerStore'
 import { isUnarmed } from '../weapons/cordState'
 import { weaponRuntime } from '../weapons/weaponRuntime'
-import { heightAt } from '../world/terrain'
+import { getWorldConfiguration } from '../scenes/sceneRuntime'
 import { Enemy } from './Enemy'
 import {
   enemyRuntime,
   initializeEnemyRoster,
+  isEnemySceneInitialized,
+  setEnemyHeightSampler,
   subscribeEnemyRoster,
+  type EnemySpawnLike,
 } from './enemyRuntime'
 import { stepArrows } from './projectiles'
 import { createSpawnPlan } from './spawns'
 
 function initializeDefaultRoster(): void {
-  if (enemyRuntime.records.length > 0) return
   const spawnPlan = createSpawnPlan()
   initializeEnemyRoster(
     spawnPlan.map((spawn) => ({
@@ -52,7 +54,7 @@ function EnemyProjectiles() {
       player.position.z,
       PLAYER.collider.radius,
       player.invulnerable,
-      heightAt,
+      getWorldConfiguration().sampleHeight,
     )
     if (damage > 0)
       applyCombatDamage(
@@ -133,14 +135,23 @@ function EnemyVisibilitySampler() {
   return null
 }
 
-export function Enemies() {
+export type EnemiesProps = {
+  readonly spawns?: readonly EnemySpawnLike[]
+}
+
+export function Enemies({ spawns }: EnemiesProps = {}) {
   const [, rerender] = useReducer((value: number) => value + 1, 0)
+  const scene = getWorldConfiguration().scene
 
   useEffect(() => {
     const unsubscribe = subscribeEnemyRoster(rerender)
-    initializeDefaultRoster()
+    setEnemyHeightSampler(getWorldConfiguration().sampleHeight)
+    if (!isEnemySceneInitialized(scene)) {
+      if (spawns) initializeEnemyRoster(spawns)
+      else initializeDefaultRoster()
+    }
     return unsubscribe
-  }, [])
+  }, [scene, spawns])
 
   return (
     <>

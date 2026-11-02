@@ -6,6 +6,8 @@ import {
   initialComboState,
   isTargetInArc,
   recallDuration,
+  createOutgoingHitResult,
+  resolveStrengthHit,
   selectFlatArcTargets,
   shoveDamage,
   tryStartCloseAttack,
@@ -101,5 +103,26 @@ describe('reachblade combat', () => {
     expect(capsuleOverlapsPoint(0, 0, 1, 0, 0, 0, 0, 0, 2, 0.2)).toBe(true)
     expect(capsuleOverlapsPoint(1, 0, 1, 0, 0, 0, 0, 0, 2, 0.2)).toBe(false)
     expect(capsuleOverlapsPoint(0, 0, 0, 0, 0, 0, 0, 0, 0, 0.2)).toBe(true)
+  })
+
+  it('applies Strength to close, stagger, and carried casts only', () => {
+    const output = createOutgoingHitResult()
+    resolveStrengthHit(14, 0.4, 'close', true, false, output)
+    expect(output.damage).toBeCloseTo(18.9)
+    expect(output.staggerSeconds).toBeCloseTo(0.6)
+    expect(output.breaksGuard).toBe(false)
+    resolveStrengthHit(26, 0.4, 'cast', true, false, output)
+    expect(output.damage).toBe(26)
+    expect(output.staggerSeconds).toBeCloseTo(0.6)
+    expect(output.breaksGuard).toBe(false)
+    resolveStrengthHit(26, 0.4, 'cast', true, true, output)
+    expect(output.damage).toBeCloseTo(35.1)
+    expect(output.staggerSeconds).toBeCloseTo(0.6)
+    expect(output.breaksGuard).toBe(true)
+    expect(resolveStrengthHit(26, 0.4, 'cast', false, true, output)).toEqual({
+      damage: 26,
+      staggerSeconds: 0.4,
+      breaksGuard: false,
+    })
   })
 })

@@ -51,6 +51,12 @@ describe('player death and respawn', () => {
     beginPlayerDeath(state, 0)
     stepPlayerDeath(state, PLAYER_DEATH.fadeSeconds)
     expect(isPlayerSpawnInvulnerable(state)).toBe(true)
+    expect(Number.isFinite(state.spawnInvulnerabilityRemainingSeconds)).toBe(
+      true,
+    )
+    expect(state.spawnInvulnerabilityRemainingSeconds).toBe(
+      PLAYER_DEATH.spawnInvulnerabilitySeconds,
+    )
     stepPlayerDeath(state, PLAYER_DEATH.spawnInvulnerabilitySeconds - 0.01)
     expect(isPlayerSpawnInvulnerable(state)).toBe(true)
     stepPlayerDeath(state, 0.01)

@@ -21,8 +21,11 @@ export function createDialogueState(): DialogueState {
 export function openDialogueForQuestStep(
   state: DialogueState,
   questStep: QuestStepId,
+  questComplete = false,
 ): DialogueState {
-  const nodeId = DIALOGUE_NODE_BY_STEP[questStep]
+  const nodeId = questComplete
+    ? ('hollen-complete' as const)
+    : DIALOGUE_NODE_BY_STEP[questStep]
   if (state.currentNodeId === nodeId) return state
   return { currentNodeId: nodeId }
 }

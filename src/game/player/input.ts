@@ -11,11 +11,12 @@ export type KeyName =
   | 'aim'
   | 'interact'
   | 'questLog'
+  | 'heelstonePass'
 
 const pressed = new Set<string>()
 const consumed = new Set<KeyName>()
 const released = new Set<KeyName>()
-let gameplayInputLocked = false
+const gameplayInputLocks = new Set<string>()
 const bindings: Record<KeyName, readonly string[]> = {
   forward: ['KeyW'],
   backward: ['KeyS'],
@@ -29,6 +30,7 @@ const bindings: Record<KeyName, readonly string[]> = {
   aim: ['Mouse2'],
   interact: ['KeyE'],
   questLog: ['Tab'],
+  heelstonePass: ['KeyF'],
 }
 const boundCodes = new Set(Object.values(bindings).flat())
 
@@ -81,13 +83,19 @@ export function clearInput() {
 }
 
 export function setGameplayInputLocked(locked: boolean): void {
-  if (gameplayInputLocked === locked) return
-  gameplayInputLocked = locked
+  setGameplayInputLock('legacy', locked)
+}
+
+export function setGameplayInputLock(source: string, locked: boolean): void {
+  const wasLocked = gameplayInputLocks.size > 0
+  if (locked) gameplayInputLocks.add(source)
+  else gameplayInputLocks.delete(source)
+  if (wasLocked === gameplayInputLocks.size > 0) return
   clearInput()
 }
 
 export function isGameplayInputLocked(): boolean {
-  return gameplayInputLocked
+  return gameplayInputLocks.size > 0
 }
 
 export function attachInput() {
@@ -106,21 +114,22 @@ export function detachInput() {
   window.removeEventListener('mouseup', mouseUp)
   window.removeEventListener('contextmenu', preventContextMenu)
   window.removeEventListener('blur', clearInput)
+  gameplayInputLocks.clear()
   clearInput()
 }
 
 export function inputHeld(name: KeyName) {
-  return !gameplayInputLocked && held(name)
+  return !isGameplayInputLocked() && held(name)
 }
 
 export function consumeInput(name: KeyName) {
-  if (gameplayInputLocked || !held(name) || consumed.has(name)) return false
+  if (isGameplayInputLocked() || !held(name) || consumed.has(name)) return false
   consumed.add(name)
   return true
 }
 
 export function consumeReleased(name: KeyName) {
-  if (gameplayInputLocked || !released.has(name)) return false
+  if (isGameplayInputLocked() || !released.has(name)) return false
   released.delete(name)
   return true
 }

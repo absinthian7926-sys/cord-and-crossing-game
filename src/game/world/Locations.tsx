@@ -361,11 +361,6 @@ function RuinShelf() {
   const ruin = ZONE.placeholders.ruin
   const center = ZONE.locations.E.center
   const ground = heightAt(center[0], center[1])
-  const pillarHalf = ruin.pillarSize.map((value) => value / 2) as [
-    number,
-    number,
-    number,
-  ]
 
   return (
     <group name="location-e-ruin-shelf">
@@ -417,35 +412,6 @@ function RuinShelf() {
           <meshStandardMaterial color={ZONE.palette.stone} roughness={1} />
         </mesh>
       </RigidBody>
-      <RigidBody type="fixed" colliders={false} name="inert-portico-pillars">
-        {[-1, 1].map((side) => {
-          const x =
-            ruin.porticoCenter[0] + (side * ZONE.portico.pillarSpacing) / 2
-          const z = ruin.porticoCenter[1]
-          return (
-            <CuboidCollider
-              key={side}
-              args={pillarHalf}
-              position={[x, heightAt(x, z) + pillarHalf[1], z]}
-            />
-          )
-        })}
-      </RigidBody>
-      {[-1, 1].map((side) => {
-        const x =
-          ruin.porticoCenter[0] + (side * ZONE.portico.pillarSpacing) / 2
-        const z = ruin.porticoCenter[1]
-        return (
-          <mesh
-            key={side}
-            castShadow
-            position={[x, heightAt(x, z) + pillarHalf[1], z]}
-          >
-            <boxGeometry args={ruin.pillarSize} />
-            <meshStandardMaterial color={ZONE.palette.stone} roughness={1} />
-          </mesh>
-        )
-      })}
     </group>
   )
 }

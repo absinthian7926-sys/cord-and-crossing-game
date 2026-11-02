@@ -10,16 +10,20 @@ import { useEffect, useRef } from 'react'
 import { Group, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
 import { ZONE } from '../../data/zone'
+import {
+  cancelHeelstonePassByDodge,
+  clearEffectsOnDeath,
+  isHeelstonePassRunning,
+} from '../effects/effectRuntime'
 import { resetEnemiesNearDeathToReturn } from '../enemies/enemyRuntime'
+import { getWorldConfiguration } from '../scenes/sceneRuntime'
 import { resetWeaponToInHand } from '../weapons/weaponRuntime'
-import { heightAt } from '../world/terrain'
 import {
   beginPlayerDeath,
   isPlayerInputLocked,
   isPlayerSpawnInvulnerable,
   resetVitalsForRespawn,
   stepPlayerDeath,
-  WAYSTATION_RESPAWN,
 } from './death'
 import {
   clearInput,
@@ -53,6 +57,7 @@ export function PlayerController() {
     typeof world.createCharacterController
   > | null>(null)
   const { camera } = useThree()
+  const initialPosition = playerStore.getState().position
 
   useEffect(() => {
     const controller = world.createCharacterController(0.01)
@@ -80,6 +85,7 @@ export function PlayerController() {
       cooldown.current = 0
       invulnerableLeft.current = 0
       vertical.current = 0
+      clearEffectsOnDeath()
       resetWeaponToInHand()
       resetEnemiesNearDeathToReturn(store.position.x, store.position.z)
     }
@@ -90,13 +96,14 @@ export function PlayerController() {
       invulnerableLeft.current > 0
     if (respawned) {
       const position = store.position
+      const worldConfiguration = getWorldConfiguration()
       resetVitalsForRespawn(store.vitals)
-      position.x = WAYSTATION_RESPAWN.x
+      position.x = worldConfiguration.respawn.x
       position.y =
-        WAYSTATION_RESPAWN.y +
+        worldConfiguration.respawn.y +
         PLAYER.collider.halfHeight +
         PLAYER.collider.radius
-      position.z = WAYSTATION_RESPAWN.z
+      position.z = worldConfiguration.respawn.z
       body.current.setTranslation(position, true)
       body.current.setNextKinematicTranslation(position)
       store.teleportTarget = null
@@ -124,6 +131,12 @@ export function PlayerController() {
       store.teleportTarget = null
       vertical.current = 0
       unsafeSeconds.current = 0
+      return
+    }
+    if (isHeelstonePassRunning()) {
+      if (consumeInput('dodge')) cancelHeelstonePassByDodge()
+      vertical.current = 0
+      updateVitals(store.vitals, delta, false)
       return
     }
     dodgeLeft.current = Math.max(0, dodgeLeft.current - delta)
@@ -180,22 +193,29 @@ export function PlayerController() {
     position.y = current.y + corrected.y
     position.z = current.z + corrected.z
     body.current.setNextKinematicTranslation(position)
-    const belowTerrain =
-      position.y < heightAt(position.x, position.z) - ZONE.respawn.terrainDrop
+    const worldConfiguration = getWorldConfiguration()
+    const terrainHeight = worldConfiguration.sampleHeight(
+      position.x,
+      position.z,
+    )
+    const belowTerrain = position.y < terrainHeight - ZONE.respawn.terrainDrop
     const belowSea =
-      heightAt(position.x, position.z) < ZONE.sea.level - ZONE.respawn.seaDepth
+      worldConfiguration.hasSea &&
+      terrainHeight < ZONE.sea.level - ZONE.respawn.seaDepth
     const outsideBounds =
-      position.x < ZONE.bounds.minimumX ||
-      position.x > ZONE.bounds.maximumX ||
-      position.z < ZONE.bounds.minimumZ ||
-      position.z > ZONE.bounds.maximumZ
+      position.x < worldConfiguration.bounds.minimumX ||
+      position.x > worldConfiguration.bounds.maximumX ||
+      position.z < worldConfiguration.bounds.minimumZ ||
+      position.z > worldConfiguration.bounds.maximumZ
     if (belowTerrain || belowSea || outsideBounds) {
       unsafeSeconds.current += delta
       if (unsafeSeconds.current >= ZONE.respawn.delaySeconds) {
-        position.x = ZONE.spawn[0]
+        position.x = worldConfiguration.respawn.x
         position.y =
-          ZONE.spawn[1] + PLAYER.collider.halfHeight + PLAYER.collider.radius
-        position.z = ZONE.spawn[2]
+          worldConfiguration.respawn.y +
+          PLAYER.collider.halfHeight +
+          PLAYER.collider.radius
+        position.z = worldConfiguration.respawn.z
         body.current.setTranslation(position, true)
         body.current.setNextKinematicTranslation(position)
         vertical.current = 0
@@ -217,11 +237,7 @@ export function PlayerController() {
     <RigidBody
       ref={body}
       type="kinematicPosition"
-      position={[
-        ZONE.spawn[0],
-        ZONE.spawn[1] + PLAYER.collider.halfHeight + PLAYER.collider.radius,
-        ZONE.spawn[2],
-      ]}
+      position={[initialPosition.x, initialPosition.y, initialPosition.z]}
       colliders={false}
       name="player"
     >

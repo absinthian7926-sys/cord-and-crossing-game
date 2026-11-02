@@ -2,7 +2,16 @@ import { useEffect, useRef } from 'react'
 import { PLAYER_DEATH } from '../data/enemies'
 import { PLAYER } from '../data/player'
 import { QUEST_UI } from '../data/quests'
+import { ZONE } from '../data/zone'
+import { effectRuntime, hasStrength } from '../game/effects/effectRuntime'
 import { playerStore } from '../game/player/playerStore'
+import { getQuestRuntimeSnapshot } from '../game/quest/questRuntime'
+import {
+  getPorticoRuntimeSnapshot,
+  isKeyUseNearby,
+  shouldShowHeelstonePrompt,
+  shouldShowUseKeyPrompt,
+} from '../game/portico/porticoRuntime'
 import { weaponRuntime } from '../game/weapons/weaponRuntime'
 
 export type QuestTrackerHud = {
@@ -24,6 +33,10 @@ export function Hud({ questTracker = null }: HudProps) {
   const cordState = useRef<HTMLDivElement>(null)
   const deathFade = useRef<HTMLDivElement>(null)
   const questTrackerElement = useRef<HTMLDivElement>(null)
+  const effectSlotOne = useRef<HTMLDivElement>(null)
+  const effectSlotTwo = useRef<HTMLDivElement>(null)
+  const useKeyPrompt = useRef<HTMLDivElement>(null)
+  const clearLinePrompt = useRef<HTMLDivElement>(null)
   const lastDisplayed = useRef({
     health: -1,
     stamina: -1,
@@ -31,6 +44,10 @@ export function Hud({ questTracker = null }: HudProps) {
     cord: '',
     retie: -1,
     deathOpacity: -1,
+    effectOne: '',
+    effectTwo: '',
+    showUseKey: false,
+    showClearLine: false,
   })
 
   useEffect(() => {
@@ -97,6 +114,59 @@ export function Hud({ questTracker = null }: HudProps) {
           deathFade.current.style.opacity = deathOpacity.toFixed(3)
         lastDisplayed.current.deathOpacity = deathOpacity
       }
+      const effectLabels = ['', '']
+      let effectIndex = 0
+      for (const slot of effectRuntime.effects.slots) {
+        if (slot.definition === null || effectIndex >= effectLabels.length)
+          continue
+        effectLabels[effectIndex] =
+          `${slot.definition.id} ${Math.ceil(slot.remainingSeconds)}s`
+        effectIndex += 1
+      }
+      if (effectLabels[0] !== lastDisplayed.current.effectOne) {
+        if (effectSlotOne.current) {
+          effectSlotOne.current.textContent = effectLabels[0]
+          effectSlotOne.current.style.display = effectLabels[0]
+            ? 'block'
+            : 'none'
+        }
+        lastDisplayed.current.effectOne = effectLabels[0]
+      }
+      if (effectLabels[1] !== lastDisplayed.current.effectTwo) {
+        if (effectSlotTwo.current) {
+          effectSlotTwo.current.textContent = effectLabels[1]
+          effectSlotTwo.current.style.display = effectLabels[1]
+            ? 'block'
+            : 'none'
+        }
+        lastDisplayed.current.effectTwo = effectLabels[1]
+      }
+      const quest = getQuestRuntimeSnapshot().quest
+      const portico = getPorticoRuntimeSnapshot()
+      const showUseKey = shouldShowUseKeyPrompt({
+        nearby: isKeyUseNearby(),
+        questStep: quest.currentStep,
+        keyLooted: quest.keyLooted,
+        phase: portico.phase,
+      })
+      if (showUseKey !== lastDisplayed.current.showUseKey) {
+        if (useKeyPrompt.current)
+          useKeyPrompt.current.style.display = showUseKey ? 'block' : 'none'
+        lastDisplayed.current.showUseKey = showUseKey
+      }
+      const showClearLine = shouldShowHeelstonePrompt({
+        hasActiveEffect: hasStrength(),
+        cordInHand: weaponRuntime.cord.mode === 'InHand',
+        passIdle: effectRuntime.pass.mode === 'Idle',
+        lineCarrying: effectRuntime.effects.carriedEffectId !== null,
+      })
+      if (showClearLine !== lastDisplayed.current.showClearLine) {
+        if (clearLinePrompt.current)
+          clearLinePrompt.current.style.display = showClearLine
+            ? 'block'
+            : 'none'
+        lastDisplayed.current.showClearLine = showClearLine
+      }
     }
     refresh()
     const interval = window.setInterval(refresh, 100)
@@ -120,6 +190,10 @@ export function Hud({ questTracker = null }: HudProps) {
         Click to look · LMB strike · RMB aim/cast · Q recall/stop
       </div>
       <div className="vitals">
+        <div className="effect-slots" aria-label="Active effects">
+          <div ref={effectSlotOne} className="effect-slot" />
+          <div ref={effectSlotTwo} className="effect-slot" />
+        </div>
         <div className="hud-bar-wrap">
           <div className="hud-label">
             <span>Health</span>
@@ -145,6 +219,12 @@ export function Hud({ questTracker = null }: HudProps) {
       <div className="reticle" />
       <div ref={cordState} className="cord-state">
         In Hand
+      </div>
+      <div ref={useKeyPrompt} className="action-prompt use-key-prompt">
+        {ZONE.portico.useKeyPrompt}
+      </div>
+      <div ref={clearLinePrompt} className="action-prompt clear-line-prompt">
+        {ZONE.portico.clearLinePrompt}
       </div>
       {questTracker && (
         <div

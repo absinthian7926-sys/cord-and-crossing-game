@@ -637,3 +637,549 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
   )
   expect(browserErrors).toEqual([])
 })
+
+test('completes the portico and heelstone milestone flow', async ({ page }) => {
+  const browserErrors: string[] = []
+  const hollowChunkRequests: string[] = []
+  page.on('console', (message) => {
+    if (message.type() === 'error') browserErrors.push(message.text())
+  })
+  page.on('pageerror', (error) => browserErrors.push(error.message))
+  page.on('request', (request) => {
+    if (request.url().includes('/src/game/scenes/Hollow.tsx'))
+      hollowChunkRequests.push(request.url())
+  })
+
+  await page.goto('/')
+  await expect(page.locator('canvas')).toBeVisible()
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
+  )
+
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.emitQuestEvent('talkedToHollen'),
+    ),
+  ).toBe(true)
+  const leaderId = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.spawnCampLeader(),
+  )
+  expect(leaderId).not.toBeNull()
+  const leaderStart = await page.evaluate((id) => {
+    const leader = window
+      .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+      .find((enemy) => enemy.id === id)
+    if (!leader) throw new Error('Camp leader did not spawn for M6 save test')
+    window.__CORD_AND_CROSSING_DEBUG__!.teleport(
+      leader.position.x + 6,
+      leader.position.z,
+    )
+    return leader.position
+  }, leaderId)
+  await page.waitForFunction(
+    ({ id, start }) => {
+      const leader = window
+        .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+        .find((enemy) => enemy.id === id)
+      return (
+        leader !== undefined &&
+        Math.hypot(leader.position.x - start.x, leader.position.z - start.z) >
+          0.05
+      )
+    },
+    { id: leaderId, start: leaderStart },
+    { timeout: 10_000 },
+  )
+  expect(
+    await page.evaluate(
+      (id) => window.__CORD_AND_CROSSING_DEBUG__!.killEnemy(id!),
+      leaderId,
+    ),
+  ).toBe(true)
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getQuest().keyDrop !== null,
+  )
+  const pendingKeyDrop = await page.evaluate(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getQuest().keyDrop,
+  )
+  expect(pendingKeyDrop).not.toBeNull()
+  expect(
+    Math.hypot(
+      pendingKeyDrop!.x - leaderStart.x,
+      pendingKeyDrop!.z - leaderStart.z,
+    ),
+  ).toBeGreaterThan(0.01)
+  expect(
+    await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
+  ).toBe(true)
+
+  await page.reload()
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
+  )
+  await page.waitForFunction((expected) => {
+    const drop = window.__CORD_AND_CROSSING_DEBUG__!.getQuest().keyDrop
+    return (
+      drop !== null &&
+      Math.hypot(
+        drop.x - expected.x,
+        drop.y - expected.y,
+        drop.z - expected.z,
+      ) < 0.01
+    )
+  }, pendingKeyDrop)
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    pendingKeyDrop!,
+  )
+  await expect(page.getByText('E Take key', { exact: true })).toBeVisible({
+    timeout: 5_000,
+  })
+  await page.keyboard.press('KeyE')
+  await page.waitForFunction(() => {
+    const quest = window.__CORD_AND_CROSSING_DEBUG__!.getQuest()
+    return quest.quest.currentStep === 3 && quest.keyDrop === null
+  })
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.emitQuestEvent('returnedToHollen'),
+    ),
+  ).toBe(true)
+
+  const porticoApproach = {
+    x: ZONE.portico.center[0] - 2,
+    z: ZONE.portico.center[1],
+  }
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    porticoApproach,
+  )
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getInputLocked(),
+    ),
+  ).toBe(false)
+  await expect(
+    page.getByText(ZONE.portico.useKeyPrompt, { exact: true }),
+  ).toBeVisible({ timeout: 5_000 })
+  await page.keyboard.press('KeyE')
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPortico().phase === 'active',
+  )
+  await page.locator('canvas').dispatchEvent('pointerdown', { button: 1 })
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent('pointermove', {
+        movementX: 390,
+        movementY: 0,
+        bubbles: true,
+      }),
+    ),
+  )
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new PointerEvent('pointerup', { button: 1, bubbles: true }),
+    ),
+  )
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPorticoScreenInView(),
+    undefined,
+    { timeout: 5_000 },
+  )
+  await page.waitForTimeout(350)
+  const porticoPerf = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getPerfStats(),
+  )
+  expect(porticoPerf.drawCalls).toBeLessThan(250)
+  expect(porticoPerf.triangles).toBeLessThan(500_000)
+
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    { x: ZONE.portico.center[0], z: ZONE.portico.center[1] },
+  )
+  await page.waitForTimeout(150)
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    porticoApproach,
+  )
+  await page.waitForTimeout(150)
+  expect(
+    await page.evaluate(() => ({
+      effects: window.__CORD_AND_CROSSING_DEBUG__!.getEffects().length,
+      step: window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep,
+    })),
+  ).toEqual({ effects: 0, step: 4 })
+
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    { x: ZONE.portico.center[0], z: ZONE.portico.center[1] },
+  )
+  await page.waitForTimeout(100)
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    { x: ZONE.portico.center[0] + 1, z: ZONE.portico.center[1] },
+  )
+  await page.waitForFunction(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getInputLocked(),
+  )
+  await page.keyboard.press('KeyF')
+  await page.waitForTimeout(100)
+  expect(
+    await page.evaluate(
+      () => window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().passMode,
+    ),
+  ).toBe('Idle')
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getScene() === 'hollow',
+    undefined,
+    { timeout: 2_000 },
+  )
+  expect(hollowChunkRequests.length).toBeGreaterThan(0)
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getLastSceneLoadMilliseconds() !==
+      null,
+  )
+  const sceneLoadMilliseconds = await page.evaluate(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getLastSceneLoadMilliseconds() ??
+      Number.POSITIVE_INFINITY,
+  )
+  expect(sceneLoadMilliseconds).toBeLessThan(2_000)
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep === 5 &&
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getEffects()
+        .some((effect) => effect.id === 'Strength'),
+  )
+  await expect(
+    page.locator('.effect-slot').filter({ hasText: 'Strength' }),
+  ).toBeVisible()
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getPerfStats().drawCalls > 0,
+    undefined,
+    { timeout: 5_000 },
+  )
+  await page.waitForTimeout(350)
+  const hollowArrivalPerf = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getPerfStats(),
+  )
+  expect(hollowArrivalPerf.drawCalls).toBeLessThan(250)
+  expect(hollowArrivalPerf.triangles).toBeLessThan(500_000)
+
+  await page.keyboard.press('KeyF')
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().passMode ===
+        'Carried' &&
+      window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().lineCarrying,
+    undefined,
+    { timeout: 3_000 },
+  )
+  expect(
+    await page.evaluate(
+      () =>
+        window.__CORD_AND_CROSSING_DEBUG__!.getHollow().progress
+          .heelstonePassDone,
+    ),
+  ).toBe(true)
+
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mousedown', { button: 2, bubbles: true }),
+    ),
+  )
+  await page.waitForTimeout(300)
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mouseup', { button: 2, bubbles: true }),
+    ),
+  )
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'InHand',
+    undefined,
+    { timeout: 5_000 },
+  )
+  expect(
+    await page.evaluate(
+      () => window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().lineCarrying,
+    ),
+  ).toBe(true)
+
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mousedown', { button: 2, bubbles: true }),
+    ),
+  )
+  await page.waitForTimeout(300)
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mouseup', { button: 2, bubbles: true }),
+    ),
+  )
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'Out',
+  )
+  await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.forceCut())
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'InHand',
+    undefined,
+    { timeout: 5_000 },
+  )
+  expect(
+    await page.evaluate(
+      () => window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().lineCarrying,
+    ),
+  ).toBe(false)
+
+  expect(
+    await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
+  ).toBe(true)
+  await page.reload()
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
+  )
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getScene() === 'hollow' &&
+      window.__CORD_AND_CROSSING_DEBUG__!.getHollow().progress
+        .heelstonePassDone,
+  )
+  expect(
+    await page.evaluate(() => ({
+      effects: window.__CORD_AND_CROSSING_DEBUG__!.getEffects().length,
+      carrying:
+        window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().lineCarrying,
+    })),
+  ).toEqual({ effects: 0, carrying: false })
+
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.grantEffect('Strength'),
+    ),
+  ).toBe(true)
+  await expect(
+    page.locator('.effect-slot').filter({ hasText: 'Strength' }),
+  ).toBeVisible({
+    timeout: 5_000,
+  })
+  await page.waitForTimeout(500)
+  await page.keyboard.press('KeyF')
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().passMode ===
+      'Passing',
+    undefined,
+    { timeout: 3_000 },
+  )
+  await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.damagePlayer(1))
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().passMode ===
+        'Idle' &&
+      !window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().lineCarrying,
+  )
+
+  await page.evaluate(
+    ([x, z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z + 6),
+    ZONE.hollow.snagPost,
+  )
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mousedown', { button: 2, bubbles: true }),
+    ),
+  )
+  await page.waitForTimeout(300)
+  await page.evaluate(() =>
+    window.dispatchEvent(
+      new MouseEvent('mouseup', { button: 2, bubbles: true }),
+    ),
+  )
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getHollow().progress.snagPulled,
+    undefined,
+    { timeout: 10_000 },
+  )
+  await page.waitForFunction(
+    () =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getEnemies()
+        .filter((enemy) => enemy.id.startsWith('hollow-final-')).length === 3,
+  )
+
+  expect(
+    await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
+  ).toBe(true)
+  await page.reload()
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__ !== undefined &&
+      window.__CORD_AND_CROSSING_DEBUG__.getScene() === 'hollow' &&
+      window.__CORD_AND_CROSSING_DEBUG__.getHollow().progress.snagPulled &&
+      window.__CORD_AND_CROSSING_DEBUG__
+        .getEnemies()
+        .filter((enemy) => enemy.id.startsWith('hollow-final-')).length === 3,
+    undefined,
+    { timeout: 10_000 },
+  )
+
+  const hollowEnemyIds = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.stageWorstCaseHollow(),
+  )
+  expect(hollowEnemyIds).toHaveLength(3)
+  await page.waitForFunction(
+    (ids) => {
+      const debug = window.__CORD_AND_CROSSING_DEBUG__!
+      const enemies = debug
+        .getEnemies()
+        .filter((enemy) => ids.includes(enemy.id))
+      return (
+        enemies.length === 3 &&
+        enemies.every((enemy) => enemy.alive && enemy.inFrustum) &&
+        debug.getHollowFrustumCount() === 3 &&
+        debug.getActiveArrowCount() > 0 &&
+        debug.getCordState() === 'Out'
+      )
+    },
+    hollowEnemyIds,
+    { timeout: 10_000 },
+  )
+  await page.waitForTimeout(350)
+  const hollowEncounterPerf = await page.evaluate(() =>
+    window.__CORD_AND_CROSSING_DEBUG__!.getPerfStats(),
+  )
+  expect(hollowEncounterPerf.drawCalls).toBeLessThan(250)
+  expect(hollowEncounterPerf.triangles).toBeLessThan(500_000)
+  await page.evaluate((ids) => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    debug.setCordOutForPerf(false)
+    for (const id of ids) debug.killEnemy(id)
+  }, hollowEnemyIds)
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep === 6,
+  )
+
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.grantEffect('Strength'),
+    ),
+  ).toBe(true)
+  const strengthBeforeReturn = await page.evaluate(
+    () =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getEffects()
+        .find((effect) => effect.id === 'Strength')?.remainingSeconds ?? 0,
+  )
+  for (const z of [-1, 0, 1]) {
+    await page.evaluate(
+      (nextZ) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(0, nextZ),
+      z,
+    )
+    await page.waitForTimeout(100)
+  }
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getScene() === 'zone',
+    undefined,
+    { timeout: 2_000 },
+  )
+  const strengthAfterReturn = await page.evaluate(
+    () =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getEffects()
+        .find((effect) => effect.id === 'Strength')?.remainingSeconds ?? 0,
+  )
+  expect(strengthAfterReturn).toBeGreaterThan(0)
+  expect(strengthAfterReturn).toBeLessThan(strengthBeforeReturn)
+
+  await page.evaluate(
+    ([x, z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z + 2),
+    HOLLEN.position,
+  )
+  await expect(page.getByText(HOLLEN.prompt, { exact: true })).toBeVisible({
+    timeout: 5_000,
+  })
+  await page.keyboard.press('KeyE')
+  await page.keyboard.press('Digit1')
+  await page.waitForFunction(() => {
+    const quest = window.__CORD_AND_CROSSING_DEBUG__!.getQuest()
+    return quest.quest.complete && quest.tasselEarned
+  })
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.emitQuestEvent('reportedToHollen'),
+    ),
+  ).toBe(false)
+  expect(
+    await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
+  ).toBe(true)
+  await page.reload()
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
+  )
+  await page.waitForFunction(() => {
+    const debug = window.__CORD_AND_CROSSING_DEBUG__!
+    return (
+      debug.getScene() === 'zone' &&
+      debug.getQuest().quest.complete &&
+      debug.getTasselEarned() &&
+      debug.getTasselVisible() &&
+      debug.getPortico().phase === 'active'
+    )
+  })
+
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    porticoApproach,
+  )
+  expect(
+    await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.dropBlade()),
+  ).toBe(true)
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getCordState() === 'Dropped',
+  )
+  expect(
+    await page.evaluate(() => ({
+      droppedScene: window.__CORD_AND_CROSSING_DEBUG__!.getDroppedBladeScene(),
+      present: window.__CORD_AND_CROSSING_DEBUG__!.isWeaponPresent(),
+    })),
+  ).toEqual({ droppedScene: 'zone', present: true })
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.forceCrossing('zoneToHollow'),
+    ),
+  ).toBe(true)
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getScene() === 'hollow',
+    undefined,
+    { timeout: 3_000 },
+  )
+  expect(
+    await page.evaluate(() => ({
+      cord: window.__CORD_AND_CROSSING_DEBUG__!.getCordState(),
+      droppedScene: window.__CORD_AND_CROSSING_DEBUG__!.getDroppedBladeScene(),
+      present: window.__CORD_AND_CROSSING_DEBUG__!.isWeaponPresent(),
+    })),
+  ).toEqual({ cord: 'Dropped', droppedScene: 'zone', present: false })
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.forceCrossing('hollowToZone'),
+    ),
+  ).toBe(true)
+  await page.waitForFunction(
+    () => window.__CORD_AND_CROSSING_DEBUG__!.getScene() === 'zone',
+    undefined,
+    { timeout: 3_000 },
+  )
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.isWeaponPresent(),
+    ),
+  ).toBe(true)
+
+  console.log(
+    `m6 perf portico=${JSON.stringify(porticoPerf)} hollowArrival=${JSON.stringify(hollowArrivalPerf)} hollowEncounter=${JSON.stringify(hollowEncounterPerf)} loadMs=${sceneLoadMilliseconds}`,
+  )
+  expect(browserErrors).toEqual([])
+})

@@ -7,6 +7,7 @@ export type DialogueNodeId =
   | 'hollen-step-4'
   | 'hollen-step-5'
   | 'hollen-step-6'
+  | 'hollen-complete'
 
 export type DialogueChoice = {
   id: string
@@ -156,6 +157,28 @@ export const DIALOGUE_NODES = {
       {
         id: 'leave',
         // PLACEHOLDER: M5 dialogue choice.
+        label: 'Leave',
+        close: true,
+      },
+    ],
+  },
+  'hollen-complete': {
+    id: 'hollen-complete',
+    speaker: 'Hollen',
+    questStep: 6,
+    // PLACEHOLDER: M6 quest-complete dialogue line.
+    text: 'The work at the rise is done.',
+    choices: [
+      {
+        id: 'repeat',
+        // PLACEHOLDER: M6 dialogue choice.
+        label: 'Say that again.',
+        nextNodeId: 'hollen-complete',
+        close: false,
+      },
+      {
+        id: 'leave',
+        // PLACEHOLDER: M6 dialogue choice.
         label: 'Leave',
         close: true,
       },

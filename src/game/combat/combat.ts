@@ -1,3 +1,4 @@
+import { EFFECTS } from '../../data/effects'
 import { REACHBLADE } from '../../data/weapons'
 import { applyDamage, type Vitals } from '../player/vitals'
 
@@ -143,3 +144,37 @@ export function recallDuration(distance: number): number {
 }
 
 export const shoveDamage = (): number => REACHBLADE.cut.shoveDamage
+
+export type OutgoingHitKind = 'close' | 'cast'
+
+export type OutgoingHitResult = {
+  damage: number
+  staggerSeconds: number
+  breaksGuard: boolean
+}
+
+export function createOutgoingHitResult(): OutgoingHitResult {
+  return { damage: 0, staggerSeconds: 0, breaksGuard: false }
+}
+
+export function resolveStrengthHit(
+  baseDamage: number,
+  baseStaggerSeconds: number,
+  kind: OutgoingHitKind,
+  strengthActive: boolean,
+  lineCarrying: boolean,
+  output: OutgoingHitResult,
+): OutgoingHitResult {
+  output.damage = Math.max(0, baseDamage)
+  output.staggerSeconds = Math.max(0, baseStaggerSeconds)
+  output.breaksGuard = false
+  if (!strengthActive) return output
+  output.staggerSeconds *= EFFECTS.strength.staggerDurationMultiplier
+  if (kind === 'close') {
+    output.damage *= EFFECTS.strength.closeDamageMultiplier
+  } else if (lineCarrying) {
+    output.damage *= EFFECTS.strength.carriedCastDamageMultiplier
+    output.breaksGuard = EFFECTS.strength.carriedCastBreaksGuard
+  }
+  return output
+}
