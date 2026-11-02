@@ -22,7 +22,7 @@ export type BundleBudgetFailure = {
   kind: string
   label: string
   asset?: string
-  actualBytes: number
+  actualBytes: number | null
   limitBytes: number
 }
 

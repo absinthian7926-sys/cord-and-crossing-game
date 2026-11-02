@@ -170,7 +170,14 @@ console.log(
   'Asset                         Actual          Limit          Result',
 )
 for (const [label, actual, limit] of rows) {
-  const result = actual === null || actual <= limit ? 'PASS' : 'FAIL'
+  const requiredChunk =
+    label === 'Audio engine chunk' ||
+    label === 'Perf readout chunk' ||
+    label === 'Post-processing chunk'
+  const result =
+    (actual !== null && actual <= limit) || (actual === null && !requiredChunk)
+      ? 'PASS'
+      : 'FAIL'
   console.log(
     `${label.padEnd(29)} ${formatBytes(actual).padStart(13)} ${formatBytes(limit).padStart(13)} ${result}`,
   )

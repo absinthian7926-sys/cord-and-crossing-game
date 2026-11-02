@@ -21,18 +21,21 @@ const METRIC_BUDGETS = [
     label: 'Audio engine chunk',
     measurement: 'audioEngineGzipBytes',
     budget: 'audioEngineGzipBytes',
+    required: true,
   },
   {
     kind: 'perf-readout',
     label: 'Perf readout chunk',
     measurement: 'perfReadoutGzipBytes',
     budget: 'perfReadoutGzipBytes',
+    required: true,
   },
   {
     kind: 'post-processing',
     label: 'Post-processing chunk',
     measurement: 'postProcessingGzipBytes',
     budget: 'postProcessingGzipBytes',
+    required: true,
   },
   {
     kind: 'hollow-chunk',
@@ -54,7 +57,14 @@ export function checkBundleBudget(measurements, budgets = BUNDLE_BUDGETS) {
   for (const metric of METRIC_BUDGETS) {
     const actualBytes = measurements[metric.measurement]
     const limitBytes = budgets[metric.budget]
-    if (actualBytes !== null && actualBytes > limitBytes) {
+    if (actualBytes === null && metric.required) {
+      failures.push({
+        kind: `${metric.kind}-missing`,
+        label: metric.label,
+        actualBytes,
+        limitBytes,
+      })
+    } else if (actualBytes !== null && actualBytes > limitBytes) {
       failures.push({
         kind: metric.kind,
         label: metric.label,

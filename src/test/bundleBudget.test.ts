@@ -19,7 +19,7 @@ const passingMeasurements = (): BundleMeasurements => ({
 })
 
 describe('bundle budget', () => {
-  it('passes values at or below every limit and allows absent future chunks', () => {
+  it('passes values at or below every limit and allows an absent Hollow chunk', () => {
     const exact = passingMeasurements()
     exact.mainEntryGzipBytes = BUNDLE_BUDGETS.mainEntryGzipBytes
     exact.audioEngineGzipBytes = BUNDLE_BUDGETS.audioEngineGzipBytes
@@ -36,12 +36,28 @@ describe('bundle budget', () => {
     expect(checkBundleBudget(exact)).toEqual({ passed: true, failures: [] })
 
     const absent = passingMeasurements()
-    absent.audioEngineGzipBytes = null
-    absent.perfReadoutGzipBytes = null
-    absent.postProcessingGzipBytes = null
     absent.hollowChunkGzipBytes = null
     absent.models = []
     expect(checkBundleBudget(absent)).toEqual({ passed: true, failures: [] })
+  })
+
+  it.each([
+    ['audio-engine-missing', 'audioEngineGzipBytes'],
+    ['perf-readout-missing', 'perfReadoutGzipBytes'],
+    ['post-processing-missing', 'postProcessingGzipBytes'],
+  ] as const)('fails when the required %s chunk is absent', (kind, key) => {
+    const measurements = passingMeasurements()
+    measurements[key] = null
+
+    expect(checkBundleBudget(measurements)).toEqual({
+      passed: false,
+      failures: [
+        expect.objectContaining({
+          kind,
+          actualBytes: null,
+        }),
+      ],
+    })
   })
 
   it.each([
