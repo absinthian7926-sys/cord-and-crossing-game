@@ -4,6 +4,7 @@ import { PLAYER } from '../src/data/player'
 import { HOLLEN, QUEST } from '../src/data/quests'
 import { REACHBLADE } from '../src/data/weapons'
 import { ZONE } from '../src/data/zone'
+import { resumeGameAfterReload, startGame } from './helpers'
 
 test.setTimeout(180_000)
 
@@ -13,11 +14,7 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     if (message.type() === 'error') browserErrors.push(message.text())
   })
   page.on('pageerror', (error) => browserErrors.push(error.message))
-  await page.goto('/')
-  await expect(page.locator('canvas')).toBeVisible()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await startGame(page)
   const start = await page.evaluate(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition(),
   )
@@ -445,11 +442,7 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
   const savedPosition = await page.evaluate(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition(),
   )
-  await page.reload()
-  await expect(page.locator('canvas')).toBeVisible()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await resumeGameAfterReload(page)
   await page.waitForFunction(
     ({ x, z }) => {
       const debug = window.__CORD_AND_CROSSING_DEBUG__!
@@ -650,11 +643,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
       hollowChunkRequests.push(request.url())
   })
 
-  await page.goto('/')
-  await expect(page.locator('canvas')).toBeVisible()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await startGame(page)
 
   expect(
     await page.evaluate(() =>
@@ -713,10 +702,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
   ).toBe(true)
 
-  await page.reload()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await resumeGameAfterReload(page)
   await page.waitForFunction((expected) => {
     const drop = window.__CORD_AND_CROSSING_DEBUG__!.getQuest().keyDrop
     return (
@@ -936,10 +922,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   expect(
     await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
   ).toBe(true)
-  await page.reload()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await resumeGameAfterReload(page)
   await page.waitForFunction(
     () =>
       window.__CORD_AND_CROSSING_DEBUG__!.getScene() === 'hollow' &&
@@ -1011,7 +994,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   expect(
     await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
   ).toBe(true)
-  await page.reload()
+  await resumeGameAfterReload(page)
   await page.waitForFunction(
     () =>
       window.__CORD_AND_CROSSING_DEBUG__ !== undefined &&
@@ -1114,10 +1097,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   expect(
     await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
   ).toBe(true)
-  await page.reload()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await resumeGameAfterReload(page)
   await page.waitForFunction(() => {
     const debug = window.__CORD_AND_CROSSING_DEBUG__!
     return (

@@ -20,6 +20,7 @@ export default defineConfig({
         'src/game/portico/crossing.ts',
         'src/game/settings/quality.ts',
         'src/game/settings/settings.ts',
+        'src/ui/compass.ts',
         'src/ui/perfStats.ts',
         'scripts/bundleBudget.mjs',
       ],
@@ -78,6 +79,12 @@ export default defineConfig({
           statements: 100,
         },
         'src/game/settings/settings.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        'src/ui/compass.ts': {
           branches: 100,
           functions: 100,
           lines: 100,

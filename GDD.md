@@ -233,6 +233,10 @@ M7 settings defaults (all GAME (NEW), revisable):
 - Quality defaults to Medium. Mouse sensitivity ranges from 0.5x to 2.0x and defaults to 1.0x. Invert Y defaults off. Reduce motion follows `prefers-reduced-motion` until the player chooses it by hand.
 - Low, Medium and High apply live. Their device pixel ratios are 1, [1, 1.5] and [1, 2]. Restart keeps settings.
 - The compass is 360 px wide, shows a 120 degree span and samples transient heading and marker data at 10 Hz.
+- The PLACEHOLDER title shows "Cord and Crossing", save-aware "Continue", "New game" and "Credits" actions over the rendered world. The pause root contains "Resume", "Controls", "Graphics", "Volume", "Restart" and "Credits". Restart asks: "Restart the quest from the beginning? Your saved progress will be cleared." with "Restart" and "Cancel".
+- Pause freezes fixed-step physics and the shared gameplay clock. Escape closes dialogue or the quest log first, otherwise toggles pause. Pointer-lock loss during active play opens pause. A pause requested during a crossing flash, scene load or death fade opens after that blocker clears.
+- M7 credits are exactly: "Cord and Crossing"; "Co-developed with AI by RJ and Absinthian."; "Design and direction: RJ"; "Models: made for this project with Blender scripts and code (CC0)."; "Audio: generated in code for this project (CC0)."; and "Built with open-source software: Blender, Vite, React, three.js, React Three Fiber, drei, Rapier, zustand, postprocessing. See each project's license."
+- M7 uses system fonts only: Georgia, `Times New Roman`, serif for titles and system-ui, `-apple-system`, `Segoe UI`, sans-serif for HUD and menus. No web font is downloaded.
 
 ## 11. Art direction
 

@@ -10,6 +10,13 @@ const forbiddenMarkers = [
   'CORD_DEBUG_ONLY_SCENE_LOAD',
   'CORD_DEBUG_ONLY_PORTICO_VIEW',
   'CORD_DEBUG_ONLY_DROP_BLADE',
+  'CORD_DEBUG_ONLY_GET_SETTINGS',
+  'CORD_DEBUG_ONLY_SET_SETTING',
+  'CORD_DEBUG_ONLY_PAUSE',
+  'CORD_DEBUG_ONLY_GET_PAUSE',
+  'CORD_DEBUG_ONLY_GET_QUALITY',
+  'CORD_DEBUG_ONLY_GET_AUDIO',
+  'CORD_DEBUG_ONLY_GET_COMPASS',
 ].map((marker) => Buffer.from(marker))
 const pendingDirectories = [distDirectory]
 const matches = []

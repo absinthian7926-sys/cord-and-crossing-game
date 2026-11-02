@@ -3,6 +3,7 @@ import { useRapier } from '@react-three/rapier'
 import { useEffect, useRef } from 'react'
 import { MathUtils, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
+import { cameraHeadingFromYaw } from '../../ui/compass'
 import { getPausableDelta } from '../pause/pauseRuntime'
 import { getSettingsRuntimeSnapshot } from '../settings/settingsRuntime'
 import { cameraRayFilterPredicate } from './cameraCollisionRegistry'
@@ -84,8 +85,10 @@ export function CameraRig() {
 
   useFrame((_, rawDeltaSeconds) => {
     const deltaSeconds = getPausableDelta(rawDeltaSeconds)
-    const position = playerStore.getState().position
+    const player = playerStore.getState()
+    const position = player.position
     const { yaw, pitch, distance } = orbit.current
+    player.cameraHeadingDegrees = cameraHeadingFromYaw(yaw)
     baseTarget.set(position.x, position.y + 0.45, position.z)
 
     const horizontalDistance = Math.cos(pitch) * distance
@@ -115,7 +118,7 @@ export function CameraRig() {
       true,
       rapier.QueryFilterFlags.EXCLUDE_SENSORS,
       undefined,
-      playerStore.getState().collider ?? undefined,
+      player.collider ?? undefined,
       undefined,
       cameraRayFilterPredicate,
     )
@@ -135,7 +138,7 @@ export function CameraRig() {
       PLAYER.camera.collisionMinimumDistance,
       PLAYER.camera.maximumDistance,
     )
-    playerStore.getState().cameraDistance = renderedDistance
+    player.cameraDistance = renderedDistance
 
     camera.position.copy(target).addScaledVector(rayDirection, renderedDistance)
     camera.lookAt(target)

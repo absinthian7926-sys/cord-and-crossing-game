@@ -11,6 +11,7 @@ export type PlayerState = {
   invulnerable: boolean
   collider: RapierCollider | null
   cameraDistance: number
+  cameraHeadingDegrees: number
   teleportTarget: Position | null
   death: PlayerDeathState
 }
@@ -24,6 +25,7 @@ export const playerStore = createStore<PlayerState>(() => ({
   invulnerable: false,
   collider: null,
   cameraDistance: PLAYER.camera.distance,
+  cameraHeadingDegrees: 0,
   teleportTarget: null,
   death: createPlayerDeathState(),
 }))
