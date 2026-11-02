@@ -15,12 +15,15 @@
     "format:check": "prettier --check .",
     "verify:prod-debug": "node scripts/verify-production-debug-hook.mjs",
     "check:bundle": "node scripts/check-bundle-budget.mjs",
-    "models": "node scripts/models/build-models.mjs"
+    "models": "node scripts/models/build-models.mjs",
+    "post:assets": "node scripts/postprocessing/extract-smaa-lookups.mjs"
   },
   "dependencies": {
     "@react-three/drei": "^10.0.0",
     "@react-three/fiber": "^9.0.0",
+    "@react-three/postprocessing": "^3.2.2",
     "@react-three/rapier": "^2.0.0",
+    "postprocessing": "^6.39.6",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "^0.170.0",

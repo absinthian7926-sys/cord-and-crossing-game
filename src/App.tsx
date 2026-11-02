@@ -24,6 +24,7 @@ import {
   getLazyAudioSnapshot,
   loadAndStartAudioEngine,
 } from './game/audio/AudioEngineGate'
+import { getAnimationRuntimeSnapshot } from './game/animation/animationRuntime'
 import {
   advanceRespawn as advanceEnemyRespawn,
   enemyRuntime,
@@ -49,6 +50,11 @@ import {
   markHollowEnemyDefeated,
   subscribeHollowRuntime,
 } from './game/hollow/hollowRuntime'
+import { PostEffectsGate } from './game/feel/PostEffectsGate'
+import {
+  getFeelDebugSnapshot,
+  type FeelDebugSnapshot,
+} from './game/feel/feelRuntime'
 import {
   attachInput,
   detachInput,
@@ -132,6 +138,7 @@ import { Compass } from './ui/CompassStrip'
 import { getCompassSnapshot } from './ui/compassRuntime'
 import { Credits } from './ui/Credits'
 import { PauseMenu } from './ui/PauseMenu'
+import { PlayerHitVignette } from './ui/PlayerHitVignette'
 import {
   getPerfStats,
   setPerfQualityTier,
@@ -330,13 +337,17 @@ declare global {
       getPorticoScreenInView: () => boolean
       getInputLocked: () => boolean
       dropBlade: () => boolean
-      getSettings: () => SettingsData
+      getSettings: () => SettingsData & {
+        qualityProfile: ReturnType<typeof qualityProfile>
+      }
       setSetting: (key: DebugSettingKey, value: unknown) => boolean
       pause: (open: boolean) => void
       getPause: () => ReturnType<typeof getPauseRuntimeSnapshot>
       getQualityTier: () => QualityLevel
       getAudioState: () => ReturnType<typeof getLazyAudioSnapshot>
       getCompass: () => ReturnType<typeof getCompassSnapshot>
+      getAnimationState: () => ReturnType<typeof getAnimationRuntimeSnapshot>
+      getFeelState: () => FeelDebugSnapshot
       forceFps: (value: number) => void
     }
   }
@@ -471,6 +482,8 @@ export default function App() {
       const DEBUG_ONLY_GET_QUALITY = 'CORD_DEBUG_ONLY_GET_QUALITY'
       const DEBUG_ONLY_GET_AUDIO = 'CORD_DEBUG_ONLY_GET_AUDIO'
       const DEBUG_ONLY_GET_COMPASS = 'CORD_DEBUG_ONLY_GET_COMPASS'
+      const DEBUG_ONLY_GET_ANIMATION = 'CORD_DEBUG_ONLY_GET_ANIMATION'
+      const DEBUG_ONLY_GET_FEEL = 'CORD_DEBUG_ONLY_GET_FEEL'
       const DEBUG_ONLY_FORCE_FPS = 'CORD_DEBUG_ONLY_FORCE_FPS'
       window.__CORD_AND_CROSSING_DEBUG__ = {
         getPlayerPosition: () => ({ ...playerStore.getState().position }),
@@ -783,6 +796,7 @@ export default function App() {
             reduceMotionSetByHand: current.reduceMotionSetByHand,
             mouseSensitivity: current.mouseSensitivity,
             invertY: current.invertY,
+            qualityProfile: qualityProfile(current.quality),
           }
         },
         setSetting: (key, value) => {
@@ -845,6 +859,14 @@ export default function App() {
           void DEBUG_ONLY_GET_COMPASS
           return getCompassSnapshot()
         },
+        getAnimationState: () => {
+          void DEBUG_ONLY_GET_ANIMATION
+          return getAnimationRuntimeSnapshot()
+        },
+        getFeelState: () => {
+          void DEBUG_ONLY_GET_FEEL
+          return getFeelDebugSnapshot()
+        },
         forceFps: (value) => {
           void DEBUG_ONLY_FORCE_FPS
           setForcedQualityFps(value)
@@ -881,6 +903,7 @@ export default function App() {
         <PerfSamplerGate />
         <QualityFallbackDriver />
         <PausableClockDriver />
+        <PostEffectsGate quality={settings.quality} />
         <Suspense fallback={null}>
           <Physics
             gravity={[0, -PLAYER.movement.gravity, 0]}
@@ -891,6 +914,7 @@ export default function App() {
           </Physics>
         </Suspense>
       </Canvas>
+      <PlayerHitVignette />
       <QuestOverlay />
       <Compass />
       <SceneTransitionOverlay />
