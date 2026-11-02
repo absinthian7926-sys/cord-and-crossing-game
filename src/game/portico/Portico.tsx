@@ -234,7 +234,10 @@ export function Portico({
     const shader = material.current
     if (shader) {
       shader.uniforms.uRippleSpeed.value =
-        ZONE.portico.shimmer.rippleSpeed *
+        toRippleUvPerSecond(
+          ZONE.portico.shimmer.rippleSpeed,
+          ZONE.portico.screenHeight,
+        ) *
         (getSettingsRuntimeSnapshot().reduceMotion
           ? FEEL.reduceMotion.shimmerSpeedMultiplier
           : 1)

@@ -183,7 +183,7 @@ export function playSfxEvent(
   slot.filter.frequency.setValueAtTime(AUDIO.buses.openLowpassHz, now)
   const cues = AUDIO.synthesis.cues
   let duration: number = AUDIO.hits.fleshDurationSeconds
-  let gain: number = event.value1 > 0 ? event.value1 : cues.flesh.gain
+  let gain: number = cues.flesh.gain * (event.value1 > 0 ? event.value1 : 1)
 
   if (event.id === 'cast-whistle') {
     duration = cues.castWhistle.durationSeconds
@@ -335,7 +335,7 @@ export function playSfxEvent(
       duration,
       true,
     )
-    gain = event.value1 > 0 ? event.value1 : cues.block.gain
+    gain = cues.block.gain * (event.value1 > 0 ? event.value1 : 1)
   } else if (event.id === 'player-hurt') {
     duration = AUDIO.hits.hurtDurationSeconds
     oscillator(
@@ -376,7 +376,7 @@ export function playSfxEvent(
       cues.flesh.noiseSeconds,
       cues.flesh.playbackRate,
     )
-    gain = event.value1 > 0 ? event.value1 : cues.flesh.gain
+    gain = cues.flesh.gain * (event.value1 > 0 ? event.value1 : 1)
   }
 
   envelope(slot, now, gain, duration)

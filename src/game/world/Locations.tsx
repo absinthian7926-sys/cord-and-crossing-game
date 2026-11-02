@@ -1,5 +1,6 @@
 import { CuboidCollider, RigidBody } from '@react-three/rapier'
-import { useEffect, useMemo } from 'react'
+import { useGLTF } from '@react-three/drei'
+import { Suspense, useEffect, useMemo, type ReactNode } from 'react'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -13,7 +14,9 @@ import {
   Quaternion,
   Vector3,
 } from 'three'
+import { MODEL_ASSETS } from '../../data/models'
 import { ZONE } from '../../data/zone'
+import { useModelAvailability } from '../models/modelAvailability'
 import { ModelSlot } from '../models/ModelSlot'
 import { ROAD_LENGTH, roadPointAt, sampleRoad } from './road'
 import { heightAt } from './terrain'
@@ -149,6 +152,61 @@ function buildRail(samples: Point[]): {
     new LineBasicMaterial({ color: ZONE.palette.rope }),
   )
   return { posts, rope }
+}
+
+function LoadedRopeRailPosts({ samples }: { readonly samples: Point[] }) {
+  const definition = MODEL_ASSETS.ropeRailPost
+  const { scene } = useGLTF(definition.path, false, true)
+  const parts = useMemo(() => {
+    scene.updateMatrixWorld(true)
+    const instances: InstancedMesh[] = []
+    scene.traverse((child) => {
+      if (!(child instanceof Mesh)) return
+      const instance = new InstancedMesh(
+        child.geometry,
+        child.material,
+        samples.length,
+      )
+      for (let index = 0; index < samples.length; index += 1) {
+        const sample = samples[index]
+        matrix
+          .makeTranslation(sample.x, sample.y, sample.z)
+          .multiply(child.matrixWorld)
+        instance.setMatrixAt(index, matrix)
+      }
+      instance.instanceMatrix.needsUpdate = true
+      instance.computeBoundingBox()
+      instance.computeBoundingSphere()
+      instance.castShadow = true
+      instance.receiveShadow = true
+      instances.push(instance)
+    })
+    return instances
+  }, [samples, scene])
+
+  return (
+    <>
+      {parts.map((part, index) => (
+        <primitive key={`${part.uuid}-${index}`} object={part} />
+      ))}
+    </>
+  )
+}
+
+function RopeRailPosts({
+  samples,
+  fallback,
+}: {
+  readonly samples: Point[]
+  readonly fallback: ReactNode
+}) {
+  const availability = useModelAvailability('ropeRailPost')
+  if (availability !== 'ready') return fallback
+  return (
+    <Suspense fallback={fallback}>
+      <LoadedRopeRailPosts samples={samples} />
+    </Suspense>
+  )
 }
 
 function Waystation() {
@@ -513,7 +571,10 @@ export function Locations() {
         <WreckedCart key={distance} distance={distance} />
       ))}
       <group name="location-c-cliff-path-rail">
-        <primitive object={rail.posts} />
+        <RopeRailPosts
+          samples={railSamples}
+          fallback={<primitive object={rail.posts} />}
+        />
         <primitive object={rail.rope} />
         <RigidBody type="fixed" colliders={false}>
           {railSamples.map((sample, index) => (

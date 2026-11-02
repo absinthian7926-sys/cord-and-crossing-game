@@ -5,6 +5,7 @@ import { ENEMY_ARROW, ENEMY_PRESENTATION } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
 import { audioBus, emitAudioEvent } from '../audio/audioBus'
 import { applyCombatDamage } from '../combat/combat'
+import { triggerPlayerHitFeedback } from '../feel/feelRuntime'
 import { getPausableDelta } from '../pause/pauseRuntime'
 import { playerStore } from '../player/playerStore'
 import { isUnarmed } from '../weapons/cordState'
@@ -75,7 +76,10 @@ function EnemyProjectiles() {
         isUnarmed(weaponRuntime.cord),
         player.invulnerable,
       )
-      if (appliedDamage > 0) emitAudioEvent(audioBus, 'player-hurt')
+      if (appliedDamage > 0) {
+        emitAudioEvent(audioBus, 'player-hurt')
+        triggerPlayerHitFeedback()
+      }
     }
 
     const arrowsMesh = mesh.current

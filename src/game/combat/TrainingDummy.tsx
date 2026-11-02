@@ -1,9 +1,21 @@
 import { Html } from '@react-three/drei'
 import { useFrame } from '@react-three/fiber'
-import { useEffect, useRef } from 'react'
-import { Group, MeshStandardMaterial } from 'three'
+import { useEffect, useMemo, useRef } from 'react'
+import { Color, Group, MeshStandardMaterial } from 'three'
+import { AUDIO } from '../../data/audio'
+import { FEEL } from '../../data/feel'
+import { REACHBLADE } from '../../data/weapons'
 import { audioBus, emitAudioEvent } from '../audio/audioBus'
-import { getPauseRuntimeSnapshot } from '../pause/pauseRuntime'
+import {
+  createEnemyFlashState,
+  stepEnemyHitFlash,
+  triggerEnemyHitFlash,
+} from '../feel/hitFlash'
+import { recordEnemyHitFlash } from '../feel/feelRuntime'
+import {
+  getPausableDelta,
+  getPauseRuntimeSnapshot,
+} from '../pause/pauseRuntime'
 import {
   subscribeDummyDamage,
   type DamageLogEntry,
@@ -25,12 +37,29 @@ export function TrainingDummy({
   const damageLabel = useRef<HTMLDivElement>(null)
   const hitAt = useRef(Number.NEGATIVE_INFINITY)
   const staggerUntil = useRef(Number.NEGATIVE_INFINITY)
+  const hitFlash = useRef(createEnemyFlashState())
+  const baseColor = useMemo(
+    () => new Color(cordCutter ? 0x76504b : 0x766f62),
+    [cordCutter],
+  )
+  const flashColor = useMemo(() => new Color(FEEL.hitFlash.enemy.color), [])
 
   useEffect(
     () =>
       subscribeDummyDamage((entry: DamageLogEntry) => {
         if (entry.dummyId !== id) return
-        if (entry.damage > 0) emitAudioEvent(audioBus, 'hit-flesh')
+        if (entry.damage > 0) {
+          emitAudioEvent(
+            audioBus,
+            'hit-flesh',
+            0,
+            entry.damage === REACHBLADE.close.damage[2]
+              ? AUDIO.hits.strikeThreeGainMultiplier
+              : 1,
+          )
+          triggerEnemyHitFlash(hitFlash.current, false)
+          recordEnemyHitFlash()
+        }
         hitAt.current = entry.atSeconds
         staggerUntil.current = entry.atSeconds + entry.staggerSeconds
         if (damageLabel.current) {
@@ -41,7 +70,8 @@ export function TrainingDummy({
     [id],
   )
 
-  useFrame(() => {
+  useFrame((_, rawDeltaSeconds) => {
+    const deltaSeconds = getPausableDelta(rawDeltaSeconds)
     const now = getPauseRuntimeSnapshot().elapsedSeconds
     if (group.current) {
       const staggered = now < staggerUntil.current
@@ -49,13 +79,16 @@ export function TrainingDummy({
       group.current.position.y = position[1]
     }
     if (material.current) {
-      material.current.color.setHex(
-        now < staggerUntil.current
-          ? 0xc78a62
-          : cordCutter
-            ? 0x76504b
-            : 0x766f62,
+      const staggered = now < staggerUntil.current
+      const flashMix = stepEnemyHitFlash(
+        hitFlash.current,
+        deltaSeconds,
+        staggered,
       )
+      if (staggered) material.current.color.setHex(0xc78a62)
+      else material.current.color.copy(baseColor)
+      if (!staggered && flashMix > 0)
+        material.current.color.lerp(flashColor, flashMix)
     }
     if (damageLabel.current && now - hitAt.current > 0.75) {
       damageLabel.current.style.opacity = '0'
