@@ -17,6 +17,7 @@ describe('enemy data', () => {
       maxHealth: 60,
       damage: 12,
       attackCadenceSeconds: 1.1,
+      attackWindupSeconds: 0.5,
       moveSpeed: 4.2,
       attackRange: 1.8,
       cordCutter: false,
@@ -46,6 +47,7 @@ describe('enemy data', () => {
       maxHealth: 35,
       damage: 8,
       attackCadenceSeconds: 0.8,
+      attackWindupSeconds: 0.35,
       moveSpeed: 7,
       attackRange: 1.4,
       cordCutter: true,
@@ -59,6 +61,7 @@ describe('enemy data', () => {
       leashRadius: 40,
       safeZoneRadius: 25,
       alertSeconds: 0.6,
+      playerDeathResetRadius: 40,
       patrolSpeedMultiplier: 0.5,
       patrolRadius: 15,
     })
@@ -109,6 +112,11 @@ describe('enemy data', () => {
   it('keeps placeholder enemy presentation numbers in typed data', () => {
     expect(ENEMY_PRESENTATION).toEqual({
       stagger: { angularFrequency: 80, maximumRotationRadians: 0.09 },
+      meleeWindup: {
+        tintColor: '#c9a46a',
+        brigandSwordRaiseRadians: Math.PI * 0.5,
+        houndCrouchScaleY: 0.65,
+      },
       arrow: {
         width: 0.025,
         height: 0.025,

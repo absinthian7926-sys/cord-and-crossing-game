@@ -2,12 +2,14 @@ import { describe, expect, it } from 'vitest'
 import { ENEMY_AI, ENEMY_TYPES } from '../data/enemies'
 import {
   createAiStepResult,
-  houndBiteCutsCordSegment,
+  houndBiteCutsSimulatedRope,
   shouldBucklerBlock,
   stepAi,
   type AiInputs,
   type AiState,
 } from '../game/enemies/ai'
+import { applyCombatDamage } from '../game/combat/combat'
+import { initialVitals } from '../game/player/vitals'
 import { initialCordState, step } from '../game/weapons/cordState'
 
 const inputs = (overrides: Partial<AiInputs> = {}): AiInputs => ({
@@ -146,13 +148,15 @@ describe('enemy AI', () => {
     expect(result.healAtAnchor).toBe(true)
   })
 
-  it('forces Return when the player is dead', () => {
-    expect(
-      run('Attack', {
-        distanceToPlayer: 1,
-        playerAlive: false,
-      }).state,
-    ).toBe('Return')
+  it('keeps a far enemy state without attacking, forcing Return, or healing', () => {
+    const result = run('Attack', {
+      distanceToPlayer: 1,
+      playerAlive: false,
+    })
+    expect(result.state).toBe('Attack')
+    expect(result.moveTarget).toBe('None')
+    expect(result.attack).toBe(false)
+    expect(result.healAtAnchor).toBe(false)
   })
 
   it('holds the visible archer draw for 0.6 s before release', () => {
@@ -205,11 +209,25 @@ describe('enemy AI', () => {
     expect(cadenceRelease.attack).toBe(true)
   })
 
-  it('bites on the hound 0.8 s attack cadence', () => {
-    const firstBite = run('Attack', {
-      enemyType: 'cliffHound',
-      distanceToPlayer: ENEMY_TYPES.cliffHound.attackRange,
-    })
+  it('winds up each hound bite inside the 0.8 s attack cadence', () => {
+    const windingUp = run(
+      'Attack',
+      {
+        enemyType: 'cliffHound',
+        distanceToPlayer: ENEMY_TYPES.cliffHound.attackRange,
+      },
+      ENEMY_TYPES.cliffHound.attackWindupSeconds - 0.01,
+    )
+    expect(windingUp.attack).toBe(false)
+    const firstBite = run(
+      'Attack',
+      {
+        enemyType: 'cliffHound',
+        distanceToPlayer: ENEMY_TYPES.cliffHound.attackRange,
+        attackWindupSeconds: windingUp.attackWindupSeconds,
+      },
+      0.01,
+    )
     expect(firstBite.attack).toBe(true)
     expect(firstBite.attackCooldownSeconds).toBe(
       ENEMY_TYPES.cliffHound.attackCadenceSeconds,
@@ -271,13 +289,102 @@ describe('enemy AI', () => {
     ).toBe(false)
   })
 
-  it('uses the existing cord geometry path for hound cuts', () => {
+  it('cuts the simulated rope at a sag even when the straight line misses', () => {
     const out = step(initialCordState(), { type: 'castRelease' })
-    expect(houndBiteCutsCordSegment(out, 0, 0, 1, 0, 0, 0, 0, 0, 2)).toBe(true)
-    expect(houndBiteCutsCordSegment(out, 2, 0, 1, 0, 0, 0, 0, 0, 2)).toBe(false)
+    const positions = new Float32Array(16 * 3)
+    for (let point = 0; point < 16; point += 1) {
+      const ratio = point / 15
+      positions[point * 3] = ratio * 6
+      positions[point * 3 + 1] = 2 - Math.sin(ratio * Math.PI) * 2
+      positions[point * 3 + 2] = 0
+    }
+    expect(houndBiteCutsSimulatedRope(out, 3, 0, 0, positions, 16)).toBe(true)
+    expect(houndBiteCutsSimulatedRope(out, 3, 2, 0, positions, 16)).toBe(false)
     const returning = step(out, { type: 'recallPressed' })
-    expect(houndBiteCutsCordSegment(returning, 0, 0, 1, 0, 0, 0, 0, 0, 2)).toBe(
+    expect(houndBiteCutsSimulatedRope(returning, 3, 0, 0, positions, 16)).toBe(
       false,
+    )
+  })
+
+  it('resolves melee damage only after windup while the target remains in reach', () => {
+    const vitals = initialVitals()
+    const windup = ENEMY_TYPES.roadBrigand.attackWindupSeconds
+    const beforeImpact = run(
+      'Attack',
+      { distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange },
+      windup - 0.01,
+    )
+    if (beforeImpact.attack)
+      applyCombatDamage(vitals, ENEMY_TYPES.roadBrigand.damage, false, false)
+    expect(vitals.health).toBe(100)
+
+    const impact = run(
+      'Attack',
+      {
+        distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange,
+        attackWindupSeconds: beforeImpact.attackWindupSeconds,
+      },
+      0.01,
+    )
+    if (impact.attack)
+      applyCombatDamage(vitals, ENEMY_TYPES.roadBrigand.damage, false, false)
+    expect(impact.attack).toBe(true)
+    expect(vitals.health).toBe(88)
+  })
+
+  it('avoids the melee impact when dodge invulnerability covers it', () => {
+    const vitals = initialVitals()
+    const impact = run(
+      'Attack',
+      { distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange },
+      ENEMY_TYPES.roadBrigand.attackWindupSeconds,
+    )
+    if (impact.attack)
+      applyCombatDamage(vitals, ENEMY_TYPES.roadBrigand.damage, false, true)
+    expect(impact.attack).toBe(true)
+    expect(vitals.health).toBe(100)
+  })
+
+  it('cancels melee impact when the target leaves reach during windup', () => {
+    const halfWindup = ENEMY_TYPES.roadBrigand.attackWindupSeconds / 2
+    const windingUp = run(
+      'Attack',
+      { distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange },
+      halfWindup,
+    )
+    const movedAway = run(
+      'Attack',
+      {
+        distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange + 0.01,
+        attackWindupSeconds: windingUp.attackWindupSeconds,
+      },
+      halfWindup,
+    )
+    expect(movedAway.state).toBe('Chase')
+    expect(movedAway.attack).toBe(false)
+    expect(movedAway.attackWindupSeconds).toBe(0)
+  })
+
+  it('cancels a melee windup when staggered', () => {
+    const halfWindup = ENEMY_TYPES.roadBrigand.attackWindupSeconds / 2
+    const windingUp = run(
+      'Attack',
+      { distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange },
+      halfWindup,
+    )
+    const staggered = run(
+      'Attack',
+      {
+        distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange,
+        attackWindupSeconds: windingUp.attackWindupSeconds,
+        staggered: true,
+      },
+      halfWindup,
+    )
+    expect(staggered.attack).toBe(false)
+    expect(staggered.attackWindupSeconds).toBe(0)
+    expect(staggered.attackCooldownSeconds).toBe(
+      ENEMY_TYPES.roadBrigand.attackCadenceSeconds,
     )
   })
 })

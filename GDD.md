@@ -4,6 +4,7 @@ Status: GROK-ACCEPTED, REVISABLE, drafted by Absinthian for Ryan Jeter. Oct 31, 
 Scope: the first playable slice of a browser 3D open-world game set in the world of "Cord and Crossing". Long-term ambition is a WoW-style online world; this doc builds a small, finished, single-player piece first.
 
 Tags used in this doc:
+
 - CANON: Book One text as cited on the public guide (https://cord-and-crossing.vercel.app).
 - SITE: on the public guide as Proposed or GROK-ACCEPTED, not Book One canon.
 - GAME (NEW): invented for the game only. Revisable. Never feeds back into the books unless Ryan says so.
@@ -29,6 +30,7 @@ One-line pitch: "Cross the screen, clear the line, hold the end."
 ## 3. Scope
 
 In (Slice 1, Phase 1):
+
 - One third-person hero (GAME: an original route runner, player-named, default "Runner").
 - One zone of about 1 km x 1 km on the mainland coast (cart road country, SITE region "The mainland coast").
 - One cord-weapon combo: the reachblade (SITE) with heelstone ring (SITE, decided by Ryan Oct 28, 2026).
@@ -38,6 +40,7 @@ In (Slice 1, Phase 1):
 - Save to localStorage. Desktop keyboard and mouse. Gamepad optional.
 
 Out (Slice 1):
+
 - Multiplayer, accounts, server persistence (Phases 2 and 3).
 - The island, Stoneward Yard, the order, the council and every named Book One character.
 - Gunpowder, firearms, ebb dart, claw, sounding weight (later phases).
@@ -49,6 +52,7 @@ Out (Slice 1):
 Zone name (GAME): Saltwind Rise, a stretch of coastal cart road above a harbor town's outskirts.
 
 Layout (about 1000 m x 1000 m, heightmap terrain, sea on the west edge):
+
 - A. Waystation (spawn, 0,0 area): rope-and-timber shelter, water barrel, the quest NPC. Safe zone, radius 25 m.
 - B. The cart road: winds east 600 m uphill between scrub and rock; two wrecked carts.
 - C. Cliff path: north branch along sea cliffs with a rope rail (good for cord play, no climbing system in Slice 1).
@@ -57,6 +61,7 @@ Layout (about 1000 m x 1000 m, heightmap terrain, sea on the west edge):
 - F. Crossing Hollow (second small area, about 120 m x 120 m, separate scene loaded after the crossing): a sheltered stone hollow with a practice rail, a target post and a small final encounter.
 
 M3 implementation defaults (all GAME (NEW), revisable):
+
 - Coordinates use +X east, -Z north and +Y up. The 1000 m square runs from X -150 to 850 and Z -500 to 500, putting the west coast about 150 m from the waystation while leaving room for the 600 m road. Spawn is (0, 8, 0).
 - The heightmap is a deterministic 257 x 257 grid with seed 1, 64-cell chunks, 2 LOD levels and a 260 m LOD switch. Maximum height is 60 m. The waystation, camp and Ruin Shelf flatten to about 8 m, 38 m and 58 m. Noise uses scales 95 m and 31 m with amplitudes 3.5 m and 1.1 m.
 - Sea level is 0. The coast begins at X -150 and blends to the plateau by X -75. The sea plane is 500 m wide and 1200 m deep.
@@ -88,11 +93,13 @@ Time of day: fixed late afternoon in Slice 1 (warm sun low over the sea). Day-ni
 The reachblade (SITE): a forearm-length leaf-shaped single-edged blade with an iron ring pommel, braided cord spliced to the ring, about three to four body lengths of cord. Game cord length: 6.5 m max.
 
 ### 6.1 Close mode (blade in hand)
+
 - 3-hit combo on LMB: 14, 14, 22 damage. Windups 0.18 / 0.18 / 0.32 s. Active frames 0.08 s each. Combo window 0.5 s after each hit.
 - Hit arc 100 degrees, reach 1.6 m.
 - Stamina: 0 for hits 1 and 2, 10 for hit 3.
 
 ### 6.2 Cast mode (blade on the cord)
+
 - Straight cast: hold RMB to aim (reticle shows a line to max 6.5 m), release to throw. Travel 22 m/s. Damage 26. Windup 0.25 s.
 - Flat arc (hold RMB plus LMB): sweeps 140 degrees at radius 3.5 to 5.5 m, hits up to 3 targets, 18 each. Windup 0.4 s.
 - Recall: automatic after hit or max range; manual on Q. Recall time 0.55 s at full length (scales with distance).
@@ -102,11 +109,13 @@ The reachblade (SITE): a forearm-length leaf-shaped single-edged blade with an i
 - Interrupt: a cast hit staggers light enemies 0.4 s.
 
 ### 6.3 Utility (Slice 1)
+
 - Snag: casting at marked rope posts or loose crates pulls them 2 m (one physics puzzle in Crossing Hollow).
 - Stop: tapping Q twice within 0.3 s instantly drops the cord tension and cancels the cast with zero recovery delay, but the blade lands at the current point and must be picked up (walk over it). Teaches "stopping and recovery".
 - GAME (NEW): dropped blade pickup radius is 0.8 m and the moving blade hit radius is 0.6 m. The M2 rope simulation uses 16 points, 12 constraint iterations, damping 0.985, gravity 9.81 m/s2, a 0.04 m ground offset and a 0.12 m rope hit radius. The visible cut-line stub uses 5 points. Training dummies stand about 3 m, 5.2 m and 5.95 m from spawn; the 5.95 m dummy is the cord-cutter test target with a 0.38 m cutter volume.
 
 ### 6.4 Effects and heelstones
+
 - Crossing (CANON): stepping fully through an active portico screen (both feet past the screen plane, tracked by a trigger volume pair) grants the effect. Partial entry grants nothing. A fresh effect needs another full crossing.
 - Slice 1 effect: Strength (CANON, matched obsidian). On the player: close damage x1.35, cast pull force x2, stagger duration x1.5. Duration 180 s (GAME number; duration is open in canon).
 - Heelstones (SITE, Ryan decided Oct 28, 2026): a small matched pair in the reachblade's ring. They never create an effect. Pressing F while holding an effect plays a 1.2 s "clear the line" animation drawing the cord through the ring. If uninterrupted, the line carries the effect: cast damage x1.35 and casts can break enemy guard. If hit during the pass, nothing carries ("a pass that stops halfway carries nothing").
@@ -114,15 +123,16 @@ The reachblade (SITE): a forearm-length leaf-shaped single-edged blade with an i
 - Effect cap: maximum 2 active effects (SITE, proposed two-effect cap). Slice 1 only has one, but the code enforces the cap.
 
 ### 6.5 Other arms
+
 Swords, bows and crossbows exist (SITE arms notebook). In Slice 1 they appear only on enemies. No gunpowder anywhere.
 
 ## 7. Enemies (GAME, generic, no named characters)
 
-| Enemy | HP | Damage | Speed | Behavior | Counterplay |
-|---|---|---|---|---|---|
-| Road brigand (sword and buckler) | 60 | 12 per hit, 1.1 s cadence | 4.2 m/s | Closes in, blocks frontal casts 50% of the time with buckler | Arc around buckler, or carried strength line breaks guard |
-| Brigand archer (short bow) | 40 | 10 per arrow, 2.2 s cadence, 30 m range | 3.5 m/s | Keeps 12 to 25 m away, retreats when approached | Dodge arrows (visible draw 0.6 s), cast from 6 m |
-| Cliff hound (wild dog, packs of 2 to 3) | 35 | 8 per bite, 0.8 s | 7 m/s | Flanks, has "cord cutter" tag (bites the line) | Do not over-cast; close combo; stop and recover |
+| Enemy                                   | HP  | Damage                                  | Speed   | Behavior                                                     | Counterplay                                               |
+| --------------------------------------- | --- | --------------------------------------- | ------- | ------------------------------------------------------------ | --------------------------------------------------------- |
+| Road brigand (sword and buckler)        | 60  | 12 per hit, 1.1 s cadence               | 4.2 m/s | Closes in, blocks frontal casts 50% of the time with buckler | Arc around buckler, or carried strength line breaks guard |
+| Brigand archer (short bow)              | 40  | 10 per arrow, 2.2 s cadence, 30 m range | 3.5 m/s | Keeps 12 to 25 m away, retreats when approached              | Dodge arrows (visible draw 0.6 s), cast from 6 m          |
+| Cliff hound (wild dog, packs of 2 to 3) | 35  | 8 per bite, 0.8 s                       | 7 m/s   | Flanks, has "cord cutter" tag (bites the line)               | Do not over-cast; close combo; stop and recover           |
 
 Spawn plan: 6 brigands and 3 archers at the camp, 2 hound packs on the cliff path, 1 mixed patrol on the road. Respawn 5 minutes. Final Hollow encounter: 2 brigands, 1 archer.
 AI: simple state machine (Idle, Patrol, Alert, Chase, Attack, Flee at 15% HP for archers, Return). Aggro radius 18 m, leash 40 m.
@@ -132,20 +142,22 @@ M4 implementation defaults (all GAME (NEW), revisable):
 - Placeholder Road brigand and Brigand archer bodies use capsules with 0.4 m radius and 1.8 m height. Their placeholder colors are #655c50 and #8b8170. Cliff hounds use low capsules with 0.3 m radius, 0.9 m length and color #665e4d.
 - Road brigand attack reach is 1.8 m and Cliff hound bite reach is 1.4 m. Archers and hounds are light enemies and take the existing 0.4 s cast stagger. Road brigands stagger only on close combo hit 3. Bucklers block 50% of straight casts inside a 90 degree frontal cone. Arc hits never block. The `breaksGuard` hit flag exists but defaults false in M4.
 - Arrows travel at 35 m/s with 9.81 m/s2 gravity, use a 0.15 m hit radius, draw from a fixed pool of 16 and despawn after 2 s, after 30 m or on terrain impact. They release 0.45 m above the archer center, aim at the player's current position with no lead and use the lower ballistic arc that compensates for gravity.
-- A Cliff hound in Attack within its 1.4 m bite reach checks the existing cord capsule on its 0.8 s bite cadence. Its cutter volume radius is 0.38 m and is centered at the top of the low hound capsule. A bite overlapping the cord while it is Out produces one cut through the existing cut and re-tie path.
+- A Cliff hound in Attack within its 1.4 m bite reach checks all 15 segments of the simulated 16-point Verlet rope on its 0.8 s bite cadence. Its cutter volume radius is 0.38 m and is centered at the top of the low hound capsule. The overlap includes the rope's 0.12 m hit radius. A bite overlapping the simulated cord while it is Out produces one cut through the existing cut and re-tie path.
 - Patrol movement is 50% of chase speed. Each patrol uses 3 or 4 points within 15 m of its anchor. The mixed road patrol has 2 Road brigands and 1 Brigand archer between road distances 150 m and 350 m. Its 40 m leash is measured from the nearest point on that route corridor so the patrol can traverse both endpoints.
 - The camp spawn anchor is (380, -240) with enemies spread within 30 m. Cliff hound pack anchors are (25, -160) with 3 hounds and (-20, -225) with 2 hounds.
 - Alert lasts 0.6 s before Chase. Return restores full health when an enemy is within 1 m of its anchor. Line of sight uses one physics ray against terrain and large rocks.
 - Enemies ignore a player inside the 25 m waystation safe zone and Return if the player is there. Enemy bodies, arrows and all sensors are excluded from the camera ray. Terrain, large rocks and buildings remain camera blockers.
-- Player death uses a 1.5 s placeholder fade, then respawns at (0, 8, 0) with full health and stamina, 2 s spawn invulnerability and the cord In Hand. All living enemies reset to Return when the player dies because no nearby reset radius is defined for M4.
+- Player death uses a 1.5 s placeholder fade, then respawns at (0, 8, 0) with full health and stamina, 2 s spawn invulnerability and the cord In Hand. On death, living enemies within 40 m of the death position reset to Return, inclusive at exactly 40 m. Enemies farther away keep their current state and follow their normal no-target behavior without a forced Return or heal. The 40 m reset radius is GAME (NEW) and matches the leash.
 - Enemy death uses a 1.0 s placeholder fall before removal. Respawn is scheduled after 300 s and waits until the player is more than 40 m from the anchor. A small PLACEHOLDER world-space health bar is shown for 4 s after damage.
-- Road brigand and Cliff hound damage lands immediately when the cadence is ready and the target remains within reach because no melee windup is defined for M4.
+- Road brigand attacks have a 0.5 s windup and Cliff hound bites have a 0.35 s windup, both GAME (NEW) and inside their existing cadence. Damage, and a hound cord cut, resolve only at the windup end if the target is still within reach. Dodge invulnerability at impact prevents damage. Moving out of reach or staggering the attacker during the windup cancels the attack. The PLACEHOLDER telegraph rotates the brigand sword 90 degrees, scales the hound to 0.65 on Y, and tints the attacker #c9a46a. These presentation values are GAME (NEW).
 - PLACEHOLDER presentation numbers are GAME (NEW): the arrow mesh is 0.025 m by 0.025 m by 0.65 m, color #5e4b35 and roughness 0.9. Stagger feedback wobbles at angular frequency 80 with maximum rotation 0.09 radians. The Cliff hound body mesh uses 6 cap and 10 radial segments at roughness 0.95, with a head cone at (0, 0.08, -0.48), radius 0.22 m, length 0.42 m and 6 segments. Humanoid body meshes use 8 cap and 12 radial segments at roughness 0.9. The Road brigand sword is at (0.5, 0, 0), size (0.08, 1.05, 0.12), color #6a6b68 and metalness 0.45. Its buckler is at (-0.5, 0.1, 0), radius 0.34 m, depth 0.1 m, 10 segments, color #5d5a50 and metalness 0.35. The archer bow is at (0.46, 0.1, 0), radius 0.38 m, tube radius 0.035 m, 6 radial and 16 tubular segments, color #7a6044 and roughness 0.9. Its draw bar is 0.7 m by 0.06 m by 0.06 m at y 0.88 m, color #d2b984, with minimum horizontal scale 0.02. The health bar sits 0.8 m above the body, with a 0.9 m by 0.1 m #28251f background at depth 0.01 m and a 0.84 m by 0.065 m #9f493e fill at depth 0.02 m.
+- M5 keeps the existing M4 choices for placeholder palette and proportions, archer draw in the final 0.6 s of the cadence, lower ballistic arc, 1 m Return tolerance, road patrol corridor leash, buildings blocking line of sight, and deterministic flank and patrol order.
 
 ## 8. Quest (one NPC)
 
 NPC (GAME): Hollen, a waystation keeper and former rigger. Not a Book One character.
 Quest (GAME): "The Line at the Rise."
+
 1. Talk to Hollen at the waystation. He says brigands took the iron ring keys for the old frame shelter at the rise.
 2. Clear the brigand camp, loot the "frame shelter key" from the camp leader (a brigand variant, 120 HP).
 3. Return to Hollen. He teaches the heelstone pass in dialogue (tutorial prompt for F).
@@ -154,6 +166,19 @@ Quest (GAME): "The Line at the Rise."
 6. Return through the screen (no effect from a return crossing in Slice 1; GAME rule to keep scope small) and report to Hollen. Reward: a dyed cloth tassel cosmetic on the cord (SITE nod to dyed cloth streamers).
 
 Dialogue: short, plain, under 40 words per line, no manuscript prose.
+
+M5 implementation defaults (all GAME (NEW), revisable):
+
+- Hollen uses a PLACEHOLDER capsule with radius 0.4 m, height 1.8 m and muted linen color #b8aa82. He stands at (-5, 5), faces the road toward (0, 0), turns toward the player while talking and has a 2.5 m interaction radius.
+- The exact interaction prompts are PLACEHOLDER text: "E Talk" for Hollen and "E Take key" for the dropped key. M5 adds no key-use action and no working heelstone-pass action.
+- The camp leader is a Road brigand variant with 120 HP and the Road brigand's existing damage, cadence, 0.5 s windup, speed, buckler, stagger and no-flee rules. Its PLACEHOLDER capsule and collider are 1.15x Road brigand scale, it stands at offset (0, 4) from the camp center, and a dyed sash in #9f493e is its only bright color. It spawns from quest step 2 until defeated, drops the key at its death position and does not respawn while the key is waiting or after it is looted. The optional PLACEHOLDER label is "Camp leader".
+- The frame shelter key is a plain iron ring. Its PLACEHOLDER pickup uses a 1.5 m interaction radius, 0.18 m ring radius, 0.035 m tube radius, 6 radial and 16 tubular segments, iron color #5d5a50, metalness 0.65, roughness 0.5, and a soft #c9a46a glow with intensity 0.4 and range 2 m. It cannot be dropped or lost. Step 2 completes when the key is picked up, without requiring every camp enemy to be defeated.
+- The dialogue panel is at most 640 px wide with parchment #e8dcc0 and ink #2b2620. It shows 2 to 4 numbered choices. The quest tracker uses 14 px text and highlights a changed step for 3 s. The quest log has one key slot, shows all six steps, marks completed steps and highlights the current step.
+- The save key is `cord-and-crossing.save.v1` with schema version 1. The default player name is "Runner". Autosave runs on a quest-step change, key pickup, every 30 s while alive and page hide. Saved data is player name, health, stamina and position, quest progression, key-looted state and camp-leader-defeated state. The cord loads In Hand. Enemy positions, timers and arrows are not saved. Invalid, missing or newer data starts a new game with one console warning. A valid living player loads at the saved position; an invalid, buried, out-of-bounds or dead player loads at the waystation.
+- Steps 4 to 6 are defined in the quest data and may advance through the dev hook for tests, but M5 gameplay emits events only for steps 1 to 3. No portico, crossing, Hollow, effect or reward behavior exists in M5.
+- The exact PLACEHOLDER tracker text is GAME (NEW): "Talk to Hollen."; "Clear the brigand camp and take the frame shelter key."; "Return to Hollen."; "Go to the Ruin Shelf, use the key, and cross the portico screen."; "Clear the line, snag the rope post, and defeat the final encounter."; and "Return through the screen and report to Hollen."
+- The exact PLACEHOLDER Hollen dialogue lines are GAME (NEW): "Brigands took the iron ring keys for the old frame shelter at the rise."; "The frame shelter key is at the brigand camp."; "Once you carry an effect, press F to clear the line through the heelstones."; "Take the key to the Ruin Shelf and cross the portico screen."; "Clear the line, snag the rope post, and defeat the final encounter in the Hollow."; and "Report when you return through the screen."
+- The exact PLACEHOLDER dialogue choices are GAME (NEW): "I will bring one back."; "Leave"; "I am looking for it."; "I understand."; "Say that again."; "I will go to the shelf."; "I know the work."; and "The work is finished."
 
 ## 9. Portico mechanic (technical)
 
@@ -254,27 +279,34 @@ Build one milestone at a time. Each ends with a runnable build, passing tests an
 M0 Docs (done when): GDD.md, AGENTS.md, CODEX-PROMPTS.md at repo root.
 
 M1 Skeleton and movement
+
 - Vite + TS + R3F + Rapier project runs with `npm run dev`; deploys to Vercel.
 - Flat test ground, capsule hero, third-person camera, WASD, run, jump, dodge with the numbers in section 5.
 - HUD shows health and stamina. Vitest passes for stamina math. Playwright smoke test passes.
 
 M2 Reachblade
+
 - Close combo, straight cast, flat arc, recall, stop, unarmed window, cord cut and re-tie as in section 6, against training dummies.
 - Rope renders as a Verlet chain. Damage numbers match /src/data/weapons.ts. Unit tests for cord state machine and damage.
 
 M3 Zone
+
 - 1 km heightmap terrain with the A to E locations, sea plane, instanced scenery, fixed late afternoon light. Meets performance budget on Medium.
 
 M4 Enemies
+
 - Three enemy types with stats and AI from section 7, spawns and respawn, death, player respawn. Tests for AI state transitions.
 
 M5 Quest and NPC
+
 - Hollen, dialogue panel, quest log, all 6 steps trackable, key item, save and load via localStorage. Tests for quest progression.
 
 M6 Portico and heelstones
+
 - Portico shimmer shader, full-crossing detection (partial does nothing), Strength effect, scene load to Crossing Hollow, heelstone pass with interrupt rule, effect cap 2. Tests for crossing detection and effect rules.
 
 M7 Polish and slice complete
+
 - Placeholder models swapped for GLB assets, audio pass, pause menu, settings. Full quest playable start to finish in 15 to 25 minutes with no blocking bugs.
 
 ## 17. Later phases

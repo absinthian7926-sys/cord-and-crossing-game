@@ -6,14 +6,16 @@ import {
   type RapierCollider,
   type RapierRigidBody,
 } from '@react-three/rapier'
-import { useEffect, useRef } from 'react'
-import type { Group, Mesh } from 'three'
+import { useEffect, useMemo, useRef } from 'react'
+import { Color, type Group, type Mesh, type MeshStandardMaterial } from 'three'
 import {
+  CAMP_LEADER,
   ENEMY_AI,
   ENEMY_DEATH,
   ENEMY_PRESENTATION,
   ENEMY_ARROW,
   ENEMY_TYPES,
+  ENEMY_VARIANTS,
   type EnemyType,
 } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
@@ -35,6 +37,7 @@ import {
   type AiMoveTarget,
 } from './ai'
 import {
+  canEnemyRespawn,
   fireEnemyArrow,
   requestHoundCordBite,
   resetEnemyAtAnchor,
@@ -46,18 +49,20 @@ type EnemyProps = { enemy: EnemyRecord }
 
 const movement = { x: 0, y: 0, z: 0 }
 
-function colliderRadius(type: EnemyType): number {
-  return ENEMY_TYPES[type].collider.radius
+function colliderRadius(enemy: EnemyRecord): number {
+  return ENEMY_TYPES[enemy.type].collider.radius * enemy.scale
 }
 
-function bodyHeight(type: EnemyType): number {
-  return type === 'cliffHound'
-    ? ENEMY_TYPES.cliffHound.collider.length
-    : ENEMY_TYPES[type].collider.height
+function bodyHeight(enemy: EnemyRecord): number {
+  const height =
+    enemy.type === 'cliffHound'
+      ? ENEMY_TYPES.cliffHound.collider.length
+      : ENEMY_TYPES[enemy.type].collider.height
+  return height * enemy.scale
 }
 
-function colliderHalfHeight(type: EnemyType): number {
-  return Math.max(0, bodyHeight(type) * 0.5 - colliderRadius(type))
+function colliderHalfHeight(enemy: EnemyRecord): number {
+  return Math.max(0, bodyHeight(enemy) * 0.5 - colliderRadius(enemy))
 }
 
 function moveSpeedFor(type: EnemyType, intent: AiMoveTarget): number {
@@ -77,12 +82,20 @@ function canDrawBow(enemy: EnemyRecord): boolean {
 }
 
 export function Enemy({ enemy }: EnemyProps) {
+  const color = ENEMY_TYPES[enemy.type].color
+  const baseBodyColor = useMemo(() => new Color(color), [color])
+  const windupBodyColor = useMemo(
+    () => new Color(ENEMY_PRESENTATION.meleeWindup.tintColor),
+    [],
+  )
   const body = useRef<RapierRigidBody>(null)
   const collider = useRef<RapierCollider>(null)
   const visual = useRef<Group>(null)
   const healthBar = useRef<Group>(null)
   const healthFill = useRef<Mesh>(null)
   const drawBar = useRef<Mesh>(null)
+  const bodyMaterial = useRef<MeshStandardMaterial>(null)
+  const sword = useRef<Mesh>(null)
   const { world, rapier } = useRapier()
   const character = useRef<ReturnType<
     typeof world.createCharacterController
@@ -129,6 +142,20 @@ export function Enemy({ enemy }: EnemyProps) {
     const delta = Math.min(rawDelta, 1 / 30)
     const player = playerStore.getState()
 
+    if (enemy.teleportRequested) {
+      nextTranslation.current.x = enemy.x
+      nextTranslation.current.y = enemy.y
+      nextTranslation.current.z = enemy.z
+      enemyBody.setEnabled(true)
+      enemyCollider.setEnabled(true)
+      enemyBody.setTranslation(nextTranslation.current, true)
+      enemyBody.setNextKinematicTranslation(nextTranslation.current)
+      enemyVisual.visible = true
+      enemyVisual.rotation.z = 0
+      enemy.teleportRequested = false
+    }
+
+    const wasStaggered = enemy.staggerRemaining > 0
     enemy.healthBarRemaining = Math.max(0, enemy.healthBarRemaining - delta)
     enemy.staggerRemaining = Math.max(0, enemy.staggerRemaining - delta)
     if (healthBar.current)
@@ -157,6 +184,7 @@ export function Enemy({ enemy }: EnemyProps) {
       const playerAnchorX = player.position.x - enemy.anchorX
       const playerAnchorZ = player.position.z - enemy.anchorZ
       if (
+        canEnemyRespawn(enemy) &&
         canRespawnFromElapsed(
           enemy.respawnElapsed,
           Math.hypot(playerAnchorX, playerAnchorZ),
@@ -217,7 +245,7 @@ export function Enemy({ enemy }: EnemyProps) {
       const fullDistance = Math.hypot(toPlayerX, toPlayerY, toPlayerZ)
       const inverseDistance = fullDistance > 0 ? 1 / fullDistance : 0
       ray.current.origin.x = enemy.x
-      ray.current.origin.y = enemy.y + colliderRadius(enemy.type)
+      ray.current.origin.y = enemy.y + colliderRadius(enemy)
       ray.current.origin.z = enemy.z
       ray.current.dir.x = toPlayerX * inverseDistance
       ray.current.dir.y = toPlayerY * inverseDistance
@@ -249,6 +277,7 @@ export function Enemy({ enemy }: EnemyProps) {
     inputs.stateElapsedSeconds = enemy.stateElapsed
     inputs.attackCooldownSeconds = enemy.attackCooldown
     inputs.attackWindupSeconds = enemy.drawRemaining
+    inputs.staggered = wasStaggered
 
     const result = stepAi(enemy.state, inputs, delta, aiResult.current)
     enemy.state = result.state
@@ -272,6 +301,24 @@ export function Enemy({ enemy }: EnemyProps) {
         enemy.drawRemaining / ENEMY_TYPES.brigandArcher.drawSeconds,
       )
     }
+
+    const meleeWindupActive =
+      enemy.type !== 'brigandArcher' &&
+      enemy.drawRemaining > 0 &&
+      enemy.staggerRemaining === 0
+    if (bodyMaterial.current)
+      bodyMaterial.current.color.copy(
+        meleeWindupActive ? windupBodyColor : baseBodyColor,
+      )
+    if (sword.current)
+      sword.current.rotation.z =
+        enemy.type === 'roadBrigand' && meleeWindupActive
+          ? ENEMY_PRESENTATION.meleeWindup.brigandSwordRaiseRadians
+          : 0
+    enemyVisual.scale.y =
+      enemy.type === 'cliffHound' && meleeWindupActive
+        ? ENEMY_PRESENTATION.meleeWindup.houndCrouchScaleY
+        : 1
 
     if (result.attack && enemy.staggerRemaining === 0) {
       if (enemy.type === 'brigandArcher') {
@@ -377,7 +424,7 @@ export function Enemy({ enemy }: EnemyProps) {
         const corrected = controller.computedMovement()
         enemy.x += corrected.x
         enemy.z += corrected.z
-        enemy.y = heightAt(enemy.x, enemy.z) + bodyHeight(enemy.type) * 0.5
+        enemy.y = heightAt(enemy.x, enemy.z) + bodyHeight(enemy) * 0.5
         nextTranslation.current.x = enemy.x
         nextTranslation.current.y = enemy.y
         nextTranslation.current.z = enemy.z
@@ -389,11 +436,10 @@ export function Enemy({ enemy }: EnemyProps) {
     }
   })
 
-  const radius = colliderRadius(enemy.type)
-  const halfHeight = colliderHalfHeight(enemy.type)
-  const color = ENEMY_TYPES[enemy.type].color
+  const radius = colliderRadius(enemy)
+  const halfHeight = colliderHalfHeight(enemy)
   const healthY =
-    bodyHeight(enemy.type) * 0.5 + ENEMY_PRESENTATION.healthBar.verticalOffset
+    bodyHeight(enemy) * 0.5 + ENEMY_PRESENTATION.healthBar.verticalOffset
 
   return (
     <RigidBody
@@ -418,6 +464,7 @@ export function Enemy({ enemy }: EnemyProps) {
                 ]}
               />
               <meshStandardMaterial
+                ref={bodyMaterial}
                 color={color}
                 roughness={ENEMY_PRESENTATION.hound.bodyRoughness}
               />
@@ -455,6 +502,7 @@ export function Enemy({ enemy }: EnemyProps) {
                 ]}
               />
               <meshStandardMaterial
+                ref={bodyMaterial}
                 color={color}
                 roughness={ENEMY_PRESENTATION.humanoid.bodyRoughness}
               />
@@ -462,18 +510,22 @@ export function Enemy({ enemy }: EnemyProps) {
             {enemy.type === 'roadBrigand' ? (
               <>
                 <mesh
+                  ref={sword}
                   castShadow
                   position={[
-                    ENEMY_PRESENTATION.roadBrigand.swordPosition[0],
-                    ENEMY_PRESENTATION.roadBrigand.swordPosition[1],
-                    ENEMY_PRESENTATION.roadBrigand.swordPosition[2],
+                    ENEMY_PRESENTATION.roadBrigand.swordPosition[0] *
+                      enemy.scale,
+                    ENEMY_PRESENTATION.roadBrigand.swordPosition[1] *
+                      enemy.scale,
+                    ENEMY_PRESENTATION.roadBrigand.swordPosition[2] *
+                      enemy.scale,
                   ]}
                 >
                   <boxGeometry
                     args={[
-                      ENEMY_PRESENTATION.roadBrigand.swordSize[0],
-                      ENEMY_PRESENTATION.roadBrigand.swordSize[1],
-                      ENEMY_PRESENTATION.roadBrigand.swordSize[2],
+                      ENEMY_PRESENTATION.roadBrigand.swordSize[0] * enemy.scale,
+                      ENEMY_PRESENTATION.roadBrigand.swordSize[1] * enemy.scale,
+                      ENEMY_PRESENTATION.roadBrigand.swordSize[2] * enemy.scale,
                     ]}
                   />
                   <meshStandardMaterial
@@ -481,20 +533,45 @@ export function Enemy({ enemy }: EnemyProps) {
                     metalness={ENEMY_PRESENTATION.roadBrigand.swordMetalness}
                   />
                 </mesh>
+                {enemy.variant === ENEMY_VARIANTS.campLeader ? (
+                  <mesh
+                    castShadow
+                    rotation={[
+                      0,
+                      0,
+                      ENEMY_PRESENTATION.meleeWindup.brigandSwordRaiseRadians /
+                        2,
+                    ]}
+                  >
+                    <boxGeometry
+                      args={[
+                        radius * 2,
+                        ENEMY_PRESENTATION.healthBar.backgroundHeight *
+                          enemy.scale,
+                        ENEMY_PRESENTATION.roadBrigand.swordSize[2] *
+                          enemy.scale,
+                      ]}
+                    />
+                    <meshStandardMaterial color={CAMP_LEADER.sashColor} />
+                  </mesh>
+                ) : null}
                 <mesh
                   castShadow
                   position={[
-                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[0],
-                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[1],
-                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[2],
+                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[0] *
+                      enemy.scale,
+                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[1] *
+                      enemy.scale,
+                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[2] *
+                      enemy.scale,
                   ]}
                   rotation={[Math.PI / 2, 0, 0]}
                 >
                   <cylinderGeometry
                     args={[
-                      ENEMY_PRESENTATION.roadBrigand.shieldRadius,
-                      ENEMY_PRESENTATION.roadBrigand.shieldRadius,
-                      ENEMY_PRESENTATION.roadBrigand.shieldDepth,
+                      ENEMY_PRESENTATION.roadBrigand.shieldRadius * enemy.scale,
+                      ENEMY_PRESENTATION.roadBrigand.shieldRadius * enemy.scale,
+                      ENEMY_PRESENTATION.roadBrigand.shieldDepth * enemy.scale,
                       ENEMY_PRESENTATION.roadBrigand.shieldSegments,
                     ]}
                   />

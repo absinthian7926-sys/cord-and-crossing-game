@@ -12,6 +12,7 @@ type DamageListener = (entry: DamageLogEntry) => void
 const damageListeners = new Set<DamageListener>()
 let forceCutHandler: (() => void) | null = null
 let resetWeaponHandler: (() => void) | null = null
+let holdCordOutHandler: ((enabled: boolean) => void) | null = null
 
 export const weaponRuntime = {
   cord: initialCordState(),
@@ -58,6 +59,16 @@ export function registerWeaponReset(handler: (() => void) | null): void {
 
 export function resetWeaponToInHand(): void {
   resetWeaponHandler?.()
+}
+
+export function registerHoldCordOutForPerf(
+  handler: ((enabled: boolean) => void) | null,
+): void {
+  holdCordOutHandler = handler
+}
+
+export function holdCordOutForPerf(enabled: boolean): void {
+  holdCordOutHandler?.(enabled)
 }
 
 export function resetWeaponRuntime(): void {

@@ -1,10 +1,21 @@
 import { useEffect, useRef } from 'react'
 import { PLAYER_DEATH } from '../data/enemies'
 import { PLAYER } from '../data/player'
+import { QUEST_UI } from '../data/quests'
 import { playerStore } from '../game/player/playerStore'
 import { weaponRuntime } from '../game/weapons/weaponRuntime'
 
-export function Hud() {
+export type QuestTrackerHud = {
+  readonly text: string
+  readonly revision: number
+}
+
+export type HudProps = {
+  readonly questTracker?: QuestTrackerHud | null
+}
+
+export function Hud({ questTracker = null }: HudProps) {
+  const questRevision = questTracker?.revision ?? -1
   const healthFill = useRef<HTMLDivElement>(null)
   const healthValue = useRef<HTMLSpanElement>(null)
   const staminaFill = useRef<HTMLDivElement>(null)
@@ -12,6 +23,7 @@ export function Hud() {
   const dodgeState = useRef<HTMLDivElement>(null)
   const cordState = useRef<HTMLDivElement>(null)
   const deathFade = useRef<HTMLDivElement>(null)
+  const questTrackerElement = useRef<HTMLDivElement>(null)
   const lastDisplayed = useRef({
     health: -1,
     stamina: -1,
@@ -91,6 +103,17 @@ export function Hud() {
     return () => window.clearInterval(interval)
   }, [])
 
+  useEffect(() => {
+    const element = questTrackerElement.current
+    if (!element || questRevision < 0) return
+    element.classList.add('is-highlighted')
+    const timeout = window.setTimeout(
+      () => element.classList.remove('is-highlighted'),
+      QUEST_UI.tracker.highlightSeconds * 1000,
+    )
+    return () => window.clearTimeout(timeout)
+  }, [questRevision])
+
   return (
     <div className="hud" aria-label="Player status">
       <div className="controls-hint">
@@ -123,6 +146,16 @@ export function Hud() {
       <div ref={cordState} className="cord-state">
         In Hand
       </div>
+      {questTracker && (
+        <div
+          ref={questTrackerElement}
+          className="quest-tracker"
+          aria-live="polite"
+          style={{ fontSize: QUEST_UI.tracker.fontSizePixels }}
+        >
+          {questTracker.text}
+        </div>
+      )}
       <div ref={deathFade} className="death-fade" aria-hidden="true" />
     </div>
   )

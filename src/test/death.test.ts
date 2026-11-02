@@ -11,6 +11,7 @@ import {
   WAYSTATION_RESPAWN,
 } from '../game/player/death'
 import { initialVitals } from '../game/player/vitals'
+import { applyQuestEvent, createQuestState } from '../game/quest/quest'
 
 describe('player death and respawn', () => {
   it('starts death at zero health and locks input during the fade', () => {
@@ -54,5 +55,19 @@ describe('player death and respawn', () => {
     expect(isPlayerSpawnInvulnerable(state)).toBe(true)
     stepPlayerDeath(state, 0.01)
     expect(isPlayerSpawnInvulnerable(state)).toBe(false)
+  })
+
+  it('does not change quest progress when the player dies and respawns', () => {
+    const deathState = createPlayerDeathState()
+    const questBeforeDeath = applyQuestEvent(
+      createQuestState(),
+      'talkedToHollen',
+    )
+    const questSnapshot = structuredClone(questBeforeDeath)
+
+    beginPlayerDeath(deathState, 0)
+    stepPlayerDeath(deathState, PLAYER_DEATH.fadeSeconds)
+
+    expect(questBeforeDeath).toEqual(questSnapshot)
   })
 })

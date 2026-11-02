@@ -22,7 +22,7 @@ import {
   capsuleOverlapsPoint,
   distanceSquaredPointToSegment,
 } from '../combat/hitboxes'
-import { houndBiteCutsCordSegment } from '../enemies/ai'
+import { houndBiteCutsSimulatedRope } from '../enemies/ai'
 import {
   angleFromEnemyFacing,
   damageEnemy,
@@ -34,6 +34,7 @@ import {
   consumeInput,
   consumeReleased,
   inputHeld,
+  isGameplayInputLocked,
   isDoubleTap,
 } from '../player/input'
 import { playerStore } from '../player/playerStore'
@@ -49,6 +50,7 @@ import {
 import {
   recordCameraDistanceWhileOut,
   registerForceCut,
+  registerHoldCordOutForPerf,
   registerWeaponReset,
   recordDummyDamage,
   resetWeaponRuntime,
@@ -77,12 +79,12 @@ const arcTargets = TRAINING_DUMMIES.map((dummy) => ({
 
 function bladeOverlapsEnemy(enemy: EnemyRecord): boolean {
   const stats = ENEMY_TYPES[enemy.type]
-  const radius = stats.collider.radius
+  const radius = stats.collider.radius * enemy.scale
   const bodyHeight =
     enemy.type === 'cliffHound'
       ? ENEMY_TYPES.cliffHound.collider.length
       : ENEMY_TYPES[enemy.type].collider.height
-  const halfSegment = Math.max(0, bodyHeight * 0.5 - radius)
+  const halfSegment = Math.max(0, bodyHeight * enemy.scale * 0.5 - radius)
   const combinedRadius = REACHBLADE.bladeHitRadius + radius
   return (
     distanceSquaredPointToSegment(
@@ -110,6 +112,7 @@ export function CordWeapon() {
   const skipAimRelease = useRef(false)
   const closeActiveRemaining = useRef(0)
   const droppedVelocity = useRef(0)
+  const debugHoldOut = useRef(false)
   const rope = useRef(
     createVerletRope({ x: 0, y: 1.35, z: 0 }, { x: 0, y: 1.35, z: 0 }),
   )
@@ -160,17 +163,13 @@ export function CordWeapon() {
   const cutCordAtHoundPoint = useCallback(
     (x: number, y: number, z: number): boolean => {
       if (
-        !houndBiteCutsCordSegment(
+        !houndBiteCutsSimulatedRope(
           cord.current,
           x,
           y,
           z,
-          hand.x,
-          hand.y,
-          hand.z,
-          blade.x,
-          blade.y,
-          blade.z,
+          rope.current.positions,
+          rope.current.activePoints,
         )
       )
         return false
@@ -252,7 +251,26 @@ export function CordWeapon() {
       updateCord(step(cord.current, { type: 'cut' }))
     })
     registerHoundBiteHandler(cutCordAtHoundPoint)
+    registerHoldCordOutForPerf((enabled) => {
+      debugHoldOut.current = enabled
+      pending.current = null
+      if (enabled) {
+        const player = playerStore.getState().position
+        hand.set(player.x + 0.28, player.y + 0.45, player.z)
+        camera.getWorldDirection(castDirection)
+        castDirection.y = 0
+        castDirection.normalize()
+        blade
+          .copy(hand)
+          .addScaledVector(castDirection, REACHBLADE.maxCordLength)
+        updateCord(step(initialCordState(), { type: 'castRelease' }))
+      } else {
+        updateCord(initialCordState())
+        blade.copy(hand)
+      }
+    })
     registerWeaponReset(() => {
+      debugHoldOut.current = false
       updateCord(initialCordState())
       combo.current = initialComboState()
       pending.current = null
@@ -268,6 +286,7 @@ export function CordWeapon() {
     return () => {
       registerForceCut(null)
       registerHoundBiteHandler(null)
+      registerHoldCordOutForPerf(null)
       registerWeaponReset(null)
       ropeGeometry.dispose()
       aimGeometry.dispose()
@@ -277,6 +296,7 @@ export function CordWeapon() {
   }, [
     aimGeometry,
     aimObject,
+    camera,
     cutCordAtHoundPoint,
     ropeGeometry,
     ropeObject,
@@ -293,6 +313,11 @@ export function CordWeapon() {
     const now = clock.elapsedTime
     const player = playerStore.getState()
     if (player.death.phase !== 'Alive') return
+    if (isGameplayInputLocked()) {
+      pending.current = null
+      aimObject.visible = false
+      return
+    }
     camera.getWorldDirection(aimDirection)
     aimDirection.y = 0
     aimDirection.normalize()
@@ -301,6 +326,11 @@ export function CordWeapon() {
       player.position.y + 0.45,
       player.position.z,
     )
+    if (debugHoldOut.current) {
+      if (cord.current.mode !== 'Out')
+        updateCord(step(initialCordState(), { type: 'castRelease' }))
+      blade.copy(hand).addScaledVector(castDirection, REACHBLADE.maxCordLength)
+    }
 
     if (consumeInput('recall')) {
       if (
@@ -452,7 +482,11 @@ export function CordWeapon() {
 
     if (cord.current.mode === 'InHand') {
       blade.copy(hand).addScaledVector(aimDirection, 0.3)
-    } else if (cord.current.mode === 'Out' && !launchedThisFrame) {
+    } else if (
+      cord.current.mode === 'Out' &&
+      !launchedThisFrame &&
+      !debugHoldOut.current
+    ) {
       blade.addScaledVector(castDirection, REACHBLADE.cast.travelSpeed * delta)
       const distance = blade.distanceTo(hand)
       let hitTarget = false
@@ -578,7 +612,10 @@ export function CordWeapon() {
     ropeObject.visible = cord.current.mode !== 'InHand'
     if (bladeMesh.current) bladeMesh.current.position.copy(blade)
 
-    const aiming = inputHeld('aim') && cord.current.mode === 'InHand'
+    const aiming =
+      !debugHoldOut.current &&
+      inputHeld('aim') &&
+      cord.current.mode === 'InHand'
     aimObject.visible = aiming
     if (aiming) {
       const positions = aimPositions.current
