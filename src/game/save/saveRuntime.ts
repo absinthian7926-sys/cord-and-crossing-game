@@ -6,24 +6,26 @@ import {
   getQuestRuntimeSnapshot,
   hydrateQuestRuntime,
   subscribeQuestRuntime,
-  type KeyDropPosition,
 } from '../quest/questRuntime'
 import {
+  resetWeaponRuntime,
+  resetWeaponToInHand,
+} from '../weapons/weaponRuntime'
+import {
   clearSave,
+  createDefaultWorldState,
   createNewSaveData,
   createSaveData,
   loadSave,
   resolveLoadedPosition,
   saveToStorage,
   type HeightSampler,
-  type SaveDataV1,
+  type SaveDataV2,
   type SaveStorage,
   type SaveWarning,
+  type SaveWorldState,
+  type ScenePositionRules,
 } from './save'
-import {
-  resetWeaponRuntime,
-  resetWeaponToInHand,
-} from '../weapons/weaponRuntime'
 
 export type AutosaveHost = {
   setInterval(handler: () => void, timeoutMilliseconds: number): number
@@ -32,16 +34,41 @@ export type AutosaveHost = {
   removeEventListener(type: 'pagehide', listener: () => void): void
 }
 
-export type LoadRuntimeOptions = {
-  readonly pendingKeyDrop?: KeyDropPosition | null
-  readonly warn?: SaveWarning
+export type LoadRuntimeOptions = { readonly warn?: SaveWarning }
+
+export type SaveWorldRuntimeState = Omit<SaveWorldState, 'tasselEarned'>
+
+export type SaveWorldRuntimeAdapter = {
+  getState(): SaveWorldRuntimeState
+  hydrate(state: SaveWorldState): void
+  subscribe(listener: () => void): () => void
+}
+
+const defaultWorld = createDefaultWorldState()
+const defaultAdapter: SaveWorldRuntimeAdapter = {
+  getState: () => ({
+    porticoUnlocked: defaultWorld.porticoUnlocked,
+    currentScene: defaultWorld.currentScene,
+    hollow: { ...defaultWorld.hollow },
+  }),
+  hydrate: () => undefined,
+  subscribe: () => () => undefined,
+}
+
+let worldAdapter: SaveWorldRuntimeAdapter = defaultAdapter
+
+export function configureSaveWorldRuntimeAdapter(
+  adapter: SaveWorldRuntimeAdapter | null,
+): void {
+  worldAdapter = adapter ?? defaultAdapter
 }
 
 const PLAYER_GROUND_OFFSET = PLAYER.collider.halfHeight + PLAYER.collider.radius
 
-export function createRuntimeSaveData(): SaveDataV1 {
+export function createRuntimeSaveData(): SaveDataV2 {
   const player = playerStore.getState()
   const quest = getQuestRuntimeSnapshot()
+  const world = worldAdapter.getState()
   return createSaveData({
     player: {
       health: player.vitals.health,
@@ -54,16 +81,22 @@ export function createRuntimeSaveData(): SaveDataV1 {
     },
     quest: quest.quest,
     campLeaderDefeated: quest.campLeaderDefeated,
+    keyDrop: quest.keyDrop,
+    world: {
+      ...world,
+      hollow: { ...world.hollow },
+      tasselEarned: quest.tasselEarned,
+    },
   })
 }
 
 export function applyRuntimeSaveData(
-  data: SaveDataV1,
-  sampleHeight: HeightSampler,
-  pendingKeyDrop: KeyDropPosition | null = null,
+  data: SaveDataV2,
+  positionRules: HeightSampler | ScenePositionRules,
 ): void {
+  worldAdapter.hydrate(data.world)
   const player = playerStore.getState()
-  const position = resolveLoadedPosition(data, sampleHeight)
+  const position = resolveLoadedPosition(data, positionRules)
   player.vitals.health =
     data.player.health > 0 ? data.player.health : PLAYER.health.max
   player.vitals.stamina = data.player.stamina
@@ -77,18 +110,23 @@ export function applyRuntimeSaveData(
     y: position.y + PLAYER_GROUND_OFFSET,
     z: position.z,
   }
-  hydrateQuestRuntime(data.quest, data.quest.campLeaderDefeated, pendingKeyDrop)
+  hydrateQuestRuntime(
+    data.quest,
+    data.quest.campLeaderDefeated,
+    data.quest.keyDrop,
+    data.world.tasselEarned,
+  )
   resetWeaponRuntime()
   resetWeaponToInHand()
 }
 
 export function loadRuntimeSave(
   storage: SaveStorage,
-  sampleHeight: HeightSampler,
+  positionRules: HeightSampler | ScenePositionRules,
   options: LoadRuntimeOptions = {},
-): SaveDataV1 {
+): SaveDataV2 {
   const data = loadSave(storage, options.warn)
-  applyRuntimeSaveData(data, sampleHeight, options.pendingKeyDrop)
+  applyRuntimeSaveData(data, positionRules)
   return data
 }
 
@@ -101,11 +139,11 @@ export function saveRuntimeState(
 
 export function clearRuntimeSave(
   storage: SaveStorage,
-  sampleHeight: HeightSampler,
-): SaveDataV1 {
+  positionRules: HeightSampler | ScenePositionRules,
+): SaveDataV2 {
   clearSave(storage)
   const data = createNewSaveData()
-  applyRuntimeSaveData(data, sampleHeight)
+  applyRuntimeSaveData(data, positionRules)
   return data
 }
 
@@ -115,20 +153,14 @@ export function installRuntimeAutosave(
   warn?: SaveWarning,
 ): () => void {
   let lastQuestRevision = getQuestRuntimeSnapshot().questRevision
-  let lastCampLeaderDefeated = getQuestRuntimeSnapshot().campLeaderDefeated
-
   const persist = () => saveRuntimeState(storage, warn)
-  const unsubscribe = subscribeQuestRuntime(() => {
-    const quest = getQuestRuntimeSnapshot()
-    if (
-      quest.questRevision === lastQuestRevision &&
-      quest.campLeaderDefeated === lastCampLeaderDefeated
-    )
-      return
-    lastQuestRevision = quest.questRevision
-    lastCampLeaderDefeated = quest.campLeaderDefeated
+  const unsubscribeQuest = subscribeQuestRuntime(() => {
+    const revision = getQuestRuntimeSnapshot().questRevision
+    if (revision === lastQuestRevision) return
+    lastQuestRevision = revision
     persist()
   })
+  const unsubscribeWorld = worldAdapter.subscribe(persist)
   const intervalId = host.setInterval(() => {
     const player = playerStore.getState()
     if (player.death.phase === 'Alive' && player.vitals.health > 0) persist()
@@ -137,7 +169,8 @@ export function installRuntimeAutosave(
   host.addEventListener('pagehide', onPageHide)
 
   return () => {
-    unsubscribe()
+    unsubscribeQuest()
+    unsubscribeWorld()
     host.clearInterval(intervalId)
     host.removeEventListener('pagehide', onPageHide)
   }

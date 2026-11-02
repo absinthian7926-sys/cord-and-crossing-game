@@ -39,8 +39,9 @@ describe('quest data', () => {
 
   it('keeps save defaults in typed data', () => {
     expect(SAVE_CONFIG).toEqual({
-      storageKey: 'cord-and-crossing.save.v1',
-      schemaVersion: 1,
+      storageKey: 'cord-and-crossing.save.v2',
+      legacyStorageKey: 'cord-and-crossing.save.v1',
+      schemaVersion: 2,
       autosaveSeconds: 30,
       playerName: 'Runner',
     })

@@ -22,6 +22,7 @@ export type QuestRuntimeSnapshot = {
   readonly keyNearby: boolean
   readonly campLeaderDefeated: boolean
   readonly keyDrop: KeyDropPosition | null
+  readonly tasselEarned: boolean
   readonly questRevision: number
 }
 
@@ -42,6 +43,7 @@ function initialSnapshot(): QuestRuntimeSnapshot {
     keyNearby: false,
     campLeaderDefeated: false,
     keyDrop: null,
+    tasselEarned: false,
     questRevision: 0,
   }
 }
@@ -84,6 +86,7 @@ export function hydrateQuestRuntime(
   quest: QuestState,
   campLeaderDefeated: boolean,
   keyDrop: KeyDropPosition | null = null,
+  tasselEarned = false,
 ): void {
   transientProximity.hollenNearby = false
   transientProximity.keyNearby = false
@@ -98,16 +101,30 @@ export function hydrateQuestRuntime(
       campLeaderDefeated && !quest.keyLooted && keyDrop !== null
         ? { ...keyDrop }
         : null,
+    tasselEarned: quest.complete && tasselEarned,
     questRevision: 0,
   })
 }
 
-export function emitQuestEvent(event: QuestEventType): boolean {
+function questProgressForEvent(event: QuestEventType): {
+  quest: QuestState
+  tasselEarned: boolean
+} | null {
   const nextQuest = applyQuestEvent(snapshot.quest, event)
-  if (nextQuest === snapshot.quest) return false
+  if (nextQuest === snapshot.quest) return null
+  return {
+    quest: nextQuest,
+    tasselEarned: snapshot.tasselEarned || event === 'reportedToHollen',
+  }
+}
+
+export function emitQuestEvent(event: QuestEventType): boolean {
+  const progress = questProgressForEvent(event)
+  if (progress === null) return false
   publish({
     ...snapshot,
-    quest: nextQuest,
+    quest: progress.quest,
+    tasselEarned: progress.tasselEarned,
     keyNearby: event === 'keyLooted' ? false : snapshot.keyNearby,
     keyDrop: event === 'keyLooted' ? null : snapshot.keyDrop,
     questRevision: snapshot.questRevision + 1,
@@ -148,6 +165,7 @@ export function openHollenDialogue(): boolean {
   const dialogue = openDialogueForQuestStep(
     snapshot.dialogue,
     snapshot.quest.currentStep,
+    snapshot.quest.complete,
   )
   if (dialogue === snapshot.dialogue) return false
   publish({ ...snapshot, dialogue, questLogOpen: false })
@@ -163,19 +181,16 @@ export function closeHollenDialogue(): boolean {
 
 export function chooseHollenDialogue(choiceId: string): boolean {
   const result = chooseDialogueOption(snapshot.dialogue, choiceId)
-  const quest = result.event
-    ? applyQuestEvent(snapshot.quest, result.event)
-    : snapshot.quest
-  if (result.state === snapshot.dialogue && quest === snapshot.quest)
-    return false
-  const questChanged = quest !== snapshot.quest
+  const progress =
+    result.event === null ? null : questProgressForEvent(result.event)
+  if (result.state === snapshot.dialogue && progress === null) return false
   publish({
     ...snapshot,
     dialogue: result.state,
-    quest,
-    questRevision: questChanged
-      ? snapshot.questRevision + 1
-      : snapshot.questRevision,
+    quest: progress?.quest ?? snapshot.quest,
+    tasselEarned: progress?.tasselEarned ?? snapshot.tasselEarned,
+    questRevision:
+      progress !== null ? snapshot.questRevision + 1 : snapshot.questRevision,
   })
   return true
 }
@@ -202,6 +217,7 @@ export function markCampLeaderDefeated(position: KeyDropPosition): boolean {
     campLeaderDefeated: true,
     keyDrop: { ...position },
     keyNearby: false,
+    questRevision: snapshot.questRevision + 1,
   })
   transientProximity.keyNearby = false
   return true
@@ -214,7 +230,11 @@ export function restorePendingKeyDrop(position: KeyDropPosition): boolean {
     snapshot.keyDrop !== null
   )
     return false
-  publish({ ...snapshot, keyDrop: { ...position } })
+  publish({
+    ...snapshot,
+    keyDrop: { ...position },
+    questRevision: snapshot.questRevision + 1,
+  })
   return true
 }
 

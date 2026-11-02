@@ -72,10 +72,17 @@ M3 implementation defaults (all GAME (NEW), revisable):
 - Quality defaults to Medium. Low, Medium and High draw distances are 450 m, 650 m and 850 m. Fixed fog starts at 150 m and ends at 600 m, using color #91a3a4. Sun shadow maps are 1024 on Low and Medium and 2048 on High. Quality changes only shadow map size, scatter density and draw distance.
 - The fixed sun points from west-southwest with normalized direction (-0.933, 0.259, 0.25), color #ffc98a and intensity 2.4. Hemisphere fill intensity is 0.7. The moving shadow camera covers 90 m around the player, follows across 160 m and uses bias -0.0005.
 - Falling or leaving the 1000 m bounds resets after 1 s when 5 m below terrain or 1.5 m into the sea. Boundary walls are 80 m high and 2 m thick.
-- The inert portico pillars are 2.4 m apart and 3.2 m high. The waystation shelter is 8 x 3.2 x 5 m centered at (-7, 3), uses 0.16 m posts, and has a 0.5 m radius by 1.2 m barrel at offset (4, 2). Its PLACEHOLDER NPC marker is a flat 0.6 m disc at offset (2, 2), with no person, interaction or gameplay.
+- The M3 inert portico pillars were 2.4 m apart and 3.2 m high. M6 replaces those forms with the active portico described in section 9. The waystation shelter is 8 x 3.2 x 5 m centered at (-7, 3), uses 0.16 m posts, and has a 0.5 m radius by 1.2 m barrel at offset (4, 2). Its PLACEHOLDER NPC marker is a flat 0.6 m disc at offset (2, 2), with no person, interaction or gameplay.
 - Placeholder carts use a 3.2 x 0.7 x 1.6 m body with 0.48 m radius by 0.22 m wheels. Camp tents use 6 x 3.2 x 4 m forms at offsets (-10, 0), (8, -5) and (2, 10). The static fire radius is 0.8 m with glow range 12 m. The lookout is 3 x 6 x 3 m at offset (14, -12).
 - Ruin frame posts use 1.4 x 4 x 1.4 m forms at offsets (-6, 0), (6, 0) and (0, 5), with a 13 x 0.8 x 1.4 m lintel. The inert portico center is (600, -80) and its pillar forms are 0.7 x 3.2 x 0.7 m.
 - The dev performance overlay samples every 0.25 s and toggles with F3. Palette values are terrain #6f735f, road #725f45, sea #557981, rocks #686b66 / #77766d / #595f5d, scrub #6d7657 / #7c7657, wood #8b7658, rope #a48a5e, stone #777873, tent #82745f, fire #d98245 and NPC marker #b8aa82.
+
+M6 Crossing Hollow defaults (all GAME (NEW), revisable):
+
+- Crossing Hollow is a flat 120 m square from X and Z -60 to 60 at ground height 0, with ground color #5f625b. Its return portico is centered at (0, 0) with screen normal (0, 0, 1). Arrival and the Hollow death respawn point are (0, 0, -3).
+- The PLACEHOLDER practice rail is at (-6, -11), the target post at (7, -12), the marked snag post at (0, -30), the 3 m blocked gap at the snag post, and the final encounter center at (0, -55). Final-enemy offsets are (-4, 0), (4, 0) and (0, -3), keeping every body inside the Hollow walls.
+- PLACEHOLDER Hollow forms are low-poly primitives. The practice rail uses 1.5 m posts at X offsets -1.5 and 1.5 with 0.09 to 0.11 m radii, a 3 m rope at height 1.25 m and radius 0.045 m. The target uses a 2 m post with 0.13 to 0.16 m radii and a 0.45 m radius by 0.12 m target. The snag post uses a 1.6 m form with 0.22 to 0.28 m radii and a 0.27 m ring with 0.05 m tube. The temporary gate is 3 m wide, 3 m high and 0.6 m thick, with permanent stone shoulders reaching the side bounds so the gate is the only route. Visible perimeter shelter walls are 4 m high and 1 m thick.
+- PLACEHOLDER Hollow lighting uses ambient intensity 0.65 and a warm directional light at (-35, 22, 18) with intensity 1.6. Fog starts at 54 m and ends at 120 m. Final encounter ground markers use 0.35 m radius with 10 segments, and the ground collider is 0.25 m deep.
 
 Time of day: fixed late afternoon in Slice 1 (warm sun low over the sea). Day-night cycle later.
 
@@ -110,17 +117,24 @@ The reachblade (SITE): a forearm-length leaf-shaped single-edged blade with an i
 
 ### 6.3 Utility (Slice 1)
 
-- Snag: casting at marked rope posts or loose crates pulls them 2 m (one physics puzzle in Crossing Hollow).
+- Snag: casting at marked rope posts or loose crates pulls them 2 m (one physics puzzle in Crossing Hollow). GAME (NEW): the M6 marked post moves at a base 2 m/s; Strength doubles only that speed, not the 2 m distance.
 - Stop: tapping Q twice within 0.3 s instantly drops the cord tension and cancels the cast with zero recovery delay, but the blade lands at the current point and must be picked up (walk over it). Teaches "stopping and recovery".
+- A dropped blade remains in the scene where it landed and does not cross a portico with the player. The player stays unarmed in the other scene until returning to pick it up.
 - GAME (NEW): dropped blade pickup radius is 0.8 m and the moving blade hit radius is 0.6 m. The M2 rope simulation uses 16 points, 12 constraint iterations, damping 0.985, gravity 9.81 m/s2, a 0.04 m ground offset and a 0.12 m rope hit radius. The visible cut-line stub uses 5 points. Training dummies stand about 3 m, 5.2 m and 5.95 m from spawn; the 5.95 m dummy is the cord-cutter test target with a 0.38 m cutter volume.
 
 ### 6.4 Effects and heelstones
 
 - Crossing (CANON): stepping fully through an active portico screen (both feet past the screen plane, tracked by a trigger volume pair) grants the effect. Partial entry grants nothing. A fresh effect needs another full crossing.
-- Slice 1 effect: Strength (CANON, matched obsidian). On the player: close damage x1.35, cast pull force x2, stagger duration x1.5. Duration 180 s (GAME number; duration is open in canon).
+- Slice 1 effect: Strength (CANON, matched obsidian). On the player: close damage x1.35, cast pull force x2, stagger duration x1.5. Duration 180 s (GAME, PLACEHOLDER pending Ryan; GDD 18 question 2 remains open).
 - Heelstones (SITE, Ryan decided Oct 28, 2026): a small matched pair in the reachblade's ring. They never create an effect. Pressing F while holding an effect plays a 1.2 s "clear the line" animation drawing the cord through the ring. If uninterrupted, the line carries the effect: cast damage x1.35 and casts can break enemy guard. If hit during the pass, nothing carries ("a pass that stops halfway carries nothing").
 - The line holds the effect only while the bearer holds the hand end. Cut or dropped cord (Stop) makes the line plain at once.
 - Effect cap: maximum 2 active effects (SITE, proposed two-effect cap). Slice 1 only has one, but the code enforces the cap.
+
+M6 implementation defaults (all GAME (NEW), revisable unless marked otherwise):
+
+- Re-adding Strength refreshes its timer to the full configured duration and does not stack. Effects and the carried line are not saved. Reload and death clear both.
+- The heelstone pass requires the blade In Hand. During its 1.2 s the player may turn but cannot move, strike, cast or dodge. Damage interrupts it. Dodge input cancels it with nothing carried. It has no stamina cost.
+- A carried line remains carried through normal cast and recall while Strength remains active. Cut, Stop, Strength expiry or removal, and player death make it plain at once.
 
 ### 6.5 Other arms
 
@@ -163,7 +177,7 @@ Quest (GAME): "The Line at the Rise."
 3. Return to Hollen. He teaches the heelstone pass in dialogue (tutorial prompt for F).
 4. Go to the Ruin Shelf, use the key, and cross the portico screen. Load Crossing Hollow. Strength is granted.
 5. In the Hollow: clear the line through the heelstones, snag the rope post to open the path, defeat the final encounter.
-6. Return through the screen (no effect from a return crossing in Slice 1; GAME rule to keep scope small) and report to Hollen. Reward: a dyed cloth tassel cosmetic on the cord (SITE nod to dyed cloth streamers).
+6. Return through the screen (no effect from a return crossing in Slice 1; GAME, PLACEHOLDER pending Ryan; GDD 18 question 2 remains open) and report to Hollen. Reward: a dyed cloth tassel cosmetic on the cord (SITE nod to dyed cloth streamers).
 
 Dialogue: short, plain, under 40 words per line, no manuscript prose.
 
@@ -174,18 +188,34 @@ M5 implementation defaults (all GAME (NEW), revisable):
 - The camp leader is a Road brigand variant with 120 HP and the Road brigand's existing damage, cadence, 0.5 s windup, speed, buckler, stagger and no-flee rules. Its PLACEHOLDER capsule and collider are 1.15x Road brigand scale, it stands at offset (0, 4) from the camp center, and a dyed sash in #9f493e is its only bright color. It spawns from quest step 2 until defeated, drops the key at its death position and does not respawn while the key is waiting or after it is looted. The optional PLACEHOLDER label is "Camp leader".
 - The frame shelter key is a plain iron ring. Its PLACEHOLDER pickup uses a 1.5 m interaction radius, 0.18 m ring radius, 0.035 m tube radius, 6 radial and 16 tubular segments, iron color #5d5a50, metalness 0.65, roughness 0.5, and a soft #c9a46a glow with intensity 0.4 and range 2 m. It cannot be dropped or lost. Step 2 completes when the key is picked up, without requiring every camp enemy to be defeated.
 - The dialogue panel is at most 640 px wide with parchment #e8dcc0 and ink #2b2620. It shows 2 to 4 numbered choices. The quest tracker uses 14 px text and highlights a changed step for 3 s. The quest log has one key slot, shows all six steps, marks completed steps and highlights the current step.
-- The save key is `cord-and-crossing.save.v1` with schema version 1. The default player name is "Runner". Autosave runs on a quest-step change, key pickup, every 30 s while alive and page hide. Saved data is player name, health, stamina and position, quest progression, key-looted state and camp-leader-defeated state. The cord loads In Hand. Enemy positions, timers and arrows are not saved. Invalid, missing or newer data starts a new game with one console warning. A valid living player loads at the saved position; an invalid, buried, out-of-bounds or dead player loads at the waystation.
+- M5 used save key `cord-and-crossing.save.v1` with schema version 1. M6 migrates a valid v1 record to the v2 rules below.
 - Steps 4 to 6 are defined in the quest data and may advance through the dev hook for tests, but M5 gameplay emits events only for steps 1 to 3. No portico, crossing, Hollow, effect or reward behavior exists in M5.
 - The exact PLACEHOLDER tracker text is GAME (NEW): "Talk to Hollen."; "Clear the brigand camp and take the frame shelter key."; "Return to Hollen."; "Go to the Ruin Shelf, use the key, and cross the portico screen."; "Clear the line, snag the rope post, and defeat the final encounter."; and "Return through the screen and report to Hollen."
 - The exact PLACEHOLDER Hollen dialogue lines are GAME (NEW): "Brigands took the iron ring keys for the old frame shelter at the rise."; "The frame shelter key is at the brigand camp."; "Once you carry an effect, press F to clear the line through the heelstones."; "Take the key to the Ruin Shelf and cross the portico screen."; "Clear the line, snag the rope post, and defeat the final encounter in the Hollow."; and "Report when you return through the screen."
 - The exact PLACEHOLDER dialogue choices are GAME (NEW): "I will bring one back."; "Leave"; "I am looking for it."; "I understand."; "Say that again."; "I will go to the shelf."; "I know the work."; and "The work is finished."
 
+M6 quest and save defaults (all GAME (NEW), revisable):
+
+- The save key is `cord-and-crossing.save.v2` with schema version 2. A valid v1 save from `cord-and-crossing.save.v1` migrates on load. The v2 record adds the exact pending key-drop position or null, permanent portico-unlocked state, current scene, Hollow pass / snag / encounter progress, and tassel-earned state. Clearing a save removes both keys.
+- A migrated v1 save that defeated the camp leader before taking the key uses the prior camp-leader anchor as its legacy key-drop fallback because v1 did not store the exact death point. Every new v2 key drop stores and restores the exact point.
+- Autosave still runs on every quest revision, every persistent portico, scene or Hollow-progress change, every 30 s while alive, and page hide. A living player restores a valid position in the saved scene. Zone fallback is (0, 8, 0); Hollow fallback is (0, 0, -3). Effects and the carried line load empty, and the cord loads In Hand.
+- The key is kept after use and the portico stays unlocked. Quest step 5 completes only after one heelstone pass has completed in the Hollow, the marked post has been pulled and all three final enemies have been defeated. The two Road brigands and one Brigand archer do not respawn after defeat.
+- Reporting at step 6 completes the quest, grants the tassel once and autosaves. Reporting at steps 1 to 5 or after completion changes nothing. The PLACEHOLDER completion line is "The work at the rise is done." The added PLACEHOLDER choice is "Say that again."; "Leave" is reused.
+- The PLACEHOLDER tassel is a 0.25 m by 0.06 m by 0.025 m cloth strip at blade-ring offset (0, -0.56, 0), color #9f493e and roughness 0.9. It has no gameplay effect.
+
 ## 9. Portico mechanic (technical)
 
 - Portico: two stone pillars (iron holders, SITE) 2.4 m apart, a vertical shimmer plane between them (shader: soft pale edge, slow vertical ripple; CANON "A bright edge appeared between the stones").
 - Crossing detection: two thin trigger volumes, A (front) and B (back), 0.3 m apart from the plane. A crossing counts only if the player capsule enters A, fully passes the plane, and the capsule leaves B on the far side with no part behind the plane. Reversing midway cancels.
-- On a valid crossing: grant effect (EffectSystem.add), play 1 s white flash and low chord, then scene transition to Crossing Hollow (loading screen under 2 s target).
+- On a valid crossing: grant effect (EffectSystem.add), play a 1 s white flash, then scene transition to Crossing Hollow (loading screen under 2 s target). Audio remains M7 and no chord plays in M6.
 - The screen does not teleport, bridge gaps or carry objects (CANON constraint). In game terms the scene load is a fade between two connected spaces, presented as walking on through the shelter.
+
+M6 portico defaults (all GAME (NEW), revisable):
+
+- The zone portico is centered at (600, -80), with its front facing west and screen normal (-1, 0, 0). The key-use radius is 2.5 m on the zone side. "E Use key" appears only at quest step 4 with the key while the screen is locked. The key is not consumed. Returning from the Hollow places the player 3 m west of the screen on the zone side.
+- The screen is 2.4 m wide, 3.2 m high and 0.04 m thick. Trigger centers are 0.3 m from the plane and trigger depth is 0.12 m. Solid pillars remain camera blockers; all key-use and crossing sensors are excluded from camera rays.
+- The PLACEHOLDER shimmer uses pale edge #e9efe6, a 0.25 m soft edge, 0.3 m/s vertical ripple, opacity 0.45 and a 1 s fade on unlock. Its cheap shader uses ripple frequency 34, horizontal phase 5, body alpha 0.12 plus ripple alpha 0.16, and edge contribution 0.78. It is one draw call with no downloaded texture or post-processing. A dev performance sample counts it as in view only when its center is inside the camera frustum and the absolute camera-to-screen normal dot is at least 0.5.
+- The crossing flash lasts 1 s. The loading panel says "Crossing Hollow" and contains no lore text. The return screen is always active. With the PLACEHOLDER pending rule, a Hollow-to-zone return crossing does not add or refresh Strength.
 
 ## 10. UI
 
@@ -194,6 +224,8 @@ M5 implementation defaults (all GAME (NEW), revisable):
 - Dialogue panel: bottom-center, parchment style, 2 to 4 choices.
 - Pause menu: resume, controls, graphics quality (Low, Medium, High), volume, restart.
 - Font: a readable serif for titles (e.g. Cormorant Garamond) and a sans for HUD (Inter). Palette taken from the guide site.
+
+M6 UI implementation (GAME (NEW), revisable): effect slots sit above the existing vitals and are sampled at 10 Hz with whole-second timers. The exact M6 action prompts are "E Use key" and "F Clear the line". The PLACEHOLDER loading panel uses the existing parchment and ink colors with the text "Crossing Hollow". M6 adds no compass, pause menu, settings UI or downloaded web fonts; those remain M7.
 
 ## 11. Art direction
 
@@ -248,12 +280,13 @@ Core systems: Input, CameraRig, PlayerController, CordWeapon (state machine plus
     main.tsx
     App.tsx
     /game
-      /scenes        Zone.tsx, Hollow.tsx, SceneManager.ts
+      /scenes        Zone.tsx, Hollow.tsx, SceneManager.tsx, sceneRuntime.ts
       /player        PlayerController.tsx, CameraRig.tsx, input.ts
       /weapons       CordWeapon.tsx, cordState.ts, verletRope.ts
       /combat        combat.ts, hitboxes.ts
-      /effects       effects.ts
-      /portico       Portico.tsx, crossing.ts
+      /effects       effects.ts, effectRuntime.ts, EffectController.tsx, heelstonePass.ts
+      /portico       Portico.tsx, crossing.ts, porticoRuntime.ts, porticoGameplay.ts
+      /hollow        hollow.ts, hollowRuntime.ts, HollowEncounter.tsx, snag.ts
       /enemies       Enemy.tsx, ai.ts
       /quest         quest.ts, dialogue.ts
       /save          save.ts

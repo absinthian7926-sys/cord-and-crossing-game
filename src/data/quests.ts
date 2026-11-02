@@ -89,6 +89,16 @@ export const FRAME_SHELTER_KEY = {
 
 export const KEY_ITEM = FRAME_SHELTER_KEY
 
+export const TASSEL_REWARD = {
+  id: 'dyed-cloth-tassel',
+  length: 0.25,
+  width: 0.06,
+  depth: 0.025,
+  color: '#9f493e',
+  offset: [0, -0.56, 0],
+  roughness: 0.9,
+} as const
+
 export const HOLLEN = {
   name: 'Hollen',
   position: [-5, 5],
@@ -121,8 +131,9 @@ export const QUEST_UI = {
 } as const
 
 export const SAVE_CONFIG = {
-  storageKey: 'cord-and-crossing.save.v1',
-  schemaVersion: 1,
+  storageKey: 'cord-and-crossing.save.v2',
+  legacyStorageKey: 'cord-and-crossing.save.v1',
+  schemaVersion: 2,
   autosaveSeconds: 30,
   playerName: 'Runner',
 } as const

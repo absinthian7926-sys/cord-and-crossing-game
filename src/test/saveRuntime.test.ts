@@ -5,38 +5,87 @@ import { playerStore } from '../game/player/playerStore'
 import {
   emitQuestEvent,
   getQuestRuntimeSnapshot,
+  lootFrameShelterKey,
   markCampLeaderDefeated,
   resetQuestRuntime,
+  setHollenNearby,
+  setKeyNearbyTransient,
 } from '../game/quest/questRuntime'
 import {
   applyRuntimeSaveData,
   clearRuntimeSave,
+  configureSaveWorldRuntimeAdapter,
   createRuntimeSaveData,
   installRuntimeAutosave,
   loadRuntimeSave,
   type AutosaveHost,
+  type SaveWorldRuntimeAdapter,
+  type SaveWorldRuntimeState,
 } from '../game/save/saveRuntime'
-import { createNewSaveData, type SaveStorage } from '../game/save/save'
+import {
+  createNewSaveData,
+  serializeSave,
+  type SaveStorage,
+  type SaveWorldState,
+} from '../game/save/save'
 import { weaponRuntime } from '../game/weapons/weaponRuntime'
 
-function memoryStorage(initial: string | null = null): SaveStorage & {
-  value: () => string | null
+function memoryStorage(entries: Record<string, string> = {}): SaveStorage & {
+  entries: Map<string, string>
 } {
-  let value = initial
+  const values = new Map(Object.entries(entries))
   return {
-    getItem: () => value,
-    setItem: (_key, nextValue) => {
-      value = nextValue
+    entries: values,
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
+    removeItem: (key) => values.delete(key),
+  }
+}
+
+function testWorldAdapter(initial?: Partial<SaveWorldRuntimeState>): {
+  adapter: SaveWorldRuntimeAdapter
+  state: () => SaveWorldRuntimeState
+  notify: () => void
+  hydrate: ReturnType<typeof vi.fn<(value: SaveWorldState) => void>>
+} {
+  let state: SaveWorldRuntimeState = {
+    porticoUnlocked: false,
+    currentScene: 'zone',
+    hollow: {
+      heelstonePassDone: false,
+      snagPulled: false,
+      encounterDefeated: false,
     },
-    removeItem: () => {
-      value = null
+    ...initial,
+  }
+  const listeners = new Set<() => void>()
+  const hydrate = vi.fn((value: SaveWorldState) => {
+    state = {
+      porticoUnlocked: value.porticoUnlocked,
+      currentScene: value.currentScene,
+      hollow: { ...value.hollow },
+    }
+  })
+  return {
+    adapter: {
+      getState: () => state,
+      hydrate,
+      subscribe: (listener) => {
+        listeners.add(listener)
+        return () => listeners.delete(listener)
+      },
     },
-    value: () => value,
+    state: () => state,
+    notify: () => {
+      for (const listener of listeners) listener()
+    },
+    hydrate,
   }
 }
 
 describe('save runtime', () => {
   beforeEach(() => {
+    configureSaveWorldRuntimeAdapter(null)
     resetQuestRuntime()
     const player = playerStore.getState()
     player.position.x = 0
@@ -48,7 +97,17 @@ describe('save runtime', () => {
     player.death.phase = 'Alive'
   })
 
-  it('stores the player logical ground position and quest flags', () => {
+  it('stores exact key drop, player state, and adapter world state', () => {
+    const world = testWorldAdapter({
+      porticoUnlocked: true,
+      currentScene: 'hollow',
+      hollow: {
+        heelstonePassDone: true,
+        snagPulled: true,
+        encounterDefeated: false,
+      },
+    })
+    configureSaveWorldRuntimeAdapter(world.adapter)
     const player = playerStore.getState()
     player.position.x = 12
     player.position.y = 10 + PLAYER.collider.halfHeight + PLAYER.collider.radius
@@ -56,7 +115,7 @@ describe('save runtime', () => {
     player.vitals.health = 72
     player.vitals.stamina = 48
     emitQuestEvent('talkedToHollen')
-    markCampLeaderDefeated({ x: 380, y: 38, z: -236 })
+    markCampLeaderDefeated({ x: 381.25, y: 38.5, z: -235.75 })
 
     const save = createRuntimeSaveData()
     expect(save).toMatchObject({
@@ -66,12 +125,23 @@ describe('save runtime', () => {
         position: { x: 12, z: -4 },
         cordState: 'InHand',
       },
-      quest: { currentStep: 2, campLeaderDefeated: true },
+      quest: {
+        currentStep: 2,
+        campLeaderDefeated: true,
+        keyDrop: { x: 381.25, y: 38.5, z: -235.75 },
+      },
+      world: {
+        porticoUnlocked: true,
+        currentScene: 'hollow',
+        hollow: { heelstonePassDone: true, snagPulled: true },
+      },
     })
     expect(save.player.position.y).toBeCloseTo(10)
   })
 
-  it('restores vitals, a safe center position, quest, and cord In Hand', () => {
+  it('restores exact key drop, world state, vitals, position, and cord In Hand', () => {
+    const world = testWorldAdapter()
+    configureSaveWorldRuntimeAdapter(world.adapter)
     const data = createNewSaveData()
     data.player.health = 65
     data.player.stamina = 31
@@ -79,13 +149,14 @@ describe('save runtime', () => {
     data.quest.currentStep = 2
     data.quest.completedSteps = [1]
     data.quest.campLeaderDefeated = true
+    data.quest.keyDrop = { x: 381.25, y: 38.5, z: -235.75 }
     weaponRuntime.cord = {
       mode: 'Out',
       castKind: 'straight',
       retieRemaining: 0,
     }
 
-    applyRuntimeSaveData(data, () => 8, { x: 380, y: 38, z: -236 })
+    applyRuntimeSaveData(data, () => 8)
     const player = playerStore.getState()
     expect(player.vitals.health).toBe(65)
     expect(player.vitals.stamina).toBe(31)
@@ -94,22 +165,60 @@ describe('save runtime', () => {
       9 + PLAYER.collider.halfHeight + PLAYER.collider.radius,
     )
     expect(getQuestRuntimeSnapshot().keyDrop).toEqual({
-      x: 380,
-      y: 38,
-      z: -236,
+      x: 381.25,
+      y: 38.5,
+      z: -235.75,
     })
+    expect(world.hydrate).toHaveBeenCalledWith(data.world)
     expect(weaponRuntime.cord.mode).toBe('InHand')
+
+    data.player.health = 0
+    applyRuntimeSaveData(data, () => 8)
+    expect(player.vitals.health).toBe(PLAYER.health.max)
   })
 
-  it('loads and clears storage without browser globals', () => {
-    const storage = memoryStorage(JSON.stringify(createNewSaveData()))
-    expect(loadRuntimeSave(storage, () => 8).schemaVersion).toBe(1)
+  it('restores a non-default pending drop across reload and removes it after pickup', () => {
+    emitQuestEvent('talkedToHollen')
+    markCampLeaderDefeated({ x: 377.43, y: 40.12, z: -238.91 })
+    const storage = memoryStorage()
+    storage.setItem(
+      SAVE_CONFIG.storageKey,
+      serializeSave(createRuntimeSaveData()),
+    )
+
+    resetQuestRuntime()
+    loadRuntimeSave(storage, () => 8)
+    expect(getQuestRuntimeSnapshot().keyDrop).toEqual({
+      x: 377.43,
+      y: 40.12,
+      z: -238.91,
+    })
+    setKeyNearbyTransient(true)
+    expect(lootFrameShelterKey()).toBe(true)
+    const afterPickup = createRuntimeSaveData()
+    expect(afterPickup.quest.keyDrop).toBeNull()
+    storage.setItem(SAVE_CONFIG.storageKey, serializeSave(afterPickup))
+
+    resetQuestRuntime()
+    loadRuntimeSave(storage, () => 8)
+    expect(getQuestRuntimeSnapshot().quest.keyLooted).toBe(true)
+    expect(getQuestRuntimeSnapshot().keyDrop).toBeNull()
+  })
+
+  it('loads and clears both storage versions without browser globals', () => {
+    const storage = memoryStorage({
+      [SAVE_CONFIG.storageKey]: JSON.stringify(createNewSaveData()),
+      [SAVE_CONFIG.legacyStorageKey]: 'legacy',
+    })
+    expect(loadRuntimeSave(storage, () => 8).schemaVersion).toBe(2)
     clearRuntimeSave(storage, () => 8)
-    expect(storage.value()).toBeNull()
+    expect(storage.entries.size).toBe(0)
     expect(getQuestRuntimeSnapshot().quest.currentStep).toBe(1)
   })
 
-  it('autosaves progression, leader defeat, alive intervals, and page hide', () => {
+  it('autosaves persistent quest and world changes, alive intervals, and page hide', () => {
+    const world = testWorldAdapter()
+    configureSaveWorldRuntimeAdapter(world.adapter)
     const storage = memoryStorage()
     let interval: (() => void) | null = null
     let pageHide: (() => void) | null = null
@@ -127,20 +236,35 @@ describe('save runtime', () => {
     }
     const cleanup = installRuntimeAutosave(storage, host)
 
+    setHollenNearby(true)
+    expect(storage.entries.size).toBe(0)
     emitQuestEvent('talkedToHollen')
-    expect(storage.value()).not.toBeNull()
-    storage.removeItem(SAVE_CONFIG.storageKey)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
     markCampLeaderDefeated({ x: 1, y: 2, z: 3 })
-    expect(storage.value()).not.toBeNull()
-    storage.removeItem(SAVE_CONFIG.storageKey)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    world.notify()
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
     ;(interval as (() => void) | null)?.()
-    expect(storage.value()).not.toBeNull()
-    storage.removeItem(SAVE_CONFIG.storageKey)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    playerStore.getState().death.phase = 'Fading'
+    ;(interval as (() => void) | null)?.()
+    expect(storage.entries.size).toBe(0)
+    playerStore.getState().death.phase = 'Alive'
+    playerStore.getState().vitals.health = 0
+    ;(interval as (() => void) | null)?.()
+    expect(storage.entries.size).toBe(0)
     ;(pageHide as (() => void) | null)?.()
-    expect(storage.value()).not.toBeNull()
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
 
     cleanup()
     expect(host.clearInterval).toHaveBeenCalledWith(7)
     expect(host.removeEventListener).toHaveBeenCalled()
+
+    configureSaveWorldRuntimeAdapter(null)
+    installRuntimeAutosave(storage, host)()
   })
 })
