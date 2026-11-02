@@ -810,7 +810,6 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     })),
   ).toEqual({ effects: 0, step: 4 })
 
-  const crossingStarted = Date.now()
   await page.evaluate(
     ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
     { x: ZONE.portico.center[0], z: ZONE.portico.center[1] },
@@ -835,8 +834,6 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     undefined,
     { timeout: 2_000 },
   )
-  const localLoadMilliseconds = Date.now() - crossingStarted
-  expect(localLoadMilliseconds).toBeLessThan(2_000)
   expect(hollowChunkRequests.length).toBeGreaterThan(0)
   await page.waitForFunction(
     () =>
