@@ -89,7 +89,7 @@ import {
   weaponRuntime,
   type DamageLogEntry,
 } from './game/weapons/weaponRuntime'
-import { PerfOverlay, PerfSampler } from './ui/PerfOverlay'
+import { PerfOverlayGate, PerfSamplerGate } from './ui/PerfReadoutGate'
 import { getPerfStats, type PerfStats } from './ui/perfRuntime'
 import { QuestOverlay } from './ui/QuestOverlay'
 import { SceneTransitionOverlay } from './ui/SceneTransitionOverlay'
@@ -559,7 +559,7 @@ export default function App() {
         }}
         dpr={[1, 1.5]}
       >
-        {import.meta.env.DEV && <PerfSampler />}
+        <PerfSamplerGate />
         <Suspense fallback={null}>
           <Physics gravity={[0, -PLAYER.movement.gravity, 0]} timeStep={1 / 60}>
             <SceneManager />
@@ -568,7 +568,7 @@ export default function App() {
       </Canvas>
       <QuestOverlay />
       <SceneTransitionOverlay />
-      {import.meta.env.DEV && <PerfOverlay />}
+      <PerfOverlayGate />
     </main>
   )
 }
