@@ -256,6 +256,16 @@ M7 settings defaults (all GAME (NEW), revisable):
 - Heelstone pass: a dry hiss of cord through the ring ending in a small chime when the working end clears.
 - Music: sparse strings and wooden flute, combat layer adds drums. Use CC0 or licensed sources only; record source in /public/audio/CREDITS.md.
 
+M7 procedural audio defaults (all GAME (NEW), PLACEHOLDER and revisable):
+
+- All Slice 1 audio is synthesized at runtime. The lazy engine has 24 voices. Master, music, SFX and ambient sliders default to 80, 50, 80 and 60 and use the squared gain curve `(value / 100)^2`. The master compressor threshold is -12 dB with ratio 3.
+- A crossing bell ducks music 6 dB for 1.5 s. Pause filters music and ambience at 800 Hz and reduces both 9 dB over 0.3 s. The open filter is 20 kHz.
+- Zone wind uses a 0.07 Hz gain LFO. Surf swells every 6 to 9 s, is full at X = -150, falls to 25 percent at X = 300 and stays there farther east. Gulls occur every 8 to 20 s within 250 m of the west coast. Rope creaks occur every 5 to 12 s within 15 m of the rail or shelter. Waystation fire and wood are heard within 25 m. Hollow wind is 40 percent, surf is 15 percent and gulls are absent.
+- Cord whistle pitch maps blade speed 0 to 22 m/s onto 0.8x to 1.2x. The maximum-length snap is at 6.5 m. Portico sound is silent beyond 20 m and full at 2 m, with pitch rising 2 semitones and the low-pass opening from 400 Hz to 2000 Hz across that range.
+- Heelstone hiss follows the 1.2 s pass and chimes only on completion. Music uses seed 7, 72 bpm and D dorian, with phrases of 2 to 4 notes, rests of 4 to 12 beats, 5 Hz flute vibrato, 2 s combat entry, 6 s combat exit and 2 s crossfades.
+- Footsteps are 0.5 s apart at walk speed and 0.32 s apart at run speed, gain 0.35, with seeded pitch variation within 4 percent. Dirt is filtered at 1200 Hz. Stone uses a 2500 Hz band and 180 Hz body. The Ruin Shelf stone radius is 42 m.
+- Flesh hits use a 220 Hz body for 0.12 s. Buckler blocks use 880 Hz and 1320 Hz partials for 0.2 s. Player hurt uses a 140 Hz body for 0.15 s. Strike 3 gain is 1.15x. Guard-break block pitch is 3 semitones lower and is followed by the flesh hit.
+
 ## 13. Tech architecture
 
 - Build: Vite + TypeScript (strict).

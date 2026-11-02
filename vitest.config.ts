@@ -6,6 +6,10 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       include: [
+        'src/game/audio/audioBus.ts',
+        'src/game/audio/audioCues.ts',
+        'src/game/audio/mixer.ts',
+        'src/game/audio/musicDirector.ts',
         'src/game/pause/pause.ts',
         'src/game/weapons/cordState.ts',
         'src/game/quest/quest.ts',
@@ -20,6 +24,30 @@ export default defineConfig({
         'scripts/bundleBudget.mjs',
       ],
       thresholds: {
+        'src/game/audio/audioBus.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        'src/game/audio/audioCues.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        'src/game/audio/mixer.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        'src/game/audio/musicDirector.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
         'src/game/pause/pause.ts': {
           branches: 100,
           functions: 100,
