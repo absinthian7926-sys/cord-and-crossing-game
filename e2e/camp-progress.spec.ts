@@ -21,6 +21,8 @@ import { resumeGameAfterReload, startGame } from './helpers'
 test('keeps camp progress after a normal player death without debug mutations', async ({
   page,
 }) => {
+  await page.setViewportSize({ width: 320, height: 240 })
+
   const browserErrors: string[] = []
   page.on('pageerror', (error) => browserErrors.push(error.message))
   page.on('console', (message) => {
@@ -28,7 +30,8 @@ test('keeps camp progress after a normal player death without debug mutations', 
   })
 
   const startX = ENEMY_SPAWNS.camp.anchor[0]
-  const startZ = ENEMY_SPAWNS.camp.anchor[1] + 46
+  const startZ =
+    ENEMY_SPAWNS.camp.anchor[1] + CAMP_PROGRESS.checkpointRadius + 0.1
   const save = createNewSaveData()
   save.player.position = {
     x: startX,
