@@ -134,7 +134,9 @@ export function requestSceneTransition(
   return true
 }
 
-export function beginPendingSceneLoad(): boolean {
+export function beginPendingSceneLoad(
+  nowMilliseconds = performance.now(),
+): boolean {
   if (snapshot.pendingScene === null || snapshot.phase !== 'flashing')
     return false
   const nextScene = snapshot.pendingScene
@@ -146,6 +148,7 @@ export function beginPendingSceneLoad(): boolean {
     pendingScene: null,
     phase: 'loading',
     revision: snapshot.revision + 1,
+    transitionStartedMilliseconds: nowMilliseconds,
   })
   emitAudioEvent(audioBus, 'scene-change')
   return true
