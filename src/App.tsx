@@ -315,6 +315,7 @@ declare global {
         stamina: number
         deathPhase: string
         invulnerable: boolean
+        spawnInvulnerabilityRemainingSeconds: number
       }
       setPlayerVitals: (health: number, stamina: number) => void
       saveGame: () => boolean
@@ -730,6 +731,8 @@ export default function App() {
             stamina: state.vitals.stamina,
             deathPhase: state.death.phase,
             invulnerable: state.invulnerable,
+            spawnInvulnerabilityRemainingSeconds:
+              state.death.spawnInvulnerabilityRemainingSeconds,
           }
         },
         setPlayerVitals: (health, stamina) => {
