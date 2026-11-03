@@ -17,6 +17,7 @@ export function updateVitals(
   current: Vitals,
   deltaSeconds: number,
   running: boolean,
+  inSafeZone = false,
 ): void {
   const delta = Math.max(0, deltaSeconds)
   let stamina = current.stamina
@@ -34,11 +35,17 @@ export function updateVitals(
     )
   }
   const secondsSinceDamage = current.secondsSinceDamage + delta
+  const healthRegenerationDelay = inSafeZone
+    ? PLAYER.health.safeZoneRegenerationDelaySeconds
+    : PLAYER.health.regenerationDelaySeconds
+  const healthRegenerationRate = inSafeZone
+    ? PLAYER.health.safeZoneRegenerationPerSecond
+    : PLAYER.health.regenerationPerSecond
   const health =
-    secondsSinceDamage >= PLAYER.health.regenerationDelaySeconds
+    secondsSinceDamage >= healthRegenerationDelay
       ? Math.min(
           PLAYER.health.max,
-          current.health + PLAYER.health.regenerationPerSecond * delta,
+          current.health + healthRegenerationRate * delta,
         )
       : current.health
   current.health = health

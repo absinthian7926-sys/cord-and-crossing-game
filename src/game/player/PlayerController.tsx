@@ -9,6 +9,7 @@ import {
 import { useCallback, useEffect, useRef } from 'react'
 import { Group, Vector3, type AnimationClip, type Object3D } from 'three'
 import { AUDIO } from '../../data/audio'
+import { ENEMY_AI } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
 import { ZONE } from '../../data/zone'
 import {
@@ -75,6 +76,15 @@ const input = new Vector3(),
   dodge = new Vector3(),
   translation = { x: 0, y: 0, z: 0 }
 const deathRespawn = { x: 0, z: 0 }
+const safeZoneRadiusSquared = ENEMY_AI.safeZoneRadius * ENEMY_AI.safeZoneRadius
+
+function isInsideWaystationSafeZone(
+  enabled: boolean,
+  x: number,
+  z: number,
+): boolean {
+  return enabled && x * x + z * z <= safeZoneRadiusSquared
+}
 
 export function PlayerController() {
   const body = useRef<RapierRigidBody>(null),
@@ -256,6 +266,17 @@ export function PlayerController() {
     }
     if (isGameplayInputLocked()) {
       clearInput()
+      const worldConfiguration = getWorldConfiguration()
+      updateVitals(
+        store.vitals,
+        delta,
+        false,
+        isInsideWaystationSafeZone(
+          worldConfiguration.safeZoneEnabled,
+          store.position.x,
+          store.position.z,
+        ),
+      )
       stepHeroAnimation(
         delta,
         false,
@@ -290,7 +311,17 @@ export function PlayerController() {
     }
     if (isHeelstonePassRunning()) {
       vertical.current = 0
-      updateVitals(store.vitals, delta, false)
+      const worldConfiguration = getWorldConfiguration()
+      updateVitals(
+        store.vitals,
+        delta,
+        false,
+        isInsideWaystationSafeZone(
+          worldConfiguration.safeZoneEnabled,
+          store.position.x,
+          store.position.z,
+        ),
+      )
       stepHeroAnimation(
         delta,
         false,
@@ -397,7 +428,16 @@ export function PlayerController() {
     if (grounded && vertical.current < 0) vertical.current = 0
     if (direction.lengthSq() > 0.001 && visual.current)
       visual.current.rotation.y = Math.atan2(direction.x, direction.z)
-    updateVitals(store.vitals, delta, running)
+    updateVitals(
+      store.vitals,
+      delta,
+      running,
+      isInsideWaystationSafeZone(
+        worldConfiguration.safeZoneEnabled,
+        position.x,
+        position.z,
+      ),
+    )
     store.invulnerable =
       invulnerableLeft.current > 0 || isPlayerSpawnInvulnerable(store.death)
     const movementSpeed = direction.lengthSq() > 0.001 ? speed : 0

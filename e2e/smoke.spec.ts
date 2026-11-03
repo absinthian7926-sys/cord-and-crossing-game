@@ -465,6 +465,22 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     QUEST.steps[3].trackerText,
   )
 
+  const saveTestPosition = {
+    x: ZONE.locations.A.radius + 5,
+    z: ZONE.locations.A.center[1],
+  }
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    saveTestPosition,
+  )
+  await page.waitForFunction(
+    ({ x, z }) => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - x, position.z - z) < 0.5
+    },
+    saveTestPosition,
+    { timeout: 5_000 },
+  )
   await page.evaluate(() => {
     const debug = window.__CORD_AND_CROSSING_DEBUG__!
     debug.setPlayerVitals(73, 41)

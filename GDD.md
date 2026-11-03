@@ -90,7 +90,7 @@ Time of day: fixed late afternoon in Slice 1 (warm sun low over the sea). Day-ni
 
 - Camera: third-person orbit, shoulder offset 0.6 m right, distance 4.5 m (2.5 to 7 m on scroll), collision-aware with 0.2 m clearance and recovery damping 12 after obstruction. GAME (NEW): collision may pull in to 0.3 m when geometry is closer than the scroll minimum.
 - Movement: walk 2.2 m/s, run 5.5 m/s (Shift), dodge roll 4 m over 0.45 s with 0.3 s of invulnerability, 0.8 s cooldown. Jump 1.1 m. No climbing in Slice 1.
-- Health: 100. Regenerates 4 per second after 6 s without damage.
+- Health: 100. Regenerates 4 per second after 4 s without damage. Inside the 25 m waystation safe zone, health regenerates at 20 per second with no delay. The prior 6 s delay changed to 4 s, and the safe-zone rate and no-delay rule are GAME, decided by Ryan on 2026-11-03.
 - Stamina: 100. Run costs 8/s, dodge 25, cord cast 15. Regenerates 20/s after 1 s. After run drains stamina to 0, running re-engages at 10 stamina.
 - Death: respawn at waystation or last rested portico area, keep quest state.
 - Controls (default): WASD move, mouse look, LMB close strike, RMB hold to aim then release to cast, Q recall line early, Space jump, Ctrl or C dodge, E interact, F clear the line (heelstone pass), Tab quest log, Esc pause.

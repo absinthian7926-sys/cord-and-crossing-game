@@ -70,12 +70,21 @@ describe('player vitals', () => {
     expect(vitals.stamina).toBe(0)
   })
 
-  it('waits six seconds after damage, then regenerates health', () => {
+  it('waits four seconds after damage, then regenerates health', () => {
     const vitals = initialVitals()
     applyDamage(vitals, 40)
-    updateVitals(vitals, 5.5, false)
+    updateVitals(vitals, 3.9, false)
     expect(vitals.health).toBe(60)
-    updateVitals(vitals, 0.5, false)
-    expect(vitals.health).toBe(62)
+    updateVitals(vitals, 0.1, false)
+    expect(vitals.health).toBeCloseTo(60.4)
+  })
+
+  it('regenerates 20 health per second immediately in the safe zone', () => {
+    const vitals = initialVitals()
+    applyDamage(vitals, 40)
+    updateVitals(vitals, 1, false, true)
+    expect(vitals.health).toBe(80)
+    updateVitals(vitals, 2, false, true)
+    expect(vitals.health).toBe(PLAYER.health.max)
   })
 })
