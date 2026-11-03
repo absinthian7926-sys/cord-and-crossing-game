@@ -2,6 +2,7 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './e2e',
+  workers: process.env.CI ? 1 : undefined,
   use: { headless: true },
   projects: [
     {
