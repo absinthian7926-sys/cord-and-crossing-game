@@ -31,7 +31,7 @@ describe('enemy spawns', () => {
     expect(plan).toHaveLength(17)
   })
 
-  it('keeps all nine camp enemies within the 30 m spread', () => {
+  it('keeps all nine camp enemies within the 30 m camp footprint', () => {
     for (const spawn of createSpawnPlan().filter(
       ({ group }) => group === 'camp',
     )) {

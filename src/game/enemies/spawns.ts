@@ -4,6 +4,7 @@ import {
   ENEMY_TYPES,
   CAMP_LEADER,
   ENEMY_VARIANTS,
+  type CampGroupId,
   type EnemyType,
   type EnemyVariant,
 } from '../../data/enemies'
@@ -17,6 +18,7 @@ export type SpawnDefinition = {
   enemyType: EnemyType
   variant?: EnemyVariant
   group: SpawnGroup
+  campGroup?: CampGroupId
   x: number
   z: number
   anchorX: number
@@ -52,6 +54,7 @@ export function createCampLeaderSpawn(
     enemyType: CAMP_LEADER.baseType,
     variant: ENEMY_VARIANTS.campLeader,
     group: 'camp',
+    campGroup: 'leader',
     x,
     z,
     anchorX: x,
@@ -63,33 +66,36 @@ export function createCampLeaderSpawn(
   }
 }
 
-function addCampSpawns(
-  target: SpawnDefinition[],
-  enemyType: EnemyType,
-  count: number,
-  firstOrdinal: number,
-  totalCount: number,
-): void {
+function addCampSpawns(target: SpawnDefinition[]): void {
   const camp = ENEMY_SPAWNS.camp
-  for (let index = 0; index < count; index += 1) {
-    const ordinal = firstOrdinal + index
-    const angle = (Math.PI * 2 * ordinal) / totalCount
-    const radius = (camp.spreadRadius * (ordinal + 1)) / (totalCount + 1)
-    const x = camp.anchor[0] + Math.cos(angle) * radius
-    const z = camp.anchor[1] + Math.sin(angle) * radius
-    target.push({
-      id: `camp-${enemyType}-${index + 1}`,
-      enemyType,
-      group: 'camp',
-      x,
-      z,
-      anchorX: x,
-      anchorZ: z,
-      patrolStartX: x,
-      patrolStartZ: z,
-      patrolEndX: x,
-      patrolEndZ: z,
-    })
+  let brigandOrdinal = 0
+  let archerOrdinal = 0
+  for (const campGroup of camp.groups) {
+    for (const member of campGroup.members) {
+      const enemyType: EnemyType = member.enemyType
+      const ordinal =
+        enemyType === 'roadBrigand'
+          ? (brigandOrdinal += 1)
+          : (archerOrdinal += 1)
+      const x =
+        camp.anchor[0] + campGroup.groupOffset[0] + member.groupOffset[0]
+      const z =
+        camp.anchor[1] + campGroup.groupOffset[1] + member.groupOffset[1]
+      target.push({
+        id: `camp-${enemyType}-${ordinal}`,
+        enemyType,
+        group: 'camp',
+        campGroup: campGroup.id,
+        x,
+        z,
+        anchorX: x,
+        anchorZ: z,
+        patrolStartX: x,
+        patrolStartZ: z,
+        patrolEndX: x,
+        patrolEndZ: z,
+      })
+    }
   }
 }
 
@@ -169,22 +175,7 @@ function addRoadPatrol(target: SpawnDefinition[]): void {
 
 export function createSpawnPlan(): SpawnDefinition[] {
   const target: SpawnDefinition[] = []
-  const campTotal =
-    ENEMY_SPAWNS.camp.roadBrigands + ENEMY_SPAWNS.camp.brigandArchers
-  addCampSpawns(
-    target,
-    'roadBrigand',
-    ENEMY_SPAWNS.camp.roadBrigands,
-    0,
-    campTotal,
-  )
-  addCampSpawns(
-    target,
-    'brigandArcher',
-    ENEMY_SPAWNS.camp.brigandArchers,
-    ENEMY_SPAWNS.camp.roadBrigands,
-    campTotal,
-  )
+  addCampSpawns(target)
   addHoundPacks(target)
   addRoadPatrol(target)
   return target

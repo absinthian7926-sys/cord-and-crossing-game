@@ -165,6 +165,36 @@ export const ENEMY_SPAWNS = {
     spreadRadius: 30,
     roadBrigands: 6,
     brigandArchers: 3,
+    // GAME, decided by Ryan on 2026-11-03. PLACEHOLDER group layout.
+    groups: [
+      {
+        id: 'tent-west',
+        groupOffset: [-24, 0],
+        members: [
+          { enemyType: 'roadBrigand', groupOffset: [-2, -1] },
+          { enemyType: 'roadBrigand', groupOffset: [2, 1] },
+          { enemyType: 'brigandArcher', groupOffset: [-5, 0] },
+        ],
+      },
+      {
+        id: 'tent-south',
+        groupOffset: [8, -22],
+        members: [
+          { enemyType: 'roadBrigand', groupOffset: [-2, 0] },
+          { enemyType: 'roadBrigand', groupOffset: [2, 0] },
+          { enemyType: 'brigandArcher', groupOffset: [0, -5] },
+        ],
+      },
+      {
+        id: 'leader',
+        groupOffset: [0, 4],
+        members: [
+          { enemyType: 'roadBrigand', groupOffset: [-2, 0] },
+          { enemyType: 'roadBrigand', groupOffset: [2, 0] },
+          { enemyType: 'brigandArcher', groupOffset: [0, 5] },
+        ],
+      },
+    ],
   },
   houndPacks: [
     { anchor: [25, -160], size: 3 },
@@ -176,6 +206,8 @@ export const ENEMY_SPAWNS = {
     routeDistances: [150, 350],
   },
 } as const
+
+export type CampGroupId = (typeof ENEMY_SPAWNS.camp.groups)[number]['id']
 
 export const ENEMY_DEATH = {
   fallSeconds: 1,
