@@ -36,12 +36,13 @@ Expected:
 
 ### 2. Take the frame shelter key
 
-Follow the cart road east and uphill. The brigand camp is northeast of the road, about 450 m from the waystation, centered near `(380, -240)`. Defeat the camp leader near the fire. Approach the dropped iron ring key and press E when **E Take key** appears. Clearing every other camp enemy is optional.
+Follow the cart road east and uphill, then approach from the south road to avoid the cliff path. The brigand camp is northeast of the road, about 450 m from the waystation, centered near `(380, -240)`. Its enemies are split into a west tent group, a south tent group and the leader group at the fire. Pull one outer group, retreat to recover if needed, then take the leader group. Defeat the camp leader, approach the dropped iron ring key and press E when **E Take key** appears. Clearing every other camp enemy is optional.
 
 Expected:
 
 - Road brigands telegraph a raised sword before striking. Archers visibly draw before releasing arrows.
 - Blade hits, buckler blocks, player hurt, footsteps, arrows, and combat music are audible.
+- Entering 45 m of the camp activates a checkpoint on the south road. A death during step 2 respawns there. Standard camp enemies already defeated stay down until the key is taken, and the leader keeps its remaining health after a player death.
 - The quest log keeps the key after pickup and advances to the return objective.
 
 ### 3. Return to Hollen

@@ -400,8 +400,11 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     () =>
       window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep === 2,
   )
-  await expect(page.locator('.quest-tracker')).toHaveText(
+  await expect(page.locator('.quest-tracker-objective')).toHaveText(
     QUEST.steps[1].trackerText,
+  )
+  await expect(page.locator('.quest-tracker-hint')).toHaveText(
+    'Approach from the south road to avoid the cliff path.',
   )
 
   await page.keyboard.press('Tab')
@@ -461,7 +464,7 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     () =>
       window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep === 4,
   )
-  await expect(page.locator('.quest-tracker')).toHaveText(
+  await expect(page.locator('.quest-tracker-objective')).toHaveText(
     QUEST.steps[3].trackerText,
   )
 

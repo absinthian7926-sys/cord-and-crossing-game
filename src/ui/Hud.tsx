@@ -18,6 +18,7 @@ import { getSettingsRuntimeSnapshot } from '../game/settings/settingsRuntime'
 
 export type QuestTrackerHud = {
   readonly text: string
+  readonly hint?: string
   readonly revision: number
 }
 
@@ -253,7 +254,10 @@ export function Hud({ questTracker = null }: HudProps) {
           aria-live="polite"
           style={{ fontSize: QUEST_UI.tracker.fontSizePixels }}
         >
-          {questTracker.text}
+          <div className="quest-tracker-objective">{questTracker.text}</div>
+          {questTracker.hint && (
+            <div className="quest-tracker-hint">{questTracker.hint}</div>
+          )}
         </div>
       )}
       <div

@@ -16,6 +16,7 @@ export type QuestStepDefinition = {
   id: string
   order: QuestStepId
   trackerText: string
+  trackerHint?: string
   completionEvent: QuestEventType
 }
 
@@ -30,6 +31,8 @@ export const QUEST_STEPS = [
     id: 'take-frame-shelter-key',
     order: 2,
     trackerText: 'Clear the brigand camp and take the frame shelter key.',
+    // PLACEHOLDER, GAME (NEW): M7 camp route signposting.
+    trackerHint: 'Approach from the south road to avoid the cliff path.',
     completionEvent: QUEST_EVENT_TYPES.keyLooted,
   },
   {

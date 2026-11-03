@@ -194,6 +194,7 @@ M5 implementation defaults (all GAME (NEW), revisable):
 - M5 used save key `cord-and-crossing.save.v1` with schema version 1. M6 migrates a valid v1 record to the v2 rules below.
 - Steps 4 to 6 are defined in the quest data and may advance through the dev hook for tests, but M5 gameplay emits events only for steps 1 to 3. No portico, crossing, Hollow, effect or reward behavior exists in M5.
 - The exact PLACEHOLDER tracker text is GAME (NEW): "Talk to Hollen."; "Clear the brigand camp and take the frame shelter key."; "Return to Hollen."; "Go to the Ruin Shelf, use the key, and cross the portico screen."; "Clear the line, snag the rope post, and defeat the final encounter."; and "Return through the screen and report to Hollen."
+- The exact step 2 PLACEHOLDER tracker hint is GAME (NEW): "Approach from the south road to avoid the cliff path."
 - The exact PLACEHOLDER Hollen dialogue lines are GAME (NEW): "Brigands took the iron ring keys for the old frame shelter at the rise."; "The frame shelter key is at the brigand camp."; "Once you carry an effect, press F to clear the line through the heelstones."; "Take the key to the Ruin Shelf and cross the portico screen."; "Clear the line, snag the rope post, and defeat the final encounter in the Hollow."; and "Report when you return through the screen."
 - The exact PLACEHOLDER dialogue choices are GAME (NEW): "I will bring one back."; "Leave"; "I am looking for it."; "I understand."; "Say that again."; "I will go to the shelf."; "I know the work."; and "The work is finished."
 
