@@ -19,6 +19,7 @@ export type AiMoveTarget =
   | 'None'
   | 'PatrolPoint'
   | 'Player'
+  | 'CirclePlayer'
   | 'FlankPlayer'
   | 'AwayFromPlayer'
   | 'Anchor'
@@ -35,6 +36,7 @@ export type AiInputs = {
   stateElapsedSeconds: number
   attackCooldownSeconds: number
   attackWindupSeconds: number
+  attackTokenGranted: boolean
   staggered?: boolean
 }
 
@@ -256,6 +258,14 @@ export function stepAi(
         inputs.distanceToPlayer > attackDistance
       ) {
         enterState(result, state, 'Chase', elapsedSeconds)
+      } else if (!inputs.attackTokenGranted) {
+        result.attackCooldownSeconds = Math.max(
+          result.attackCooldownSeconds,
+          attackWindupDuration(inputs.enemyType),
+        )
+        result.attackWindupSeconds = 0
+        if (inputs.enemyType !== 'brigandArcher')
+          result.moveTarget = 'CirclePlayer'
       } else {
         stepAttackCycle(
           result,

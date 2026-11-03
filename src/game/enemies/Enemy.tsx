@@ -18,6 +18,7 @@ import {
 import {
   CAMP_LEADER,
   ENEMY_AI,
+  ENEMY_ATTACK_TOKENS,
   ENEMY_DEATH,
   ENEMY_PRESENTATION,
   ENEMY_ARROW,
@@ -68,7 +69,15 @@ import {
   type AiMoveTarget,
 } from './ai'
 import {
+  applyAttackTokenEvent,
+  ownsAttackToken,
+  releaseAttackToken,
+  resolveWaitingTarget,
+  tokenKindForEnemy,
+} from './attackTokens'
+import {
   canEnemyRespawn,
+  enemyRuntime,
   fireEnemyArrow,
   requestHoundCordBite,
   resetEnemyAtAnchor,
@@ -80,6 +89,7 @@ import { advanceRespawnElapsed, canRespawnFromElapsed } from './spawns'
 type EnemyProps = { enemy: EnemyRecord }
 
 const movement = { x: 0, y: 0, z: 0 }
+const waitingTarget = { x: 0, z: 0 }
 
 function colliderRadius(enemy: EnemyRecord): number {
   return ENEMY_TYPES[enemy.type].collider.radius * enemy.scale
@@ -99,9 +109,21 @@ function colliderHalfHeight(enemy: EnemyRecord): number {
 
 function moveSpeedFor(type: EnemyType, intent: AiMoveTarget): number {
   const speed = ENEMY_TYPES[type].moveSpeed
-  return intent === 'PatrolPoint'
-    ? speed * ENEMY_AI.patrolSpeedMultiplier
-    : speed
+  if (intent === 'PatrolPoint') return speed * ENEMY_AI.patrolSpeedMultiplier
+  if (intent === 'CirclePlayer')
+    return speed * ENEMY_ATTACK_TOKENS.waitingSpeedMultiplier
+  return speed
+}
+
+function attackRangeFor(type: EnemyType): number {
+  return type === 'brigandArcher'
+    ? ENEMY_TYPES.brigandArcher.keepAway.maximumDistance
+    : ENEMY_TYPES[type].attackRange
+}
+
+function attackWindupFor(type: EnemyType): number {
+  if (type === 'brigandArcher') return ENEMY_TYPES.brigandArcher.drawSeconds
+  return ENEMY_TYPES[type].attackWindupSeconds
 }
 
 function canDrawBow(enemy: EnemyRecord): boolean {
@@ -186,6 +208,7 @@ export function Enemy({ enemy }: EnemyProps) {
     stateElapsedSeconds: 0,
     attackCooldownSeconds: 0,
     attackWindupSeconds: 0,
+    attackTokenGranted: false,
   })
   const nextTranslation = useRef({ x: enemy.x, y: enemy.y, z: enemy.z })
 
@@ -242,13 +265,14 @@ export function Enemy({ enemy }: EnemyProps) {
     controller.setMinSlopeSlideAngle((50 * Math.PI) / 180)
     if (enemyCollider) registerCameraExcludedCollider(enemyCollider.handle)
     return () => {
+      releaseAttackToken(enemyRuntime.attackTokens, enemy.id, false)
       if (enemyCollider) unregisterCameraExcludedCollider(enemyCollider.handle)
       world.removeCharacterController(controller)
       character.current = null
       destroyAnimationController(animation.current)
       animation.current = null
     }
-  }, [world])
+  }, [enemy.id, world])
 
   useFrame((_, rawDelta) => {
     const enemyBody = body.current
@@ -406,11 +430,53 @@ export function Enemy({ enemy }: EnemyProps) {
     inputs.attackWindupSeconds = enemy.drawRemaining
     inputs.staggered = wasStaggered
 
+    const attackTokenKind = tokenKindForEnemy(enemy.type)
+    const attackCycleReady =
+      enemy.state === 'Attack' &&
+      lineOfSight &&
+      distanceToPlayer <= attackRangeFor(enemy.type) &&
+      !wasStaggered &&
+      enemy.attackCooldown <= attackWindupFor(enemy.type) + delta
+    let attackTokenGranted = ownsAttackToken(
+      enemyRuntime.attackTokens,
+      enemy.id,
+      attackTokenKind,
+    )
+    if (attackCycleReady)
+      attackTokenGranted = applyAttackTokenEvent(
+        enemyRuntime.attackTokens,
+        enemy.id,
+        attackTokenKind,
+        'request',
+        false,
+      )
+    else if (attackTokenGranted) {
+      releaseAttackToken(enemyRuntime.attackTokens, enemy.id, false)
+      attackTokenGranted = false
+    }
+    inputs.attackTokenGranted = attackTokenGranted
+
     const result = stepAi(enemy.state, inputs, delta, aiResult.current)
     enemy.state = result.state
     enemy.stateElapsed = result.stateElapsedSeconds
     enemy.attackCooldown = result.attackCooldownSeconds
     enemy.drawRemaining = result.attackWindupSeconds
+    if (result.attack)
+      applyAttackTokenEvent(
+        enemyRuntime.attackTokens,
+        enemy.id,
+        attackTokenKind,
+        'impact',
+        false,
+      )
+    else if (result.state !== 'Attack' || enemy.staggerRemaining > 0)
+      applyAttackTokenEvent(
+        enemyRuntime.attackTokens,
+        enemy.id,
+        attackTokenKind,
+        'leftAttack',
+        false,
+      )
     if (result.healAtAnchor) enemy.hp = enemy.maxHp
     if (
       distanceToPlayer > 0 &&
@@ -516,6 +582,18 @@ export function Enemy({ enemy }: EnemyProps) {
     } else if (intent === 'Player') {
       targetX = player.position.x
       targetZ = player.position.z
+      shouldMove = true
+    } else if (intent === 'CirclePlayer') {
+      resolveWaitingTarget(
+        waitingTarget,
+        enemy.id,
+        enemy.x,
+        enemy.z,
+        player.position.x,
+        player.position.z,
+      )
+      targetX = waitingTarget.x
+      targetZ = waitingTarget.z
       shouldMove = true
     } else if (intent === 'FlankPlayer') {
       const inverseDistance = distanceToPlayer > 0 ? 1 / distanceToPlayer : 0

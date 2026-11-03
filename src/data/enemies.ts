@@ -228,3 +228,11 @@ export const ENEMY_ATTACK = {
   brigandComboStaggerHitIndex: 2,
   breaksGuardByDefault: false,
 } as const
+
+export const ENEMY_ATTACK_TOKENS = {
+  // GAME, decided by Ryan on 2026-11-03.
+  meleeCap: 2,
+  archerCap: 2,
+  waitingRadius: 3.5,
+  waitingSpeedMultiplier: 0.5,
+} as const

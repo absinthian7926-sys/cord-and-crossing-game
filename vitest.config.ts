@@ -12,6 +12,7 @@ export default defineConfig({
         'src/game/audio/mixer.ts',
         'src/game/audio/musicDirector.ts',
         'src/game/pause/pause.ts',
+        'src/game/enemies/attackTokens.ts',
         'src/game/weapons/cordState.ts',
         'src/game/quest/quest.ts',
         'src/game/save/save.ts',
@@ -62,6 +63,12 @@ export default defineConfig({
           statements: 100,
         },
         'src/game/pause/pause.ts': {
+          branches: 100,
+          functions: 100,
+          lines: 100,
+          statements: 100,
+        },
+        'src/game/enemies/attackTokens.ts': {
           branches: 100,
           functions: 100,
           lines: 100,

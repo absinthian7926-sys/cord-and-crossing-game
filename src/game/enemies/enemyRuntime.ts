@@ -9,6 +9,13 @@ import {
 } from '../../data/enemies'
 import { heightAt } from '../world/terrain'
 import { shouldBucklerBlock, type AiState } from './ai'
+import {
+  applyAttackTokenEvent,
+  clearAttackTokens,
+  createAttackTokenState,
+  releaseAttackToken,
+  tokenKindForEnemy,
+} from './attackTokens'
 import { createArrowPool, launchArrow } from './projectiles'
 import {
   advanceRespawnElapsed,
@@ -119,6 +126,7 @@ const INITIAL_RANDOM_STATE = 0x51_4f_4e_45
 type EnemySceneState = {
   readonly records: EnemyRecord[]
   readonly arrows: ReturnType<typeof createArrowPool>
+  readonly attackTokens: ReturnType<typeof createAttackTokenState>
   initialized: boolean
   debugSpawnSequence: number
   randomState: number
@@ -128,6 +136,7 @@ function createEnemySceneState(): EnemySceneState {
   return {
     records: [],
     arrows: createArrowPool(),
+    attackTokens: createAttackTokenState(),
     initialized: false,
     debugSpawnSequence: 0,
     randomState: INITIAL_RANDOM_STATE,
@@ -214,6 +223,7 @@ function makeRecord(spawn: EnemySpawnLike): EnemyRecord {
 export const enemyRuntime = {
   records: enemyScenes.zone.records,
   arrows: enemyScenes.zone.arrows,
+  attackTokens: enemyScenes.zone.attackTokens,
   campLeaderDefeated: false,
 }
 
@@ -227,6 +237,7 @@ export function activateEnemyScene(scene: EnemyScene): boolean {
   const state = activeSceneState()
   enemyRuntime.records = state.records
   enemyRuntime.arrows = state.arrows
+  enemyRuntime.attackTokens = state.attackTokens
   notifyRoster()
   return true
 }
@@ -242,6 +253,7 @@ export function resetEnemySceneRosters(): void {
     const state = enemyScenes[scene]
     state.records.length = 0
     state.arrows.active.fill(0)
+    clearAttackTokens(state.attackTokens)
     state.initialized = false
     state.debugSpawnSequence = 0
     state.randomState = INITIAL_RANDOM_STATE
@@ -249,6 +261,7 @@ export function resetEnemySceneRosters(): void {
   activeEnemyScene = 'zone'
   enemyRuntime.records = enemyScenes.zone.records
   enemyRuntime.arrows = enemyScenes.zone.arrows
+  enemyRuntime.attackTokens = enemyScenes.zone.attackTokens
   enemyRuntime.campLeaderDefeated = false
   notifyRoster()
 }
@@ -271,6 +284,7 @@ export function initializeEnemyRoster(spawns: readonly EnemySpawnLike[]): void {
   state.debugSpawnSequence = 0
   state.randomState = INITIAL_RANDOM_STATE
   state.arrows.active.fill(0)
+  clearAttackTokens(state.attackTokens)
   if (activeEnemyScene === 'zone') enemyRuntime.campLeaderDefeated = false
   notifyRoster()
 }
@@ -443,7 +457,22 @@ export function damageEnemy(
       enemy.staggerRemaining,
       meta.staggerSeconds ?? 0,
     )
+  if (castStaggersLight || comboThreeStaggersBrigand)
+    applyAttackTokenEvent(
+      enemyRuntime.attackTokens,
+      enemy.id,
+      tokenKindForEnemy(enemy.type),
+      'stagger',
+      false,
+    )
   if (enemy.hp === 0) {
+    applyAttackTokenEvent(
+      enemyRuntime.attackTokens,
+      enemy.id,
+      tokenKindForEnemy(enemy.type),
+      'death',
+      false,
+    )
     enemy.phase = 'Dying'
     enemy.deathElapsed = 0
     enemy.respawnElapsed = 0
@@ -526,11 +555,13 @@ export function resetEnemiesNearDeathToReturn(
       enemy.state = 'Return'
       enemy.stateElapsed = 0
       enemy.drawRemaining = 0
+      releaseAttackToken(enemyRuntime.attackTokens, enemy.id, false)
     }
   }
 }
 
 export function resetEnemyAtAnchor(enemy: EnemyRecord): void {
+  releaseAttackToken(enemyRuntime.attackTokens, enemy.id, false)
   enemy.state = 'Idle'
   enemy.hp = enemy.maxHp
   enemy.x = enemy.anchorX
