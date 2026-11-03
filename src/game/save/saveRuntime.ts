@@ -1,6 +1,8 @@
 import { PLAYER } from '../../data/player'
 import { SAVE_CONFIG } from '../../data/quests'
 import { resetEffectRuntime } from '../effects/effectRuntime'
+import { isCampQuestActive } from '../enemies/campProgress'
+import { restoreCampEnemyDeaths } from '../enemies/enemyRuntime'
 import { createPlayerDeathState } from '../player/death'
 import { playerStore } from '../player/playerStore'
 import {
@@ -89,6 +91,8 @@ export function createRuntimeSaveData(): SaveDataV2 {
     quest: quest.quest,
     campLeaderDefeated: quest.campLeaderDefeated,
     keyDrop: quest.keyDrop,
+    campCheckpointActive: quest.campCheckpointActive,
+    deadCampEnemyIds: quest.deadCampEnemyIds,
     world: {
       ...world,
       hollow: { ...world.hollow },
@@ -123,6 +127,12 @@ export function applyRuntimeSaveData(
     data.quest.campLeaderDefeated,
     data.quest.keyDrop,
     data.world.tasselEarned,
+    data.quest.campCheckpointActive,
+    data.quest.deadCampEnemyIds,
+  )
+  restoreCampEnemyDeaths(
+    data.quest.deadCampEnemyIds,
+    isCampQuestActive(data.quest.currentStep, data.quest.keyLooted),
   )
   resetWeaponRuntime()
   resetWeaponToInHand()

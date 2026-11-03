@@ -32,6 +32,7 @@ import {
   isHeelstonePassRunning,
 } from '../effects/effectRuntime'
 import { resetEnemiesNearDeathToReturn } from '../enemies/enemyRuntime'
+import { resolveCampDeathRespawn } from '../enemies/campProgress'
 import {
   createFootstepOutput,
   createFootstepState,
@@ -44,6 +45,10 @@ import {
   getSceneRuntimeSnapshot,
   getWorldConfiguration,
 } from '../scenes/sceneRuntime'
+import {
+  getQuestRuntimeSnapshot,
+  trySetCampCheckpoint,
+} from '../quest/questRuntime'
 import { resetWeaponToInHand } from '../weapons/weaponRuntime'
 import {
   beginPlayerDeath,
@@ -69,6 +74,7 @@ const input = new Vector3(),
   move = new Vector3(),
   dodge = new Vector3(),
   translation = { x: 0, y: 0, z: 0 }
+const deathRespawn = { x: 0, z: 0 }
 
 export function PlayerController() {
   const body = useRef<RapierRigidBody>(null),
@@ -194,6 +200,8 @@ export function PlayerController() {
     const delta = getPausableDelta(rawDelta)
     if (delta === 0) return
     const store = playerStore.getState()
+    if (getSceneRuntimeSnapshot().currentScene === 'zone')
+      trySetCampCheckpoint(store.position.x, store.position.z)
     if (beginPlayerDeath(store.death, store.vitals.health)) {
       clearInput()
       dodgeLeft.current = 0
@@ -212,13 +220,23 @@ export function PlayerController() {
     if (respawned) {
       const position = store.position
       const worldConfiguration = getWorldConfiguration()
+      const checkpointActive =
+        worldConfiguration.scene === 'zone' &&
+        getQuestRuntimeSnapshot().campCheckpointActive
+      resolveCampDeathRespawn(
+        deathRespawn,
+        checkpointActive,
+        worldConfiguration.respawn.x,
+        worldConfiguration.respawn.z,
+      )
+      const respawnGroundY = checkpointActive
+        ? worldConfiguration.sampleHeight(deathRespawn.x, deathRespawn.z)
+        : worldConfiguration.respawn.y
       resetVitalsForRespawn(store.vitals)
-      position.x = worldConfiguration.respawn.x
+      position.x = deathRespawn.x
       position.y =
-        worldConfiguration.respawn.y +
-        PLAYER.collider.halfHeight +
-        PLAYER.collider.radius
-      position.z = worldConfiguration.respawn.z
+        respawnGroundY + PLAYER.collider.halfHeight + PLAYER.collider.radius
+      position.z = deathRespawn.z
       body.current.setTranslation(position, true)
       body.current.setNextKinematicTranslation(position)
       store.teleportTarget = null

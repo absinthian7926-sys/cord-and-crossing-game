@@ -11,10 +11,13 @@ import {
   emitQuestEvent,
   getQuestRuntimeSnapshot,
   lootFrameShelterKey,
+  markCampEnemyDead,
+  markCampEnemyRespawned,
   markCampLeaderDefeated,
   resetQuestRuntime,
   setHollenNearby,
   setKeyNearbyTransient,
+  trySetCampCheckpoint,
 } from '../game/quest/questRuntime'
 import {
   applyRuntimeSaveData,
@@ -121,6 +124,8 @@ describe('save runtime', () => {
     player.vitals.health = 72
     player.vitals.stamina = 48
     emitQuestEvent('talkedToHollen')
+    expect(trySetCampCheckpoint(380, -195)).toBe(true)
+    expect(markCampEnemyDead('camp-roadBrigand-1')).toBe(true)
     markCampLeaderDefeated({ x: 381.25, y: 38.5, z: -235.75 })
 
     const save = createRuntimeSaveData()
@@ -135,6 +140,8 @@ describe('save runtime', () => {
         currentStep: 2,
         campLeaderDefeated: true,
         keyDrop: { x: 381.25, y: 38.5, z: -235.75 },
+        campCheckpointActive: true,
+        deadCampEnemyIds: ['camp-roadBrigand-1'],
       },
       world: {
         porticoUnlocked: true,
@@ -156,6 +163,8 @@ describe('save runtime', () => {
     data.quest.completedSteps = [1]
     data.quest.campLeaderDefeated = true
     data.quest.keyDrop = { x: 381.25, y: 38.5, z: -235.75 }
+    data.quest.campCheckpointActive = true
+    data.quest.deadCampEnemyIds = ['camp-roadBrigand-1']
     weaponRuntime.cord = {
       mode: 'Out',
       castKind: 'straight',
@@ -175,6 +184,10 @@ describe('save runtime', () => {
       y: 38.5,
       z: -235.75,
     })
+    expect(getQuestRuntimeSnapshot().campCheckpointActive).toBe(true)
+    expect(getQuestRuntimeSnapshot().deadCampEnemyIds).toEqual([
+      'camp-roadBrigand-1',
+    ])
     expect(world.hydrate).toHaveBeenCalledWith(data.world)
     expect(weaponRuntime.cord.mode).toBe('InHand')
 
@@ -245,6 +258,15 @@ describe('save runtime', () => {
     setHollenNearby(true)
     expect(storage.entries.size).toBe(0)
     emitQuestEvent('talkedToHollen')
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    expect(trySetCampCheckpoint(380, -195)).toBe(true)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    expect(markCampEnemyDead('camp-roadBrigand-1')).toBe(true)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    expect(markCampEnemyRespawned('camp-roadBrigand-1')).toBe(true)
     expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
     storage.entries.clear()
     markCampLeaderDefeated({ x: 1, y: 2, z: 3 })

@@ -7,6 +7,7 @@ import {
 } from '../../data/quests'
 import { ZONE } from '../../data/zone'
 import type { QuestState } from '../quest/quest'
+import { isValidDeadCampEnemyIds } from '../enemies/campProgress'
 import type { CordMode } from '../weapons/cordState'
 import { heightAt } from '../world/terrain'
 
@@ -24,6 +25,8 @@ export type SavePlayerState = {
 export type SaveQuestStateV1 = QuestState & { campLeaderDefeated: boolean }
 export type SaveQuestState = SaveQuestStateV1 & {
   keyDrop: SavedPosition | null
+  campCheckpointActive: boolean
+  deadCampEnemyIds: string[]
 }
 
 export type SaveHollowProgress = {
@@ -60,8 +63,14 @@ type StoredPlayerState = Omit<SavePlayerState, 'cordState'> & {
 type StoredSaveDataV1 = Omit<SaveDataV1, 'player'> & {
   player: StoredPlayerState
 }
-type StoredSaveDataV2 = Omit<SaveDataV2, 'player'> & {
+type StoredSaveQuestStateV2 = SaveQuestStateV1 & {
+  keyDrop: SavedPosition | null
+  campCheckpointActive?: boolean
+  deadCampEnemyIds?: string[]
+}
+type StoredSaveDataV2 = Omit<SaveDataV2, 'player' | 'quest'> & {
   player: StoredPlayerState
+  quest: StoredSaveQuestStateV2
 }
 
 export type SaveSnapshotInput = {
@@ -74,6 +83,8 @@ export type SaveSnapshotInput = {
   quest: QuestState
   campLeaderDefeated: boolean
   keyDrop?: SavedPosition | null
+  campCheckpointActive?: boolean
+  deadCampEnemyIds?: readonly string[]
   world?: SaveWorldState
 }
 
@@ -210,9 +221,13 @@ function isStoredQuestV1(value: unknown): value is SaveQuestStateV1 {
   return true
 }
 
-function isStoredQuestV2(value: unknown): value is SaveQuestState {
+function isStoredQuestV2(value: unknown): value is StoredSaveQuestStateV2 {
   if (!isStoredQuestV1(value)) return false
-  const candidate = value as SaveQuestStateV1 & { keyDrop?: unknown }
+  const candidate = value as SaveQuestStateV1 & {
+    keyDrop?: unknown
+    campCheckpointActive?: unknown
+    deadCampEnemyIds?: unknown
+  }
   if (candidate.keyDrop !== null && !isSavedPosition(candidate.keyDrop)) {
     return false
   }
@@ -222,6 +237,27 @@ function isStoredQuestV2(value: unknown): value is SaveQuestState {
     candidate.campLeaderDefeated &&
     !candidate.keyLooted &&
     candidate.keyDrop === null
+  )
+    return false
+  if (
+    candidate.campCheckpointActive !== undefined &&
+    typeof candidate.campCheckpointActive !== 'boolean'
+  )
+    return false
+  if (
+    candidate.campCheckpointActive === true &&
+    (candidate.currentStep !== 2 || candidate.keyLooted)
+  )
+    return false
+  if (
+    candidate.deadCampEnemyIds !== undefined &&
+    !isValidDeadCampEnemyIds(candidate.deadCampEnemyIds)
+  )
+    return false
+  if (
+    Array.isArray(candidate.deadCampEnemyIds) &&
+    candidate.deadCampEnemyIds.length > 0 &&
+    candidate.currentStep < 2
   )
     return false
   return true
@@ -236,7 +272,7 @@ function isHollowProgress(value: unknown): value is SaveHollowProgress {
 
 function isWorldState(
   value: unknown,
-  quest: SaveQuestState,
+  quest: SaveQuestStateV1,
 ): value is SaveWorldState {
   if (!isRecord(value)) return false
   if (typeof value.porticoUnlocked !== 'boolean') return false
@@ -321,6 +357,8 @@ function copySaveDataV2(value: StoredSaveDataV2): SaveDataV2 {
     quest: {
       ...copyQuestV1(value.quest),
       keyDrop: value.quest.keyDrop === null ? null : { ...value.quest.keyDrop },
+      campCheckpointActive: value.quest.campCheckpointActive ?? false,
+      deadCampEnemyIds: [...(value.quest.deadCampEnemyIds ?? [])],
     },
     world: copyWorld(value.world),
   }
@@ -337,6 +375,8 @@ function migrateV1(value: StoredSaveDataV1): SaveDataV2 {
     quest: {
       ...copyQuestV1(value.quest),
       keyDrop: pendingLegacyKey ? { ...LEGACY_PENDING_KEY_DROP } : null,
+      campCheckpointActive: false,
+      deadCampEnemyIds: [],
     },
     world: {
       ...copyWorld(NEW_WORLD_STATE),
@@ -368,6 +408,8 @@ export function createNewSaveData(): SaveDataV2 {
       complete: false,
       campLeaderDefeated: false,
       keyDrop: null,
+      campCheckpointActive: false,
+      deadCampEnemyIds: [],
     },
     world: copyWorld(NEW_WORLD_STATE),
   }
@@ -393,6 +435,8 @@ export function createSaveData(input: SaveSnapshotInput): SaveDataV2 {
         input.keyDrop === undefined || input.keyDrop === null
           ? null
           : { ...input.keyDrop },
+      campCheckpointActive: input.campCheckpointActive ?? false,
+      deadCampEnemyIds: [...(input.deadCampEnemyIds ?? [])],
     },
     world: copyWorld(input.world ?? NEW_WORLD_STATE),
   }

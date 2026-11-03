@@ -4,6 +4,7 @@ import { FRAME_SHELTER_KEY } from '../../data/quests'
 import { Hollen } from '../npc/Hollen'
 import {
   ensureCampLeaderSpawned,
+  releaseCampEnemyRespawns,
   registerCampLeaderDefeatedHandler,
   setCampLeaderDefeated,
 } from '../enemies/enemyRuntime'
@@ -65,6 +66,10 @@ export function QuestWorld() {
     snapshot.quest.currentStep,
     snapshot.quest.keyLooted,
   ])
+
+  useEffect(() => {
+    if (snapshot.quest.keyLooted) releaseCampEnemyRespawns()
+  }, [snapshot.quest.keyLooted])
 
   return (
     <>

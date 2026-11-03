@@ -236,3 +236,9 @@ export const ENEMY_ATTACK_TOKENS = {
   waitingRadius: 3.5,
   waitingSpeedMultiplier: 0.5,
 } as const
+
+export const CAMP_PROGRESS = {
+  // GAME, decided by Ryan on 2026-11-03.
+  checkpointRadius: 45,
+  respawn: [330, -200],
+} as const

@@ -8,6 +8,11 @@ import {
   type EnemyVariant,
 } from '../../data/enemies'
 import { heightAt } from '../world/terrain'
+import {
+  getQuestRuntimeSnapshot,
+  markCampEnemyDead,
+  markCampEnemyRespawned,
+} from '../quest/questRuntime'
 import { shouldBucklerBlock, type AiState } from './ai'
 import {
   applyAttackTokenEvent,
@@ -16,6 +21,7 @@ import {
   releaseAttackToken,
   tokenKindForEnemy,
 } from './attackTokens'
+import { isCampQuestActive, isStandardCampEnemyId } from './campProgress'
 import { createArrowPool, launchArrow } from './projectiles'
 import {
   advanceRespawnElapsed,
@@ -79,6 +85,8 @@ export type EnemyRecord = {
   blockFlashSequence: number
   inFrustum: boolean
   teleportRequested: boolean
+  campRespawnHeld: boolean
+  preserveHpOnReturn: boolean
 }
 
 export type EnemySnapshot = {
@@ -122,6 +130,8 @@ let houndBiteHandler: HoundBiteHandler | null = null
 let campLeaderDefeatedHandler: CampLeaderDefeatedHandler | null = null
 let enemyHeightSampler: (x: number, z: number) => number = heightAt
 const INITIAL_RANDOM_STATE = 0x51_4f_4e_45
+const restoredCampEnemyDeaths: string[] = []
+let restoredCampRespawnsHeld = false
 
 type EnemySceneState = {
   readonly records: EnemyRecord[]
@@ -217,6 +227,29 @@ function makeRecord(spawn: EnemySpawnLike): EnemyRecord {
     blockFlashSequence: 0,
     inFrustum: false,
     teleportRequested: false,
+    campRespawnHeld: false,
+    preserveHpOnReturn: false,
+  }
+}
+
+function hasRestoredCampDeath(enemyId: string): boolean {
+  for (let index = 0; index < restoredCampEnemyDeaths.length; index += 1)
+    if (restoredCampEnemyDeaths[index] === enemyId) return true
+  return false
+}
+
+function applyRestoredCampDeaths(): void {
+  for (const enemy of enemyRuntime.records) {
+    if (!hasRestoredCampDeath(enemy.id)) continue
+    releaseAttackToken(enemyRuntime.attackTokens, enemy.id, false)
+    enemy.hp = 0
+    enemy.phase = 'Dead'
+    enemy.state = 'Return'
+    enemy.deathElapsed = ENEMY_DEATH.fallSeconds
+    enemy.respawnElapsed = 0
+    enemy.attackCooldown = 0
+    enemy.drawRemaining = 0
+    enemy.campRespawnHeld = restoredCampRespawnsHeld
   }
 }
 
@@ -263,6 +296,8 @@ export function resetEnemySceneRosters(): void {
   enemyRuntime.arrows = enemyScenes.zone.arrows
   enemyRuntime.attackTokens = enemyScenes.zone.attackTokens
   enemyRuntime.campLeaderDefeated = false
+  restoredCampEnemyDeaths.length = 0
+  restoredCampRespawnsHeld = false
   notifyRoster()
 }
 
@@ -285,6 +320,7 @@ export function initializeEnemyRoster(spawns: readonly EnemySpawnLike[]): void {
   state.randomState = INITIAL_RANDOM_STATE
   state.arrows.active.fill(0)
   clearAttackTokens(state.attackTokens)
+  applyRestoredCampDeaths()
   if (activeEnemyScene === 'zone') enemyRuntime.campLeaderDefeated = false
   notifyRoster()
 }
@@ -477,6 +513,13 @@ export function damageEnemy(
     enemy.deathElapsed = 0
     enemy.respawnElapsed = 0
     enemy.state = 'Return'
+    enemy.campRespawnHeld = markCampEnemyDead(enemy.id)
+    if (
+      enemy.campRespawnHeld &&
+      !hasRestoredCampDeath(enemy.id) &&
+      isStandardCampEnemyId(enemy.id)
+    )
+      restoredCampEnemyDeaths.push(enemy.id)
     if (enemy.variant === ENEMY_VARIANTS.campLeader) {
       enemyRuntime.campLeaderDefeated = true
       campLeaderDefeatedHandler?.(enemy.id, enemy.x, enemy.y, enemy.z)
@@ -491,7 +534,29 @@ export function damageEnemy(
 }
 
 export function canEnemyRespawn(enemy: EnemyRecord): boolean {
-  return enemy.respawns
+  return enemy.respawns && !enemy.campRespawnHeld
+}
+
+export function restoreCampEnemyDeaths(
+  enemyIds: readonly string[],
+  respawnsHeld: boolean,
+): void {
+  restoredCampEnemyDeaths.length = 0
+  for (let index = 0; index < enemyIds.length; index += 1) {
+    const enemyId = enemyIds[index]
+    if (isStandardCampEnemyId(enemyId)) restoredCampEnemyDeaths.push(enemyId)
+  }
+  restoredCampRespawnsHeld = respawnsHeld
+  applyRestoredCampDeaths()
+}
+
+export function releaseCampEnemyRespawns(): void {
+  restoredCampRespawnsHeld = false
+  for (const enemy of enemyRuntime.records) {
+    if (!enemy.campRespawnHeld) continue
+    enemy.campRespawnHeld = false
+    enemy.respawnElapsed = 0
+  }
 }
 
 export function angleFromEnemyFacing(
@@ -547,17 +612,33 @@ export function resetEnemiesNearDeathToReturn(
   deathX: number,
   deathZ: number,
 ): void {
+  const quest = getQuestRuntimeSnapshot().quest
+  const preserveCampLeaderHp = isCampQuestActive(
+    quest.currentStep,
+    quest.keyLooted,
+  )
   for (const enemy of enemyRuntime.records) {
+    const isCampLeader = enemy.variant === ENEMY_VARIANTS.campLeader
     if (
       enemy.phase === 'Alive' &&
-      isWithinPlayerDeathResetRadius(enemy.x, enemy.z, deathX, deathZ)
+      (isWithinPlayerDeathResetRadius(enemy.x, enemy.z, deathX, deathZ) ||
+        (preserveCampLeaderHp && isCampLeader))
     ) {
       enemy.state = 'Return'
       enemy.stateElapsed = 0
       enemy.drawRemaining = 0
+      enemy.preserveHpOnReturn = preserveCampLeaderHp && isCampLeader
       releaseAttackToken(enemyRuntime.attackTokens, enemy.id, false)
     }
   }
+}
+
+export function completeEnemyReturn(enemy: EnemyRecord): void {
+  if (enemy.preserveHpOnReturn) {
+    if (enemy.state !== 'Return') enemy.preserveHpOnReturn = false
+    return
+  }
+  enemy.hp = enemy.maxHp
 }
 
 export function resetEnemyAtAnchor(enemy: EnemyRecord): void {
@@ -583,4 +664,14 @@ export function resetEnemyAtAnchor(enemy: EnemyRecord): void {
   enemy.blockFlashSequence = 0
   enemy.inFrustum = false
   enemy.teleportRequested = false
+  enemy.campRespawnHeld = false
+  enemy.preserveHpOnReturn = false
+  if (isStandardCampEnemyId(enemy.id)) {
+    markCampEnemyRespawned(enemy.id)
+    for (let index = 0; index < restoredCampEnemyDeaths.length; index += 1) {
+      if (restoredCampEnemyDeaths[index] !== enemy.id) continue
+      restoredCampEnemyDeaths.splice(index, 1)
+      break
+    }
+  }
 }

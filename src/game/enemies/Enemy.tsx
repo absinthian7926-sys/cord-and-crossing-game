@@ -77,6 +77,7 @@ import {
 } from './attackTokens'
 import {
   canEnemyRespawn,
+  completeEnemyReturn,
   enemyRuntime,
   fireEnemyArrow,
   requestHoundCordBite,
@@ -330,6 +331,9 @@ export function Enemy({ enemy }: EnemyProps) {
     }
 
     if (enemy.phase === 'Dead') {
+      enemyVisual.visible = false
+      enemyCollider.setEnabled(false)
+      enemyBody.setEnabled(false)
       enemy.respawnElapsed = advanceRespawnElapsed(enemy.respawnElapsed, delta)
       const playerAnchorX = player.position.x - enemy.anchorX
       const playerAnchorZ = player.position.z - enemy.anchorZ
@@ -477,7 +481,7 @@ export function Enemy({ enemy }: EnemyProps) {
         'leftAttack',
         false,
       )
-    if (result.healAtAnchor) enemy.hp = enemy.maxHp
+    if (result.healAtAnchor) completeEnemyReturn(enemy)
     if (
       distanceToPlayer > 0 &&
       (enemy.state === 'Alert' || enemy.state === 'Attack')
