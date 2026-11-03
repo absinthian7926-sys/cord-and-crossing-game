@@ -108,7 +108,7 @@ export function PlayerController() {
     z: 0,
   })
   const footstepOutput = useRef(createFootstepOutput())
-  const { world } = useRapier()
+  const { world, rapier } = useRapier()
   const character = useRef<ReturnType<
     typeof world.createCharacterController
   > | null>(null)
@@ -332,7 +332,11 @@ export function PlayerController() {
     translation.x = direction.x * speed * delta
     translation.y = vertical.current * delta
     translation.z = direction.z * speed * delta
-    controller.computeColliderMovement(collider.current, translation)
+    controller.computeColliderMovement(
+      collider.current,
+      translation,
+      rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+    )
     const corrected = controller.computedMovement(),
       current = body.current.translation()
     const position = store.position

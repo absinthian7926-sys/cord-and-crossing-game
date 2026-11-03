@@ -46,6 +46,37 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
   )
   expect(afterBackwardDodge.z - end.z).toBeGreaterThan(3)
 
+  const hollenApproach = {
+    x: HOLLEN.position[0],
+    z:
+      HOLLEN.position[1] +
+      HOLLEN.interactionRadius +
+      PLAYER.collider.radius +
+      0.5,
+  }
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    hollenApproach,
+  )
+  await page.waitForFunction(
+    ({ x, z }) => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - x, position.z - z) < 0.1
+    },
+    hollenApproach,
+    { timeout: 5_000 },
+  )
+  await page.keyboard.down('KeyW')
+  await expect(page.getByText(HOLLEN.prompt, { exact: true })).toBeVisible({
+    timeout: 5_000,
+  })
+  await page.keyboard.up('KeyW')
+  const hollenDistance = await page.evaluate(([x, z]) => {
+    const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+    return Math.hypot(position.x - x, position.z - z)
+  }, HOLLEN.position)
+  expect(hollenDistance).toBeLessThanOrEqual(HOLLEN.interactionRadius)
+
   await page.evaluate(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.teleport(0, -1.7),
   )
