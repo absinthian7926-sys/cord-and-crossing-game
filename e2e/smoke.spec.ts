@@ -839,6 +839,13 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
       ),
     ),
   ).toBeCloseTo(0.35, 4)
+  await page.waitForFunction(({ bells, musicGain }) => {
+    const audio = window.__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+    return (
+      audio.lastCueIds.filter((cue) => cue === 'portico-bell').length > bells &&
+      audio.musicGain < musicGain
+    )
+  }, audioBeforePartial)
   await page.waitForFunction(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.getInputLocked(),
   )
@@ -859,13 +866,6 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
       .locator('.scene-loading')
       .evaluate((element) => getComputedStyle(element).transitionDuration),
   ).toContain('0.3s')
-  await page.waitForFunction(({ bells, musicGain }) => {
-    const audio = window.__CORD_AND_CROSSING_DEBUG__!.getAudioState()
-    return (
-      audio.lastCueIds.filter((cue) => cue === 'portico-bell').length > bells &&
-      audio.musicGain < musicGain
-    )
-  }, audioBeforePartial)
   expect(hollowChunkRequests.length).toBeGreaterThan(0)
   await page.waitForFunction(
     () =>
