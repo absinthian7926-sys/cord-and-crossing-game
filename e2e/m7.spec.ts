@@ -209,7 +209,9 @@ test('title, credits, lazy audio, models, animation and game feel work together'
       const feel = window.__CORD_AND_CROSSING_DEBUG__!.getFeelState()
       return (
         feel.flashes.playerCount > before &&
-        feel.flashes.playerOpacity > 0 &&
+        document
+          .querySelector('.player-hit-vignette')
+          ?.getAttribute('data-seen-visible') === 'true' &&
         feel.trauma > 0 &&
         Math.hypot(feel.offset.x, feel.offset.y, feel.offset.z) > 0
       )
