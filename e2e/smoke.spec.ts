@@ -871,6 +871,49 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     ),
   ).toBe(audioBeforePartial.bells)
 
+  await page.evaluate(() => {
+    type FlashObservationWindow = Window & {
+      __CORD_CROSSING_FLASH_OBSERVATION__?: {
+        opacity: number
+        peak: number
+      }
+    }
+
+    const observedWindow = window as FlashObservationWindow
+    delete observedWindow.__CORD_CROSSING_FLASH_OBSERVATION__
+
+    const recordFlash = (element: Element) => {
+      if (!(element instanceof HTMLElement)) return
+      const styles = getComputedStyle(element)
+      const peak = Number.parseFloat(
+        element.style.getPropertyValue('--crossing-flash-peak') ||
+          styles.getPropertyValue('--crossing-flash-peak'),
+      )
+      const opacity = Number.parseFloat(styles.opacity)
+      if (!Number.isFinite(peak) || !Number.isFinite(opacity)) return
+
+      const previous = observedWindow.__CORD_CROSSING_FLASH_OBSERVATION__
+      observedWindow.__CORD_CROSSING_FLASH_OBSERVATION__ = {
+        opacity: Math.max(previous?.opacity ?? 0, opacity),
+        peak,
+      }
+    }
+
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof Element)) continue
+          if (node.matches('.crossing-flash')) recordFlash(node)
+          for (const flash of node.querySelectorAll('.crossing-flash')) {
+            recordFlash(flash)
+          }
+        }
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    window.setTimeout(() => observer.disconnect(), 2_000)
+  })
+
   await page.evaluate(
     ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
     { x: ZONE.portico.center[0], z: ZONE.portico.center[1] },
@@ -880,15 +923,27 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
     { x: ZONE.portico.center[0] + 1, z: ZONE.portico.center[1] },
   )
-  const reducedFlash = page.locator('.crossing-flash')
-  await expect(reducedFlash).toBeVisible()
-  expect(
-    await reducedFlash.evaluate((element) =>
-      Number.parseFloat(
-        getComputedStyle(element).getPropertyValue('--crossing-flash-peak'),
-      ),
-    ),
-  ).toBeCloseTo(0.35, 4)
+  await page.waitForFunction(
+    () =>
+      (
+        window as Window & {
+          __CORD_CROSSING_FLASH_OBSERVATION__?: unknown
+        }
+      ).__CORD_CROSSING_FLASH_OBSERVATION__ !== undefined,
+  )
+  const reducedFlash = await page.evaluate(
+    () =>
+      (
+        window as Window & {
+          __CORD_CROSSING_FLASH_OBSERVATION__: {
+            opacity: number
+            peak: number
+          }
+        }
+      ).__CORD_CROSSING_FLASH_OBSERVATION__,
+  )
+  expect(reducedFlash.peak).toBeCloseTo(0.35, 4)
+  expect(reducedFlash.opacity).toBeCloseTo(0.35, 4)
   await page.waitForFunction(({ bells, musicGain }) => {
     const audio = window.__CORD_AND_CROSSING_DEBUG__!.getAudioState()
     return (

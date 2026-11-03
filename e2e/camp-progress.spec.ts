@@ -8,7 +8,12 @@ import {
 } from '../src/data/enemies'
 import { PLAYER } from '../src/data/player'
 import { SAVE_CONFIG } from '../src/data/quests'
+import { SETTINGS } from '../src/data/settings'
 import { REACHBLADE } from '../src/data/weapons'
+import {
+  createDefaultSettings,
+  serializeSettings,
+} from '../src/game/settings/settings'
 import { createNewSaveData, serializeSave } from '../src/game/save/save'
 import { heightAt } from '../src/game/world/terrain'
 import { resumeGameAfterReload, startGame } from './helpers'
@@ -41,31 +46,22 @@ test('keeps camp progress after a normal player death without debug mutations', 
       ENEMY_TYPES.roadBrigand.attackRange -
       0.25,
   }
-  const combatSave = createNewSaveData()
-  combatSave.player.health = ENEMY_TYPES.roadBrigand.damage * 2
-  combatSave.player.position = {
-    x: leaderApproach.x,
-    y: heightAt(leaderApproach.x, leaderApproach.z),
-    z: leaderApproach.z,
-  }
-  combatSave.quest.currentStep = 2
-  combatSave.quest.completedSteps = [1]
-  combatSave.quest.campCheckpointActive = true
+  const settings = createDefaultSettings(false)
+  settings.quality = 'Low'
+  settings.qualityChosenByHand = true
 
   await page.addInitScript(
-    ({ combatValue, initialValue, key, stageKey }) => {
-      if (window.sessionStorage.getItem(stageKey) === null) {
+    ({ initialValue, key, settingsKey, settingsValue }) => {
+      if (window.localStorage.getItem(key) === null) {
         window.localStorage.setItem(key, initialValue)
-        window.sessionStorage.setItem(stageKey, 'checkpoint-crossed')
-        return
       }
-      window.localStorage.setItem(key, combatValue)
+      window.localStorage.setItem(settingsKey, settingsValue)
     },
     {
-      combatValue: serializeSave(combatSave),
       initialValue: serializeSave(save),
       key: SAVE_CONFIG.storageKey,
-      stageKey: 'camp-progress-e2e-stage',
+      settingsKey: SETTINGS.storageKey,
+      settingsValue: serializeSettings(settings),
     },
   )
 
@@ -90,6 +86,48 @@ test('keeps camp progress after a normal player death without debug mutations', 
   )
   await page.keyboard.up('KeyW')
   await page.keyboard.up('ShiftLeft')
+
+  await page.waitForFunction((key) => {
+    const serialized = window.localStorage.getItem(key)
+    if (serialized === null) return false
+    const saved = JSON.parse(serialized) as {
+      quest?: { campCheckpointActive?: boolean }
+    }
+    return saved.quest?.campCheckpointActive === true
+  }, SAVE_CONFIG.storageKey)
+
+  const relocationMarker = 'camp-progress-relocate-once'
+  await page.addInitScript(
+    ({ health, key, marker, position }) => {
+      if (window.sessionStorage.getItem(marker) !== 'pending') return
+      const serialized = window.localStorage.getItem(key)
+      if (serialized !== null) {
+        const saved = JSON.parse(serialized) as {
+          player: {
+            health: number
+            position: { x: number; y: number; z: number }
+          }
+        }
+        saved.player.health = health
+        saved.player.position = position
+        window.localStorage.setItem(key, JSON.stringify(saved))
+      }
+      window.sessionStorage.removeItem(marker)
+    },
+    {
+      health: ENEMY_TYPES.roadBrigand.damage,
+      key: SAVE_CONFIG.storageKey,
+      marker: relocationMarker,
+      position: {
+        x: leaderApproach.x,
+        y: heightAt(leaderApproach.x, leaderApproach.z),
+        z: leaderApproach.z,
+      },
+    },
+  )
+  await page.evaluate((marker) => {
+    window.sessionStorage.setItem(marker, 'pending')
+  }, relocationMarker)
 
   await resumeGameAfterReload(page)
   await page.waitForFunction(({ x, z }) => {
