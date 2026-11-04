@@ -1,5 +1,9 @@
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
   color: #f1ead9;
   background: #172127;
   font-synthesis: none;
@@ -180,6 +184,12 @@ canvas {
   display: grid;
   place-items: center;
   background: #172127;
+  visibility: hidden;
+  opacity: 0;
+}
+.scene-loading.is-visible {
+  visibility: visible;
+  opacity: 1;
 }
 .scene-loading-panel {
   padding: 1rem 1.35rem;
@@ -193,11 +203,19 @@ canvas {
 }
 @keyframes crossing-flash-fade {
   from {
-    opacity: 1;
+    opacity: var(--crossing-flash-peak, 1);
   }
   to {
     opacity: 0;
   }
+}
+.scene-loading.reduce-motion {
+  transition:
+    opacity 0.3s ease-out,
+    visibility 0s linear 0.3s;
+}
+.scene-loading.reduce-motion.is-visible {
+  transition: opacity 0.3s ease-out;
 }
 .interaction-prompt-anchor {
   pointer-events: none;
@@ -209,9 +227,9 @@ canvas {
   background: rgb(20 26 27 / 84%);
   color: #f1ead9;
   font:
-    600 0.78rem/1.2 Inter,
-    ui-sans-serif,
-    system-ui,
+    600 0.78rem/1.2 system-ui,
+    -apple-system,
+    'Segoe UI',
     sans-serif;
   text-shadow: 0 1px 2px #000;
   white-space: nowrap;
@@ -368,8 +386,240 @@ canvas {
 .quest-key-slot span {
   color: #ead9ad;
 }
+.menu-screen,
+.confirm-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  pointer-events: auto;
+  text-shadow: none;
+}
+.menu-screen {
+  background: rgb(12 17 19 / 74%);
+  backdrop-filter: blur(3px);
+}
+.title-screen {
+  background: linear-gradient(rgb(12 17 19 / 58%), rgb(12 17 19 / 82%));
+}
+.confirm-dialog {
+  z-index: 82;
+  padding: 1rem;
+  background: rgb(7 10 11 / 72%);
+}
+.menu-panel {
+  width: min(31rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  overflow: auto;
+  padding: 1.35rem;
+  border: 1px solid rgb(232 220 192 / 54%);
+  border-radius: 6px;
+  background: rgb(23 33 39 / 96%);
+  color: #f4ead7;
+  box-shadow: 0 1.1rem 3.5rem rgb(0 0 0 / 55%);
+}
+.menu-panel h1,
+.menu-panel h2 {
+  margin: 0 0 1rem;
+  color: #f4ead7;
+  font-family: Georgia, 'Times New Roman', serif;
+  font-weight: 600;
+}
+.menu-panel h1 {
+  font-size: clamp(1.9rem, 6vw, 3rem);
+  letter-spacing: 0.025em;
+}
+.menu-panel h2 {
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+.title-panel {
+  text-align: center;
+}
+.menu-actions,
+.confirm-actions {
+  display: grid;
+  gap: 0.55rem;
+}
+.confirm-actions {
+  grid-template-columns: 1fr 1fr;
+}
+.menu-button {
+  min-height: 2.65rem;
+  padding: 0.55rem 0.8rem;
+  border: 1px solid rgb(232 220 192 / 48%);
+  border-radius: 4px;
+  background: rgb(232 220 192 / 9%);
+  color: #f4ead7;
+  font:
+    600 0.94rem/1.2 system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  cursor: pointer;
+}
+.menu-button:hover {
+  background: rgb(232 220 192 / 17%);
+}
+.menu-button-primary {
+  border-color: #e8dcc0;
+  background: #e8dcc0;
+  color: #2b2620;
+}
+.menu-button-primary:hover {
+  background: #f4ead7;
+}
+.menu-button-danger {
+  border-color: #c67b6d;
+  background: #713c35;
+}
+.menu-button:focus-visible,
+.menu-panel input:focus-visible {
+  outline: 3px solid #f4d99c;
+  outline-offset: 2px;
+}
+.credits-panel {
+  width: min(46rem, calc(100vw - 2rem));
+}
+.credits-copy {
+  margin-bottom: 1.25rem;
+  line-height: 1.55;
+}
+.credits-copy p {
+  margin: 0.55rem 0;
+}
+.controls-list {
+  margin: 0 0 1.2rem;
+}
+.controls-list > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) 1.6fr;
+  gap: 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid rgb(232 220 192 / 15%);
+}
+.controls-list dt {
+  color: #f4ead7;
+  font-weight: 600;
+}
+.controls-list dd {
+  margin: 0;
+  color: #ddd4c2;
+}
+.settings-fields {
+  display: grid;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.settings-fieldset {
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid rgb(232 220 192 / 28%);
+}
+.quality-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+.quality-options label,
+.setting-toggle {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.setting-slider {
+  display: grid;
+  gap: 0.4rem;
+}
+.setting-slider span {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.setting-slider output {
+  color: #f4d99c;
+  font-variant-numeric: tabular-nums;
+}
+.setting-slider input {
+  width: 100%;
+  accent-color: #c9a46a;
+}
+.game-toast {
+  position: fixed;
+  z-index: 75;
+  bottom: 2rem;
+  left: 50%;
+  width: min(34rem, calc(100vw - 2rem));
+  padding: 0.7rem 0.9rem;
+  transform: translateX(-50%);
+  border: 1px solid rgb(232 220 192 / 48%);
+  border-radius: 4px;
+  background: rgb(20 26 27 / 94%);
+  color: #f4ead7;
+  text-align: center;
+  pointer-events: none;
+}
+.compass {
+  position: fixed;
+  top: 0.75rem;
+  left: 50%;
+  z-index: 24;
+  width: 360px;
+  height: 3.2rem;
+  transform: translateX(-50%);
+  overflow: hidden;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    rgb(20 26 27 / 0%),
+    rgb(20 26 27 / 72%) 18%,
+    rgb(20 26 27 / 72%) 82%,
+    rgb(20 26 27 / 0%)
+  );
+  color: #f4ead7;
+  font:
+    600 0.76rem/1.2 system-ui,
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
+  text-shadow: 0 1px 2px #141a1b;
+  pointer-events: none;
+}
+.compass-heading {
+  position: absolute;
+  top: 0.2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #f4d99c;
+  font-variant-numeric: tabular-nums;
+}
+.compass-bearing,
+.compass-marker {
+  position: absolute;
+  left: 50%;
+  white-space: nowrap;
+}
+.compass-bearing {
+  top: 1.15rem;
+}
+.compass-marker {
+  top: 2rem;
+  color: #e8dcc0;
+  font-size: 0.68rem;
+}
+.compass-objective {
+  color: #f4d99c;
+}
 @media (max-width: 600px) {
   .controls-hint {
     display: none;
+  }
+  .confirm-actions,
+  .controls-list > div {
+    grid-template-columns: 1fr;
+  }
+  .compass {
+    width: min(360px, calc(100vw - 1rem));
   }
 }

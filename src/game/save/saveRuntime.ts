@@ -1,7 +1,16 @@
 import { PLAYER } from '../../data/player'
 import { SAVE_CONFIG } from '../../data/quests'
+import { resetEffectRuntime } from '../effects/effectRuntime'
+import { isCampQuestActive } from '../enemies/campProgress'
+import { restoreCampEnemyDeaths } from '../enemies/enemyRuntime'
 import { createPlayerDeathState } from '../player/death'
 import { playerStore } from '../player/playerStore'
+import {
+  getPauseRuntimeSnapshot,
+  isGameplayTimePaused,
+  subscribePausableClock,
+  subscribePauseRuntime,
+} from '../pause/pauseRuntime'
 import {
   getQuestRuntimeSnapshot,
   hydrateQuestRuntime,
@@ -82,6 +91,8 @@ export function createRuntimeSaveData(): SaveDataV2 {
     quest: quest.quest,
     campLeaderDefeated: quest.campLeaderDefeated,
     keyDrop: quest.keyDrop,
+    campCheckpointActive: quest.campCheckpointActive,
+    deadCampEnemyIds: quest.deadCampEnemyIds,
     world: {
       ...world,
       hollow: { ...world.hollow },
@@ -94,6 +105,7 @@ export function applyRuntimeSaveData(
   data: SaveDataV2,
   positionRules: HeightSampler | ScenePositionRules,
 ): void {
+  resetEffectRuntime()
   worldAdapter.hydrate(data.world)
   const player = playerStore.getState()
   const position = resolveLoadedPosition(data, positionRules)
@@ -115,6 +127,12 @@ export function applyRuntimeSaveData(
     data.quest.campLeaderDefeated,
     data.quest.keyDrop,
     data.world.tasselEarned,
+    data.quest.campCheckpointActive,
+    data.quest.deadCampEnemyIds,
+  )
+  restoreCampEnemyDeaths(
+    data.quest.deadCampEnemyIds,
+    isCampQuestActive(data.quest.currentStep, data.quest.keyLooted),
   )
   resetWeaponRuntime()
   resetWeaponToInHand()
@@ -161,7 +179,24 @@ export function installRuntimeAutosave(
     persist()
   })
   const unsubscribeWorld = worldAdapter.subscribe(persist)
+  let pauseWasOpen = getPauseRuntimeSnapshot().open
+  const unsubscribePause = subscribePauseRuntime(() => {
+    const pauseOpen = getPauseRuntimeSnapshot().open
+    if (pauseOpen && !pauseWasOpen) persist()
+    pauseWasOpen = pauseOpen
+  })
+  let periodicElapsedSeconds = 0
+  let clockHasAdvanced = false
+  const unsubscribeClock = subscribePausableClock((deltaSeconds) => {
+    clockHasAdvanced = true
+    periodicElapsedSeconds += deltaSeconds
+    if (periodicElapsedSeconds < SAVE_CONFIG.autosaveSeconds) return
+    periodicElapsedSeconds %= SAVE_CONFIG.autosaveSeconds
+    const player = playerStore.getState()
+    if (player.death.phase === 'Alive' && player.vitals.health > 0) persist()
+  })
   const intervalId = host.setInterval(() => {
+    if (isGameplayTimePaused() || clockHasAdvanced) return
     const player = playerStore.getState()
     if (player.death.phase === 'Alive' && player.vitals.health > 0) persist()
   }, SAVE_CONFIG.autosaveSeconds * 1_000)
@@ -171,6 +206,8 @@ export function installRuntimeAutosave(
   return () => {
     unsubscribeQuest()
     unsubscribeWorld()
+    unsubscribePause()
+    unsubscribeClock()
     host.clearInterval(intervalId)
     host.removeEventListener('pagehide', onPageHide)
   }

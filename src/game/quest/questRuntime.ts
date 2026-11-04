@@ -1,4 +1,11 @@
 import type { QuestEventType } from '../../data/quests'
+import { ENEMY_SPAWNS } from '../../data/enemies'
+import {
+  addDeadCampEnemyId,
+  removeDeadCampEnemyId,
+  shouldHoldCampRespawn,
+  shouldSetCampCheckpoint,
+} from '../enemies/campProgress'
 import {
   chooseDialogueOption,
   closeDialogue,
@@ -22,6 +29,8 @@ export type QuestRuntimeSnapshot = {
   readonly keyNearby: boolean
   readonly campLeaderDefeated: boolean
   readonly keyDrop: KeyDropPosition | null
+  readonly campCheckpointActive: boolean
+  readonly deadCampEnemyIds: readonly string[]
   readonly tasselEarned: boolean
   readonly questRevision: number
 }
@@ -43,6 +52,8 @@ function initialSnapshot(): QuestRuntimeSnapshot {
     keyNearby: false,
     campLeaderDefeated: false,
     keyDrop: null,
+    campCheckpointActive: false,
+    deadCampEnemyIds: [],
     tasselEarned: false,
     questRevision: 0,
   }
@@ -87,6 +98,8 @@ export function hydrateQuestRuntime(
   campLeaderDefeated: boolean,
   keyDrop: KeyDropPosition | null = null,
   tasselEarned = false,
+  campCheckpointActive = false,
+  deadCampEnemyIds: readonly string[] = [],
 ): void {
   transientProximity.hollenNearby = false
   transientProximity.keyNearby = false
@@ -101,6 +114,9 @@ export function hydrateQuestRuntime(
       campLeaderDefeated && !quest.keyLooted && keyDrop !== null
         ? { ...keyDrop }
         : null,
+    campCheckpointActive:
+      quest.currentStep === 2 && !quest.keyLooted && campCheckpointActive,
+    deadCampEnemyIds: [...deadCampEnemyIds],
     tasselEarned: quest.complete && tasselEarned,
     questRevision: 0,
   })
@@ -127,6 +143,8 @@ export function emitQuestEvent(event: QuestEventType): boolean {
     tasselEarned: progress.tasselEarned,
     keyNearby: event === 'keyLooted' ? false : snapshot.keyNearby,
     keyDrop: event === 'keyLooted' ? null : snapshot.keyDrop,
+    campCheckpointActive:
+      event === 'keyLooted' ? false : snapshot.campCheckpointActive,
     questRevision: snapshot.questRevision + 1,
   })
   if (event === 'keyLooted') transientProximity.keyNearby = false
@@ -202,6 +220,75 @@ export function setQuestLogOpen(open: boolean): void {
 
 export function toggleQuestLog(): void {
   setQuestLogOpen(!snapshot.questLogOpen)
+}
+
+export function trySetCampCheckpoint(
+  playerX: number,
+  playerZ: number,
+): boolean {
+  if (snapshot.campCheckpointActive) return false
+  const distanceToCamp = Math.hypot(
+    playerX - ENEMY_SPAWNS.camp.anchor[0],
+    playerZ - ENEMY_SPAWNS.camp.anchor[1],
+  )
+  if (
+    !shouldSetCampCheckpoint(
+      snapshot.quest.currentStep,
+      snapshot.quest.keyLooted,
+      distanceToCamp,
+    )
+  )
+    return false
+  publish({
+    ...snapshot,
+    campCheckpointActive: true,
+    questRevision: snapshot.questRevision + 1,
+  })
+  return true
+}
+
+export function markCampEnemyDead(enemyId: string): boolean {
+  if (
+    !shouldHoldCampRespawn(
+      enemyId,
+      snapshot.quest.currentStep,
+      snapshot.quest.keyLooted,
+    )
+  )
+    return false
+  const deadCampEnemyIds = addDeadCampEnemyId(
+    snapshot.deadCampEnemyIds,
+    enemyId,
+  )
+  if (deadCampEnemyIds === snapshot.deadCampEnemyIds) return false
+  publish({
+    ...snapshot,
+    deadCampEnemyIds,
+    questRevision: snapshot.questRevision + 1,
+  })
+  return true
+}
+
+export function markCampEnemyRespawned(enemyId: string): boolean {
+  const deadCampEnemyIds = removeDeadCampEnemyId(
+    snapshot.deadCampEnemyIds,
+    enemyId,
+  )
+  if (deadCampEnemyIds === snapshot.deadCampEnemyIds) return false
+  publish({
+    ...snapshot,
+    deadCampEnemyIds,
+    questRevision: snapshot.questRevision + 1,
+  })
+  return true
+}
+
+export function isCampEnemyRespawnHeld(enemyId: string): boolean {
+  for (let index = 0; index < snapshot.deadCampEnemyIds.length; index += 1) {
+    if (snapshot.deadCampEnemyIds[index] === enemyId)
+      return snapshot.quest.currentStep === 2 && !snapshot.quest.keyLooted
+  }
+  return false
 }
 
 export function markCampLeaderDefeated(position: KeyDropPosition): boolean {

@@ -1,6 +1,15 @@
-import { Canvas } from '@react-three/fiber'
+import { Canvas, useFrame, useThree } from '@react-three/fiber'
 import { Physics } from '@react-three/rapier'
-import { Suspense, useEffect } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useState,
+  useSyncExternalStore,
+} from 'react'
+import type { PerspectiveCamera } from 'three'
+import type { VolumeBus } from './data/settings'
 import {
   ENEMY_ARROW,
   ENEMY_TYPES,
@@ -9,7 +18,15 @@ import {
 } from './data/enemies'
 import { PLAYER } from './data/player'
 import { SAVE_CONFIG, type QuestEventType } from './data/quests'
-import { ZONE } from './data/zone'
+import { QUALITY_LEVELS, ZONE, type QualityLevel } from './data/zone'
+import {
+  disposeLazyAudioEngine,
+  getLazyAudioSnapshot,
+  loadAndStartAudioEngine,
+} from './game/audio/AudioEngineGate'
+import { setAudioCreditsOpen } from './game/audio/audioPresentationRuntime'
+import { audioBus, emitAudioEvent } from './game/audio/audioBus'
+import { getAnimationRuntimeSnapshot } from './game/animation/animationRuntime'
 import {
   advanceRespawn as advanceEnemyRespawn,
   enemyRuntime,
@@ -28,7 +45,6 @@ import {
   effectRuntime,
   getEffectRuntimeSnapshot,
   grantStrengthFromCrossing,
-  resetEffectRuntime,
 } from './game/effects/effectRuntime'
 import {
   getHollowRuntimeSnapshot,
@@ -36,17 +52,38 @@ import {
   markHollowEnemyDefeated,
   subscribeHollowRuntime,
 } from './game/hollow/hollowRuntime'
+import { PostEffectsGate } from './game/feel/PostEffectsGate'
+import {
+  getFeelDebugSnapshot,
+  recordBlockFlash,
+  type FeelDebugSnapshot,
+} from './game/feel/feelRuntime'
+import { setPostEnabledOverride } from './game/feel/postOverrideRuntime'
+import { getLoadedModelIds } from './game/models/modelAvailability'
 import {
   attachInput,
   detachInput,
   isGameplayInputLocked,
 } from './game/player/input'
+import type { PauseContext } from './game/pause/pause'
+import {
+  advancePausableClock,
+  getPauseRuntimeRevision,
+  getPauseRuntimeSnapshot,
+  requestPause,
+  resetPauseRuntime,
+  setPauseOpen,
+  setTitleScreenOpen,
+  subscribePauseRuntime,
+} from './game/pause/pauseRuntime'
 import { playerStore } from './game/player/playerStore'
 import { applyDamage } from './game/player/vitals'
 import {
+  closeHollenDialogue,
   emitQuestEvent,
   getQuestRuntimeSnapshot,
   openHollenDialogue,
+  setQuestLogOpen,
 } from './game/quest/questRuntime'
 import {
   clearSave,
@@ -56,11 +93,22 @@ import {
 } from './game/save/save'
 import {
   configureSaveWorldRuntimeAdapter,
+  clearRuntimeSave,
   installRuntimeAutosave,
   loadRuntimeSave,
   saveRuntimeState,
 } from './game/save/saveRuntime'
 import { SceneManager } from './game/scenes/SceneManager'
+import { qualityProfile } from './game/settings/quality'
+import { QualityFallbackDriver } from './game/settings/QualityFallbackDriver'
+import { setForcedQualityFps } from './game/settings/qualityFallbackRuntime'
+import type { SettingsData } from './game/settings/settings'
+import {
+  disposeSettingsRuntime,
+  getSettingsRuntimeSnapshot,
+  initializeSettingsRuntime,
+  subscribeSettingsRuntime,
+} from './game/settings/settingsRuntime'
 import {
   getSceneRuntimeSnapshot,
   getWorldConfiguration,
@@ -90,10 +138,67 @@ import {
   weaponRuntime,
   type DamageLogEntry,
 } from './game/weapons/weaponRuntime'
-import { PerfOverlay, PerfSampler } from './ui/PerfOverlay'
-import { getPerfStats, type PerfStats } from './ui/perfRuntime'
+import { PerfOverlayGate, PerfSamplerGate } from './ui/PerfReadoutGate'
+import { Compass } from './ui/CompassStrip'
+import { getCompassSnapshot } from './ui/compassRuntime'
+import { Credits } from './ui/Credits'
+import { PauseMenu } from './ui/PauseMenu'
+import { PlayerHitVignette } from './ui/PlayerHitVignette'
+import {
+  getPerfStats,
+  requestPerfStatsReset,
+  setPerfQualityTier,
+  type PerfStats,
+} from './ui/perfRuntime'
 import { QuestOverlay } from './ui/QuestOverlay'
 import { SceneTransitionOverlay } from './ui/SceneTransitionOverlay'
+import { TitleScreen } from './ui/TitleScreen'
+import { Toast } from './ui/Toast'
+
+const pauseContext: PauseContext = {
+  titleOpen: false,
+  dialogueOpen: false,
+  questLogOpen: false,
+  crossingFlash: false,
+  loading: false,
+  deathFade: false,
+}
+
+function readPauseContext(): PauseContext {
+  const pause = getPauseRuntimeSnapshot()
+  const quest = getQuestRuntimeSnapshot()
+  const scene = getSceneRuntimeSnapshot()
+  pauseContext.titleOpen = pause.titleOpen
+  pauseContext.dialogueOpen = quest.dialogue.currentNodeId !== null
+  pauseContext.questLogOpen = quest.questLogOpen
+  pauseContext.crossingFlash = scene.phase === 'flashing'
+  pauseContext.loading = scene.phase === 'loading'
+  pauseContext.deathFade = playerStore.getState().death.phase !== 'Alive'
+  return pauseContext
+}
+
+function PausableClockDriver() {
+  useFrame((_, deltaSeconds) => {
+    advancePausableClock(deltaSeconds)
+    if (getPauseRuntimeSnapshot().pending)
+      requestPause({ type: 'blockersCleared' }, readPauseContext())
+  }, -100)
+  return null
+}
+
+function LiveRendererSettings({
+  drawDistance,
+}: {
+  readonly drawDistance: number
+}) {
+  const { camera } = useThree()
+  useEffect(() => {
+    const perspectiveCamera = camera as PerspectiveCamera
+    perspectiveCamera.far = drawDistance
+    perspectiveCamera.updateProjectionMatrix()
+  }, [camera, drawDistance])
+  return null
+}
 
 const SCENE_POSITION_RULES: ScenePositionRules = {
   zone: {
@@ -134,7 +239,6 @@ const saveWorldRuntimeAdapter = {
       encounterDefeated: boolean
     }
   }) => {
-    resetEffectRuntime()
     hydratePorticoRuntime(state.porticoUnlocked)
     hydrateHollowRuntime(
       state.hollow.heelstonePassDone,
@@ -153,6 +257,20 @@ const saveWorldRuntimeAdapter = {
       unsubscribeHollow()
     }
   },
+}
+
+type DebugSettingKey =
+  'quality' | VolumeBus | 'reduceMotion' | 'mouseSensitivity' | 'invertY'
+
+function hasValidStoredSave(storage: Storage): boolean {
+  try {
+    const current = storage.getItem(SAVE_CONFIG.storageKey)
+    if (current !== null) return !deserializeSave(current).usedFallback
+    const legacy = storage.getItem(SAVE_CONFIG.legacyStorageKey)
+    return legacy !== null && !deserializeSave(legacy).usedFallback
+  } catch {
+    return false
+  }
 }
 
 declare global {
@@ -197,6 +315,7 @@ declare global {
         stamina: number
         deathPhase: string
         invulnerable: boolean
+        spawnInvulnerabilityRemainingSeconds: number
       }
       setPlayerVitals: (health: number, stamina: number) => void
       saveGame: () => boolean
@@ -225,15 +344,143 @@ declare global {
       getPorticoScreenInView: () => boolean
       getInputLocked: () => boolean
       dropBlade: () => boolean
+      getSettings: () => SettingsData & {
+        qualityProfile: ReturnType<typeof qualityProfile>
+      }
+      setSetting: (key: DebugSettingKey, value: unknown) => boolean
+      pause: (open: boolean) => void
+      getPause: () => ReturnType<typeof getPauseRuntimeSnapshot>
+      getQualityTier: () => QualityLevel
+      getAudioState: () => ReturnType<typeof getLazyAudioSnapshot>
+      getCompass: () => ReturnType<typeof getCompassSnapshot>
+      getAnimationState: () => ReturnType<typeof getAnimationRuntimeSnapshot>
+      getFeelState: () => FeelDebugSnapshot
+      forceFps: (value: number) => void
+      getLoadedModels: () => string[]
+      forceBucklerBlockFeedback: () => void
+      resetPerfStats: () => void
+      setPostEnabled: (enabled: boolean | null) => void
+      prepareHollowEncounter: () => void
     }
   }
 }
 export default function App() {
+  const [titleOpen, setTitleOpen] = useState(true)
+  const [creditsOpen, setCreditsOpen] = useState(false)
+  const [creditsReturn, setCreditsReturn] = useState<'title' | 'pause'>('title')
+  const [hasValidSave, setHasValidSave] = useState(() =>
+    hasValidStoredSave(window.localStorage),
+  )
+  const settingsRuntime = initializeSettingsRuntime(
+    window.localStorage,
+    window,
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+  )
+  const settings = useSyncExternalStore(
+    subscribeSettingsRuntime,
+    getSettingsRuntimeSnapshot,
+    getSettingsRuntimeSnapshot,
+  )
+  const quality = qualityProfile(settings.quality)
+  useSyncExternalStore(
+    subscribePauseRuntime,
+    getPauseRuntimeRevision,
+    getPauseRuntimeRevision,
+  )
+  const pause = getPauseRuntimeSnapshot()
+  useLayoutEffect(() => setTitleScreenOpen(titleOpen), [titleOpen])
+  useEffect(() => setAudioCreditsOpen(creditsOpen), [creditsOpen])
+  useEffect(() => setPerfQualityTier(settings.quality), [settings.quality])
+  const beginAudio = useCallback(() => {
+    void loadAndStartAudioEngine().catch(() => {
+      console.warn('Audio could not be started. The game will stay silent.')
+    })
+  }, [])
+  const continueGame = useCallback(() => {
+    setCreditsOpen(false)
+    setTitleOpen(false)
+    setTitleScreenOpen(false)
+  }, [])
+  const startNewGame = useCallback(() => {
+    clearRuntimeSave(window.localStorage, SCENE_POSITION_RULES)
+    setPauseOpen(false)
+    setCreditsOpen(false)
+    setTitleOpen(false)
+    setTitleScreenOpen(false)
+    setHasValidSave(false)
+  }, [])
+  const resumeGame = useCallback(() => {
+    requestPause({ type: 'resume' }, readPauseContext())
+  }, [])
+  const openTitleCredits = useCallback(() => {
+    setCreditsReturn('title')
+    setCreditsOpen(true)
+  }, [])
+  const openPauseCredits = useCallback(() => {
+    setCreditsReturn('pause')
+    setCreditsOpen(true)
+  }, [])
+  const closeCredits = useCallback(() => {
+    setCreditsOpen(false)
+    if (creditsReturn === 'title') setTitleOpen(true)
+    else setPauseOpen(true)
+  }, [creditsReturn])
+  const changeQuality = useCallback(
+    (value: QualityLevel) =>
+      settingsRuntime.store.getState().setQuality(value, true),
+    [settingsRuntime],
+  )
+  const changeVolume = useCallback(
+    (bus: VolumeBus, value: number) =>
+      settingsRuntime.store.getState().setVolume(bus, value),
+    [settingsRuntime],
+  )
+  const changeReduceMotion = useCallback(
+    (value: boolean) =>
+      settingsRuntime.store.getState().setReduceMotion(value, true),
+    [settingsRuntime],
+  )
+  const changeMouseSensitivity = useCallback(
+    (value: number) =>
+      settingsRuntime.store.getState().setMouseSensitivity(value),
+    [settingsRuntime],
+  )
+  const changeInvertY = useCallback(
+    (value: boolean) => settingsRuntime.store.getState().setInvertY(value),
+    [settingsRuntime],
+  )
   useEffect(() => {
     configureSaveWorldRuntimeAdapter(saveWorldRuntimeAdapter)
     attachInput()
     loadRuntimeSave(window.localStorage, SCENE_POSITION_RULES)
     const stopAutosave = installRuntimeAutosave(window.localStorage, window)
+    const flushSettings = () => settingsRuntime.flush()
+    const reduceMotionQuery = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    )
+    const onReduceMotionPreference = (event: MediaQueryListEvent) => {
+      const runtimeSettings = settingsRuntime.store.getState()
+      if (!runtimeSettings.reduceMotionSetByHand) {
+        runtimeSettings.setReduceMotion(event.matches)
+      }
+    }
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.code !== 'Escape' || event.repeat) return
+      const action = requestPause({ type: 'escape' }, readPauseContext())
+      if (action === 'closeDialogue') closeHollenDialogue()
+      else if (action === 'closeQuestLog') setQuestLogOpen(false)
+      else if (action === 'none') return
+      event.preventDefault()
+      event.stopImmediatePropagation()
+    }
+    const onPointerLockChange = () => {
+      if (document.pointerLockElement === null)
+        requestPause({ type: 'pointerLockLost' }, readPauseContext())
+    }
+    window.addEventListener('keydown', onEscape, true)
+    window.addEventListener('pagehide', flushSettings)
+    reduceMotionQuery.addEventListener('change', onReduceMotionPreference)
+    document.addEventListener('pointerlockchange', onPointerLockChange)
     if (import.meta.env.DEV) {
       const DEBUG_ONLY_INVULNERABLE = 'CORD_DEBUG_ONLY_INVULNERABLE'
       const DEBUG_ONLY_GRANT_EFFECT = 'CORD_DEBUG_ONLY_GRANT_EFFECT'
@@ -241,6 +488,22 @@ export default function App() {
       const DEBUG_ONLY_SCENE_LOAD = 'CORD_DEBUG_ONLY_SCENE_LOAD'
       const DEBUG_ONLY_PORTICO_VIEW = 'CORD_DEBUG_ONLY_PORTICO_VIEW'
       const DEBUG_ONLY_DROP_BLADE = 'CORD_DEBUG_ONLY_DROP_BLADE'
+      const DEBUG_ONLY_GET_SETTINGS = 'CORD_DEBUG_ONLY_GET_SETTINGS'
+      const DEBUG_ONLY_SET_SETTING = 'CORD_DEBUG_ONLY_SET_SETTING'
+      const DEBUG_ONLY_PAUSE = 'CORD_DEBUG_ONLY_PAUSE'
+      const DEBUG_ONLY_GET_PAUSE = 'CORD_DEBUG_ONLY_GET_PAUSE'
+      const DEBUG_ONLY_GET_QUALITY = 'CORD_DEBUG_ONLY_GET_QUALITY'
+      const DEBUG_ONLY_GET_AUDIO = 'CORD_DEBUG_ONLY_GET_AUDIO'
+      const DEBUG_ONLY_GET_COMPASS = 'CORD_DEBUG_ONLY_GET_COMPASS'
+      const DEBUG_ONLY_GET_ANIMATION = 'CORD_DEBUG_ONLY_GET_ANIMATION'
+      const DEBUG_ONLY_GET_FEEL = 'CORD_DEBUG_ONLY_GET_FEEL'
+      const DEBUG_ONLY_FORCE_FPS = 'CORD_DEBUG_ONLY_FORCE_FPS'
+      const DEBUG_ONLY_GET_LOADED_MODELS = 'CORD_DEBUG_ONLY_GET_LOADED_MODELS'
+      const DEBUG_ONLY_FORCE_BLOCK_FEEDBACK =
+        'CORD_DEBUG_ONLY_FORCE_BLOCK_FEEDBACK'
+      const DEBUG_ONLY_RESET_PERF = 'CORD_DEBUG_ONLY_RESET_PERF'
+      const DEBUG_ONLY_SET_POST = 'CORD_DEBUG_ONLY_SET_POST'
+      const DEBUG_ONLY_PREPARE_HOLLOW = 'CORD_DEBUG_ONLY_PREPARE_HOLLOW'
       window.__CORD_AND_CROSSING_DEBUG__ = {
         getPlayerPosition: () => ({ ...playerStore.getState().position }),
         getCordState: () => weaponRuntime.cord.mode,
@@ -468,6 +731,8 @@ export default function App() {
             stamina: state.vitals.stamina,
             deathPhase: state.death.phase,
             invulnerable: state.invulnerable,
+            spawnInvulnerabilityRemainingSeconds:
+              state.death.spawnInvulnerabilityRemainingSeconds,
           }
         },
         setPlayerVitals: (health, stamina) => {
@@ -540,15 +805,131 @@ export default function App() {
           void DEBUG_ONLY_DROP_BLADE
           return dropBladeForDebug()
         },
+        getSettings: () => {
+          void DEBUG_ONLY_GET_SETTINGS
+          const current = settingsRuntime.store.getState()
+          return {
+            settingsVersion: current.settingsVersion,
+            volumes: { ...current.volumes },
+            quality: current.quality,
+            qualityChosenByHand: current.qualityChosenByHand,
+            reduceMotion: current.reduceMotion,
+            reduceMotionSetByHand: current.reduceMotionSetByHand,
+            mouseSensitivity: current.mouseSensitivity,
+            invertY: current.invertY,
+            qualityProfile: qualityProfile(current.quality),
+          }
+        },
+        setSetting: (key, value) => {
+          void DEBUG_ONLY_SET_SETTING
+          const current = settingsRuntime.store.getState()
+          if (
+            key === 'quality' &&
+            typeof value === 'string' &&
+            QUALITY_LEVELS.includes(value as QualityLevel)
+          ) {
+            current.setQuality(value as QualityLevel, true)
+            return true
+          }
+          if (
+            (key === 'master' ||
+              key === 'music' ||
+              key === 'sfx' ||
+              key === 'ambient') &&
+            typeof value === 'number' &&
+            Number.isFinite(value)
+          ) {
+            current.setVolume(key, value)
+            return true
+          }
+          if (key === 'reduceMotion' && typeof value === 'boolean') {
+            current.setReduceMotion(value, true)
+            return true
+          }
+          if (
+            key === 'mouseSensitivity' &&
+            typeof value === 'number' &&
+            Number.isFinite(value)
+          ) {
+            current.setMouseSensitivity(value)
+            return true
+          }
+          if (key === 'invertY' && typeof value === 'boolean') {
+            current.setInvertY(value)
+            return true
+          }
+          return false
+        },
+        pause: (open) => {
+          void DEBUG_ONLY_PAUSE
+          setPauseOpen(open)
+        },
+        getPause: () => {
+          void DEBUG_ONLY_GET_PAUSE
+          return { ...getPauseRuntimeSnapshot() }
+        },
+        getQualityTier: () => {
+          void DEBUG_ONLY_GET_QUALITY
+          return settingsRuntime.store.getState().quality
+        },
+        getAudioState: () => {
+          void DEBUG_ONLY_GET_AUDIO
+          return getLazyAudioSnapshot()
+        },
+        getCompass: () => {
+          void DEBUG_ONLY_GET_COMPASS
+          return getCompassSnapshot()
+        },
+        getAnimationState: () => {
+          void DEBUG_ONLY_GET_ANIMATION
+          return getAnimationRuntimeSnapshot()
+        },
+        getFeelState: () => {
+          void DEBUG_ONLY_GET_FEEL
+          return getFeelDebugSnapshot()
+        },
+        forceFps: (value) => {
+          void DEBUG_ONLY_FORCE_FPS
+          setForcedQualityFps(value)
+        },
+        getLoadedModels: () => {
+          void DEBUG_ONLY_GET_LOADED_MODELS
+          return getLoadedModelIds()
+        },
+        forceBucklerBlockFeedback: () => {
+          void DEBUG_ONLY_FORCE_BLOCK_FEEDBACK
+          emitAudioEvent(audioBus, 'hit-block')
+          recordBlockFlash()
+        },
+        resetPerfStats: () => {
+          void DEBUG_ONLY_RESET_PERF
+          requestPerfStatsReset()
+        },
+        setPostEnabled: (enabled) => {
+          void DEBUG_ONLY_SET_POST
+          setPostEnabledOverride(enabled)
+        },
+        prepareHollowEncounter: () => {
+          void DEBUG_ONLY_PREPARE_HOLLOW
+          hydrateHollowRuntime(true, true, false)
+        },
       }
     }
     return () => {
+      window.removeEventListener('keydown', onEscape, true)
+      window.removeEventListener('pagehide', flushSettings)
+      reduceMotionQuery.removeEventListener('change', onReduceMotionPreference)
+      document.removeEventListener('pointerlockchange', onPointerLockChange)
       stopAutosave()
       detachInput()
+      resetPauseRuntime()
+      setPostEnabledOverride(null)
+      disposeSettingsRuntime()
+      void disposeLazyAudioEngine()
       configureSaveWorldRuntimeAdapter(null)
       if (import.meta.env.DEV) delete window.__CORD_AND_CROSSING_DEBUG__
     }
-  }, [])
+  }, [settingsRuntime])
   return (
     <main className="game-shell">
       <Canvas
@@ -557,20 +938,52 @@ export default function App() {
           position: [PLAYER.camera.shoulderOffset, 2.8, PLAYER.camera.distance],
           fov: 52,
           near: 0.1,
-          far: ZONE.drawDistanceByQuality[ZONE.quality.default],
+          far: quality.drawDistance,
         }}
-        dpr={[1, 1.5]}
+        dpr={quality.dpr as number | [number, number]}
       >
-        {import.meta.env.DEV && <PerfSampler />}
+        <LiveRendererSettings drawDistance={quality.drawDistance} />
+        <PerfSamplerGate />
+        <QualityFallbackDriver />
+        <PausableClockDriver />
+        <PostEffectsGate quality={settings.quality} />
         <Suspense fallback={null}>
-          <Physics gravity={[0, -PLAYER.movement.gravity, 0]} timeStep={1 / 60}>
+          <Physics
+            gravity={[0, -PLAYER.movement.gravity, 0]}
+            timeStep={1 / 60}
+            paused={pause.open || pause.titleOpen}
+          >
             <SceneManager />
           </Physics>
         </Suspense>
       </Canvas>
+      <PlayerHitVignette />
       <QuestOverlay />
+      <Compass />
       <SceneTransitionOverlay />
-      {import.meta.env.DEV && <PerfOverlay />}
+      <TitleScreen
+        open={titleOpen && !creditsOpen}
+        hasValidSave={hasValidSave}
+        onContinue={continueGame}
+        onNewGame={startNewGame}
+        onCredits={openTitleCredits}
+        onUserGesture={beginAudio}
+      />
+      <PauseMenu
+        open={pause.open && !titleOpen && !creditsOpen}
+        settings={settings}
+        onResume={resumeGame}
+        onRestart={startNewGame}
+        onCredits={openPauseCredits}
+        onQualityChange={changeQuality}
+        onVolumeChange={changeVolume}
+        onReduceMotionChange={changeReduceMotion}
+        onMouseSensitivityChange={changeMouseSensitivity}
+        onInvertYChange={changeInvertY}
+      />
+      <Credits open={creditsOpen} onClose={closeCredits} />
+      <Toast />
+      <PerfOverlayGate />
     </main>
   )
 }

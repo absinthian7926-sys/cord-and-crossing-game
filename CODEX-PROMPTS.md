@@ -44,6 +44,8 @@ Read AGENTS.md and GDD.md. Implement Milestone 6 only: the portico at the Ruin S
 ```
 
 ## Prompt 7 (Milestone 7: polish)
+Implemented in PR #7.
+
 ```
 Read AGENTS.md and GDD.md. Implement Milestone 7: replace placeholders with GLB models in /public/models (compressed, credits recorded), Mixamo-style animation clips for idle, run, dodge, strike, cast, recall and heelstone pass, audio per GDD section 12 with credits, pause menu with graphics quality and volume, and a full playthrough check. Confirm the performance budget and fix any blocking bugs. Update GDD.md if any number changed.
 ```

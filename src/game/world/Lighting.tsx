@@ -1,16 +1,38 @@
 import { useFrame } from '@react-three/fiber'
-import { useMemo, useRef } from 'react'
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { DirectionalLight, Object3D } from 'three'
 import { ZONE } from '../../data/zone'
 import { playerStore } from '../player/playerStore'
+import {
+  getSettingsRuntimeSnapshot,
+  subscribeSettingsRuntime,
+} from '../settings/settingsRuntime'
 
 export function Lighting() {
   const sun = useRef<DirectionalLight>(null)
   const target = useMemo(() => new Object3D(), [])
-  const quality = ZONE.quality.default
+  const quality = useSyncExternalStore(
+    subscribeSettingsRuntime,
+    getSettingsRuntimeSnapshot,
+    getSettingsRuntimeSnapshot,
+  ).quality
   const shadowMapSize = ZONE.lighting.shadowMapByQuality[quality]
   const shadowExtent = ZONE.lighting.shadowExtent
   const sunDistance = ZONE.lighting.shadowDistance
+
+  useEffect(() => {
+    const light = sun.current
+    if (!light) return
+    if (
+      light.shadow.mapSize.width === shadowMapSize &&
+      light.shadow.mapSize.height === shadowMapSize
+    )
+      return
+    light.shadow.mapSize.set(shadowMapSize, shadowMapSize)
+    light.shadow.map?.dispose()
+    light.shadow.map = null
+    light.shadow.needsUpdate = true
+  }, [shadowMapSize])
 
   useFrame(() => {
     const light = sun.current

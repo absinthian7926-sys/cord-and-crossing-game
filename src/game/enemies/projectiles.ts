@@ -15,6 +15,17 @@ export type ArrowPool = {
   distanceTravelled: Float32Array
 }
 
+export type ArrowStepResult = {
+  damage: number
+  terrainHitCount: number
+}
+
+export function createArrowStepResult(): ArrowStepResult {
+  return { damage: 0, terrainHitCount: 0 }
+}
+
+const legacyStepResult = createArrowStepResult()
+
 export function createArrowPool(): ArrowPool {
   const size = ENEMY_ARROW.poolSize
   return {
@@ -136,7 +147,7 @@ export function arrowPathIntersectsPlayer(
   )
 }
 
-export function stepArrows(
+export function stepArrowsWithResult(
   pool: ArrowPool,
   dtSeconds: number,
   playerX: number,
@@ -145,9 +156,11 @@ export function stepArrows(
   playerRadius: number,
   playerInvulnerable: boolean,
   heightAt: HeightSampler,
-): number {
+  output: ArrowStepResult,
+): ArrowStepResult {
   const deltaSeconds = Math.max(0, dtSeconds)
-  let damage = 0
+  output.damage = 0
+  output.terrainHitCount = 0
 
   for (let index = 0; index < pool.active.length; index += 1) {
     if (pool.active[index] === 0) continue
@@ -180,14 +193,21 @@ export function stepArrows(
         playerRadius,
       )
     ) {
-      damage += arrowDamage(playerInvulnerable)
+      output.damage += arrowDamage(playerInvulnerable)
       pool.active[index] = 0
       continue
     }
 
     if (
       pool.y[index] <=
-        heightAt(pool.x[index], pool.z[index]) + ENEMY_ARROW.hitRadius ||
+      heightAt(pool.x[index], pool.z[index]) + ENEMY_ARROW.hitRadius
+    ) {
+      pool.active[index] = 0
+      output.terrainHitCount += 1
+      continue
+    }
+
+    if (
       pool.ageSeconds[index] >= ENEMY_ARROW.lifetimeSeconds ||
       pool.distanceTravelled[index] >= ENEMY_ARROW.maximumRange
     ) {
@@ -195,7 +215,30 @@ export function stepArrows(
     }
   }
 
-  return damage
+  return output
+}
+
+export function stepArrows(
+  pool: ArrowPool,
+  dtSeconds: number,
+  playerX: number,
+  playerY: number,
+  playerZ: number,
+  playerRadius: number,
+  playerInvulnerable: boolean,
+  heightAt: HeightSampler,
+): number {
+  return stepArrowsWithResult(
+    pool,
+    dtSeconds,
+    playerX,
+    playerY,
+    playerZ,
+    playerRadius,
+    playerInvulnerable,
+    heightAt,
+    legacyStepResult,
+  ).damage
 }
 
 export function countActiveArrows(pool: ArrowPool): number {

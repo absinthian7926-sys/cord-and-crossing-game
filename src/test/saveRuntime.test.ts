@@ -1,15 +1,23 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { PLAYER } from '../data/player'
 import { SAVE_CONFIG } from '../data/quests'
+import {
+  advancePausableClock,
+  resetPauseRuntime,
+  setPauseOpen,
+} from '../game/pause/pauseRuntime'
 import { playerStore } from '../game/player/playerStore'
 import {
   emitQuestEvent,
   getQuestRuntimeSnapshot,
   lootFrameShelterKey,
+  markCampEnemyDead,
+  markCampEnemyRespawned,
   markCampLeaderDefeated,
   resetQuestRuntime,
   setHollenNearby,
   setKeyNearbyTransient,
+  trySetCampCheckpoint,
 } from '../game/quest/questRuntime'
 import {
   applyRuntimeSaveData,
@@ -85,6 +93,7 @@ function testWorldAdapter(initial?: Partial<SaveWorldRuntimeState>): {
 
 describe('save runtime', () => {
   beforeEach(() => {
+    resetPauseRuntime()
     configureSaveWorldRuntimeAdapter(null)
     resetQuestRuntime()
     const player = playerStore.getState()
@@ -115,6 +124,8 @@ describe('save runtime', () => {
     player.vitals.health = 72
     player.vitals.stamina = 48
     emitQuestEvent('talkedToHollen')
+    expect(trySetCampCheckpoint(380, -195)).toBe(true)
+    expect(markCampEnemyDead('camp-roadBrigand-1')).toBe(true)
     markCampLeaderDefeated({ x: 381.25, y: 38.5, z: -235.75 })
 
     const save = createRuntimeSaveData()
@@ -129,6 +140,8 @@ describe('save runtime', () => {
         currentStep: 2,
         campLeaderDefeated: true,
         keyDrop: { x: 381.25, y: 38.5, z: -235.75 },
+        campCheckpointActive: true,
+        deadCampEnemyIds: ['camp-roadBrigand-1'],
       },
       world: {
         porticoUnlocked: true,
@@ -150,6 +163,8 @@ describe('save runtime', () => {
     data.quest.completedSteps = [1]
     data.quest.campLeaderDefeated = true
     data.quest.keyDrop = { x: 381.25, y: 38.5, z: -235.75 }
+    data.quest.campCheckpointActive = true
+    data.quest.deadCampEnemyIds = ['camp-roadBrigand-1']
     weaponRuntime.cord = {
       mode: 'Out',
       castKind: 'straight',
@@ -169,6 +184,10 @@ describe('save runtime', () => {
       y: 38.5,
       z: -235.75,
     })
+    expect(getQuestRuntimeSnapshot().campCheckpointActive).toBe(true)
+    expect(getQuestRuntimeSnapshot().deadCampEnemyIds).toEqual([
+      'camp-roadBrigand-1',
+    ])
     expect(world.hydrate).toHaveBeenCalledWith(data.world)
     expect(weaponRuntime.cord.mode).toBe('InHand')
 
@@ -241,6 +260,15 @@ describe('save runtime', () => {
     emitQuestEvent('talkedToHollen')
     expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
     storage.entries.clear()
+    expect(trySetCampCheckpoint(380, -195)).toBe(true)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    expect(markCampEnemyDead('camp-roadBrigand-1')).toBe(true)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    expect(markCampEnemyRespawned('camp-roadBrigand-1')).toBe(true)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
     markCampLeaderDefeated({ x: 1, y: 2, z: 3 })
     expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
     storage.entries.clear()
@@ -266,5 +294,45 @@ describe('save runtime', () => {
 
     configureSaveWorldRuntimeAdapter(null)
     installRuntimeAutosave(storage, host)()
+  })
+
+  it('autosaves on pause open and counts exactly 30 unpaused seconds', () => {
+    resetPauseRuntime()
+    const storage = memoryStorage()
+    let interval: (() => void) | null = null
+    const host: AutosaveHost = {
+      setInterval: (handler) => {
+        interval = handler
+        return 9
+      },
+      clearInterval: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    }
+    const cleanup = installRuntimeAutosave(storage, host)
+
+    setPauseOpen(true)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    ;(interval as (() => void) | null)?.()
+    expect(storage.entries.size).toBe(0)
+
+    advancePausableClock(120)
+    expect(storage.entries.size).toBe(0)
+
+    setPauseOpen(false)
+    advancePausableClock(29)
+    expect(storage.entries.size).toBe(0)
+    setPauseOpen(true)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+    storage.entries.clear()
+    advancePausableClock(300)
+    expect(storage.entries.size).toBe(0)
+    setPauseOpen(false)
+    advancePausableClock(1)
+    expect(storage.entries.has(SAVE_CONFIG.storageKey)).toBe(true)
+
+    cleanup()
+    resetPauseRuntime()
   })
 })

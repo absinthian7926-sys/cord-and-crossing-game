@@ -1,10 +1,24 @@
 import { useFrame, useThree } from '@react-three/fiber'
 import { useRapier } from '@react-three/rapier'
 import { useEffect, useRef } from 'react'
-import { MathUtils, Vector3 } from 'three'
+import { MathUtils, Quaternion, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
-import { cameraRayFilterPredicate } from './cameraCollisionRegistry'
-import { applyShoulderOffset, resolveCameraDistance } from './cameraMath'
+import { ZONE } from '../../data/zone'
+import { cameraHeadingFromYaw } from '../../ui/compass'
+import { stepFeelShake } from '../feel/feelRuntime'
+import { getPausableDelta, isGameplayTimePaused } from '../pause/pauseRuntime'
+import { getSettingsRuntimeSnapshot } from '../settings/settingsRuntime'
+import {
+  beginCameraFadeFrame,
+  cameraRayFilterPredicate,
+  fadeCameraCollider,
+  isCameraFadeCollider,
+} from './cameraCollisionRegistry'
+import {
+  applyShoulderOffset,
+  resolveCameraDistance,
+  shouldFadeCameraBlocker,
+} from './cameraMath'
 import { playerStore } from './playerStore'
 
 const baseTarget = new Vector3()
@@ -12,6 +26,12 @@ const target = new Vector3()
 const right = new Vector3()
 const desiredCamera = new Vector3()
 const rayDirection = new Vector3()
+const shakeOffset = new Vector3()
+const shakeUp = new Vector3()
+const shakenCamera = new Vector3()
+const shakenDirection = new Vector3()
+const cameraRollAxis = new Vector3(0, 0, 1)
+const cameraRoll = new Quaternion()
 
 export function CameraRig() {
   const { camera, gl } = useThree()
@@ -48,9 +68,13 @@ export function CameraRig() {
         !orbit.current.fallbackDragging
       )
         return
-      orbit.current.yaw -= event.movementX * 0.004
+      const settings = getSettingsRuntimeSnapshot()
+      const sensitivity = settings.mouseSensitivity
+      const verticalDirection = settings.invertY ? -1 : 1
+      orbit.current.yaw -= event.movementX * 0.004 * sensitivity
       orbit.current.pitch = MathUtils.clamp(
-        orbit.current.pitch - event.movementY * 0.003,
+        orbit.current.pitch -
+          event.movementY * 0.003 * sensitivity * verticalDirection,
         0.12,
         Math.PI * 0.48,
       )
@@ -76,9 +100,12 @@ export function CameraRig() {
     }
   }, [gl])
 
-  useFrame((_, deltaSeconds) => {
-    const position = playerStore.getState().position
+  useFrame((_, rawDeltaSeconds) => {
+    const deltaSeconds = getPausableDelta(rawDeltaSeconds)
+    const player = playerStore.getState()
+    const position = player.position
     const { yaw, pitch, distance } = orbit.current
+    player.cameraHeadingDegrees = cameraHeadingFromYaw(yaw)
     baseTarget.set(position.x, position.y + 0.45, position.z)
 
     const horizontalDistance = Math.cos(pitch) * distance
@@ -102,16 +129,36 @@ export function CameraRig() {
     ray.current.dir.x = rayDirection.x
     ray.current.dir.y = rayDirection.y
     ray.current.dir.z = rayDirection.z
-    const hit = world.castRay(
+    beginCameraFadeFrame()
+    let hit = world.castRay(
       ray.current,
       distance,
       true,
       rapier.QueryFilterFlags.EXCLUDE_SENSORS,
       undefined,
-      playerStore.getState().collider ?? undefined,
+      player.collider ?? undefined,
       undefined,
       cameraRayFilterPredicate,
     )
+    while (
+      hit &&
+      shouldFadeCameraBlocker(
+        hit.timeOfImpact - PLAYER.camera.collisionPadding,
+        ZONE.placeholders.camp.cameraFadeMinimumDistance,
+        isCameraFadeCollider(hit.collider.handle),
+      ) &&
+      fadeCameraCollider(hit.collider.handle)
+    )
+      hit = world.castRay(
+        ray.current,
+        distance,
+        true,
+        rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+        undefined,
+        player.collider ?? undefined,
+        undefined,
+        cameraRayFilterPredicate,
+      )
     const collisionLimit = hit
       ? hit.timeOfImpact - PLAYER.camera.collisionPadding
       : null
@@ -128,10 +175,60 @@ export function CameraRig() {
       PLAYER.camera.collisionMinimumDistance,
       PLAYER.camera.maximumDistance,
     )
-    playerStore.getState().cameraDistance = renderedDistance
+    player.cameraDistance = renderedDistance
 
-    camera.position.copy(target).addScaledVector(rayDirection, renderedDistance)
+    const settings = getSettingsRuntimeSnapshot()
+    const shake = stepFeelShake(
+      deltaSeconds,
+      isGameplayTimePaused(),
+      settings.reduceMotion,
+      renderedDistance,
+    )
+    const hasShakeTranslation = shake.x !== 0 || shake.y !== 0 || shake.z !== 0
+    if (hasShakeTranslation) {
+      shakeUp.crossVectors(rayDirection, right).normalize()
+      shakeOffset
+        .copy(right)
+        .multiplyScalar(shake.x)
+        .addScaledVector(shakeUp, shake.y)
+        .addScaledVector(rayDirection, shake.z)
+      shakenCamera
+        .copy(target)
+        .addScaledVector(rayDirection, renderedDistance)
+        .add(shakeOffset)
+      shakenDirection.copy(shakenCamera).sub(target)
+      let shakenDistance = Math.min(renderedDistance, shakenDirection.length())
+      shakenDirection.normalize()
+      ray.current.dir.x = shakenDirection.x
+      ray.current.dir.y = shakenDirection.y
+      ray.current.dir.z = shakenDirection.z
+      const shakeHit = world.castRay(
+        ray.current,
+        shakenDistance,
+        true,
+        rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+        undefined,
+        player.collider ?? undefined,
+        undefined,
+        cameraRayFilterPredicate,
+      )
+      if (shakeHit)
+        shakenDistance = Math.min(
+          shakenDistance,
+          Math.max(0, shakeHit.timeOfImpact - PLAYER.camera.collisionPadding),
+        )
+      camera.position
+        .copy(target)
+        .addScaledVector(shakenDirection, shakenDistance)
+    } else
+      camera.position
+        .copy(target)
+        .addScaledVector(rayDirection, renderedDistance)
     camera.lookAt(target)
+    if (shake.rollRadians !== 0) {
+      cameraRoll.setFromAxisAngle(cameraRollAxis, shake.rollRadians)
+      camera.quaternion.multiply(cameraRoll)
+    }
   })
 
   return null

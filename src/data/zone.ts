@@ -260,6 +260,8 @@ export const ZONE = {
       glowRange: 12,
       lookoutOffset: [14, -12],
       lookoutSize: [3, 6, 3],
+      // GAME (NEW), PLACEHOLDER, decided by Ryan on 2026-11-03.
+      cameraFadeMinimumDistance: 1.2,
     },
     ruin: {
       frameOffsets: [

@@ -1,5 +1,12 @@
 export const PLAYER = {
-  health: { max: 100, regenerationPerSecond: 4, regenerationDelaySeconds: 6 },
+  health: {
+    max: 100,
+    regenerationPerSecond: 4,
+    // GAME, decided by Ryan on 2026-11-03.
+    regenerationDelaySeconds: 4,
+    safeZoneRegenerationPerSecond: 20,
+    safeZoneRegenerationDelaySeconds: 0,
+  },
   stamina: {
     max: 100,
     runCostPerSecond: 8,

@@ -24,6 +24,7 @@ const inputs = (overrides: Partial<AiInputs> = {}): AiInputs => ({
   stateElapsedSeconds: 0,
   attackCooldownSeconds: 0,
   attackWindupSeconds: 0,
+  attackTokenGranted: true,
   ...overrides,
 })
 
@@ -67,6 +68,65 @@ describe('enemy AI', () => {
       distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange + 0.01,
     })
     expect(chase.state).toBe('Chase')
+  })
+
+  it('holds a denied melee attacker outside the windup', () => {
+    const waiting = run('Attack', {
+      distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange,
+      attackTokenGranted: false,
+      attackWindupSeconds: 0.2,
+    })
+
+    expect(waiting.state).toBe('Attack')
+    expect(waiting.moveTarget).toBe('CirclePlayer')
+    expect(waiting.attackWindupSeconds).toBe(0)
+    expect(waiting.attack).toBe(false)
+
+    const archerWaiting = run('Attack', {
+      enemyType: 'brigandArcher',
+      distanceToPlayer: 20,
+      attackTokenGranted: false,
+    })
+    expect(archerWaiting.moveTarget).toBe('None')
+    expect(archerWaiting.attack).toBe(false)
+  })
+
+  it('ticks post-impact cadence to the windup boundary while waiting for a token', () => {
+    const windup = ENEMY_TYPES.roadBrigand.attackWindupSeconds
+    const cadence = ENEMY_TYPES.roadBrigand.attackCadenceSeconds
+    const atBoundary = run(
+      'Attack',
+      {
+        distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange,
+        attackTokenGranted: false,
+        attackCooldownSeconds: cadence,
+      },
+      cadence - windup + 0.1,
+    )
+    expect(atBoundary.attackCooldownSeconds).toBe(windup)
+
+    const stillWaiting = run(
+      'Attack',
+      {
+        distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange,
+        attackTokenGranted: false,
+        attackCooldownSeconds: atBoundary.attackCooldownSeconds,
+      },
+      1,
+    )
+    expect(stillWaiting.attackCooldownSeconds).toBe(windup)
+
+    const released = run(
+      'Attack',
+      {
+        distanceToPlayer: ENEMY_TYPES.roadBrigand.attackRange,
+        attackTokenGranted: true,
+        attackCooldownSeconds: stillWaiting.attackCooldownSeconds,
+      },
+      windup,
+    )
+    expect(released.attack).toBe(true)
+    expect(released.attackCooldownSeconds).toBe(cadence)
   })
 
   it('returns beyond the 40 m leash and idles at its anchor', () => {

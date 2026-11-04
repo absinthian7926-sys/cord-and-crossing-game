@@ -5,14 +5,27 @@ import {
   BufferGeometry,
   Line,
   LineBasicMaterial,
+  Group,
   Mesh,
   Vector3,
 } from 'three'
 import { EFFECTS } from '../../data/effects'
 import { ENEMY_ATTACK, ENEMY_TYPES } from '../../data/enemies'
+import { FEEL } from '../../data/feel'
+import { MODEL_ASSETS } from '../../data/models'
 import { TASSEL_REWARD } from '../../data/quests'
 import { REACHBLADE, TRAINING_DUMMIES } from '../../data/weapons'
 import { ZONE } from '../../data/zone'
+import {
+  resetHeroWeaponAnimationState,
+  setHeroWeaponAnimationState,
+} from '../animation/animationRuntime'
+import { audioBus, emitAudioEvent } from '../audio/audioBus'
+import {
+  createHitCueDecision,
+  resolveHitCue,
+  whistlePitchForSpeed,
+} from '../audio/audioCues'
 import {
   initialComboState,
   isTargetInArc,
@@ -28,6 +41,7 @@ import {
   distanceSquaredPointToSegment,
 } from '../combat/hitboxes'
 import { houndBiteCutsSimulatedRope } from '../enemies/ai'
+import { ModelSlot } from '../models/ModelSlot'
 import {
   angleFromEnemyFacing,
   damageEnemy,
@@ -43,10 +57,16 @@ import {
   lineCarriesEffect,
   makeCarriedLinePlain,
 } from '../effects/effectRuntime'
+import { addFeelTrauma } from '../feel/feelRuntime'
 import {
   getHollowRuntimeSnapshot,
   hitMarkedSnagPost,
 } from '../hollow/hollowRuntime'
+import {
+  getPausableDelta,
+  getPausableRawDelta,
+  getPauseRuntimeSnapshot,
+} from '../pause/pauseRuntime'
 import {
   consumeInput,
   consumeReleased,
@@ -93,6 +113,12 @@ const aimDirection = new Vector3(0, 0, -1)
 const castDirection = new Vector3(0, 0, -1)
 const toHand = new Vector3()
 const outgoingHit = createOutgoingHitResult()
+const hitCue = createHitCueDecision()
+const HERO_STRIKE_DURATIONS = [
+  MODEL_ASSETS.hero.clips[3].durationSeconds,
+  MODEL_ASSETS.hero.clips[4].durationSeconds,
+  MODEL_ASSETS.hero.clips[5].durationSeconds,
+] as const
 const arcTargets = TRAINING_DUMMIES.map((dummy) => ({
   id: dummy.id,
   x: dummy.position[0],
@@ -127,7 +153,7 @@ function bladeOverlapsEnemy(enemy: EnemyRecord): boolean {
 export function CordWeapon() {
   const { camera } = useThree()
   const bladeMesh = useRef<Mesh>(null)
-  const tasselMesh = useRef<Mesh>(null)
+  const tasselMesh = useRef<Group>(null)
   const passHighlight = useRef<Mesh>(null)
   const cord = useRef<CordState>(weaponRuntime.cord)
   const combo = useRef(initialComboState())
@@ -135,6 +161,8 @@ export function CordWeapon() {
   const lastQTap = useRef(Number.NEGATIVE_INFINITY)
   const skipAimRelease = useRef(false)
   const closeActiveRemaining = useRef(0)
+  const closeAnimationRemaining = useRef(0)
+  const animationComboIndex = useRef<1 | 2 | 3>(1)
   const droppedVelocity = useRef(0)
   const debugHoldOut = useRef(false)
   const rope = useRef(
@@ -186,11 +214,49 @@ export function CordWeapon() {
     if (previousMode !== next.mode && next.mode === 'Dropped')
       setDroppedBladeScene(getWorldConfiguration().scene)
     else if (next.mode === 'InHand') setDroppedBladeScene(null)
-    if (previousMode !== next.mode && next.mode === 'Cut')
+    if (previousMode !== next.mode && next.mode === 'Returning')
+      emitAudioEvent(audioBus, 'recall-rattle')
+    if (previousMode !== next.mode && next.mode === 'Cut') {
       makeCarriedLinePlain('cut')
-    else if (previousMode !== next.mode && next.mode === 'Dropped')
+      emitAudioEvent(audioBus, 'cord-cut')
+      addFeelTrauma(FEEL.shake.trauma.cordCut)
+    } else if (previousMode !== next.mode && next.mode === 'Dropped')
       makeCarriedLinePlain('stop')
   }, [])
+
+  const emitEnemyHitCue = useCallback(
+    (
+      damage: number,
+      blocked: boolean,
+      guardBroken: boolean,
+      strikeThree: boolean,
+    ) => {
+      if (damage <= 0 && !blocked) return
+      const decision = resolveHitCue(
+        guardBroken
+          ? 'guardBreak'
+          : blocked
+            ? 'block'
+            : strikeThree
+              ? 'strike3'
+              : 'flesh',
+        hitCue,
+      )
+      emitAudioEvent(
+        audioBus,
+        decision.primary,
+        0,
+        decision.gain,
+        decision.pitchSemitones,
+      )
+      if (decision.secondary)
+        emitAudioEvent(audioBus, decision.secondary, 0, decision.gain)
+      if (strikeThree && damage > 0)
+        addFeelTrauma(FEEL.shake.trauma.closeStrikeThree)
+      if (guardBroken) addFeelTrauma(FEEL.shake.trauma.carriedGuardBreak)
+    },
+    [],
+  )
 
   const cutCordAtHoundPoint = useCallback(
     (x: number, y: number, z: number): boolean => {
@@ -216,12 +282,14 @@ export function CordWeapon() {
     damage: number,
     staggerSeconds: number,
     nowSeconds: number,
+    strikeThree = false,
   ) => {
     recordDummyDamage({
       dummyId,
       damage,
       staggerSeconds,
       atSeconds: nowSeconds,
+      strikeThree,
     })
   }
 
@@ -249,7 +317,15 @@ export function CordWeapon() {
             arcDegrees,
           )
         ) {
-          damageDummy(dummy.id, damage, staggerSeconds, nowSeconds)
+          damageDummy(
+            dummy.id,
+            damage,
+            staggerSeconds,
+            nowSeconds,
+            comboIndex === 2,
+          )
+          if (comboIndex === 2)
+            addFeelTrauma(FEEL.shake.trauma.closeStrikeThree)
           return
         }
       }
@@ -268,11 +344,17 @@ export function CordWeapon() {
           arcDegrees,
         )
       ) {
-        damageEnemy(enemy.id, damage, {
+        const result = damageEnemy(enemy.id, damage, {
           kind,
           comboIndex,
           staggerSeconds,
         })
+        emitEnemyHitCue(
+          result.damage,
+          result.blocked,
+          result.guardBroken,
+          comboIndex === 2,
+        )
         return
       }
     }
@@ -310,11 +392,14 @@ export function CordWeapon() {
       lastQTap.current = Number.NEGATIVE_INFINITY
       skipAimRelease.current = false
       closeActiveRemaining.current = 0
+      closeAnimationRemaining.current = 0
+      animationComboIndex.current = 1
       droppedVelocity.current = 0
       blade.copy(hand)
       ropeObject.visible = false
       aimObject.visible = false
       if (bladeMesh.current) bladeMesh.current.position.copy(blade)
+      resetHeroWeaponAnimationState()
     })
     if (import.meta.env.DEV)
       registerDebugDropBlade(() => {
@@ -342,6 +427,7 @@ export function CordWeapon() {
       registerHoundBiteHandler(null)
       registerHoldCordOutForPerf(null)
       registerWeaponReset(null)
+      resetHeroWeaponAnimationState()
       if (import.meta.env.DEV) registerDebugDropBlade(null)
       ropeGeometry.dispose()
       aimGeometry.dispose()
@@ -358,14 +444,19 @@ export function CordWeapon() {
     updateCord,
   ])
 
-  useFrame(({ clock }, rawDelta) => {
-    const delta = Math.min(rawDelta, 1 / 30)
+  useFrame((_, rawDelta) => {
+    const rawGameplayDelta = getPausableRawDelta(rawDelta)
+    const delta = getPausableDelta(rawDelta)
     let launchedThisFrame = false
     closeActiveRemaining.current = Math.max(
       0,
       closeActiveRemaining.current - delta,
     )
-    const now = clock.elapsedTime
+    closeAnimationRemaining.current = Math.max(
+      0,
+      closeAnimationRemaining.current - delta,
+    )
+    const now = getPauseRuntimeSnapshot().elapsedSeconds
     const player = playerStore.getState()
     const worldConfiguration = getWorldConfiguration()
     const weaponPresent = isWeaponPresentInScene(
@@ -373,10 +464,14 @@ export function CordWeapon() {
       worldConfiguration.scene,
       weaponRuntime.droppedScene,
     )
-    if (player.death.phase !== 'Alive') return
+    if (player.death.phase !== 'Alive') {
+      resetHeroWeaponAnimationState()
+      return
+    }
     if (isGameplayInputLocked()) {
       pending.current = null
       aimObject.visible = false
+      resetHeroWeaponAnimationState()
       return
     }
     if (isHeelstonePassRunning()) {
@@ -441,6 +536,9 @@ export function CordWeapon() {
             remaining: result.attack.windupSeconds,
             attack: result.attack,
           }
+          animationComboIndex.current = (result.attack.index + 1) as 1 | 2 | 3
+          closeAnimationRemaining.current =
+            HERO_STRIKE_DURATIONS[result.attack.index]
         }
       } else if (cord.current.mode === 'Cut') {
         strikeNearest(
@@ -496,6 +594,11 @@ export function CordWeapon() {
         } else {
           castDirection.set(action.x, 0, action.z).normalize()
           blade.copy(hand)
+          emitAudioEvent(
+            audioBus,
+            'cast-whistle',
+            whistlePitchForSpeed(REACHBLADE.cast.travelSpeed),
+          )
           if (action.kind === 'cast') {
             updateCord(step(cord.current, { type: 'castRelease' }))
             launchedThisFrame = true
@@ -547,13 +650,19 @@ export function CordWeapon() {
                   REACHBLADE.flatArc.minimumRadius,
                 )
               ) {
-                damageEnemy(enemy.id, arcDamage, {
+                const result = damageEnemy(enemy.id, arcDamage, {
                   kind: 'arc',
                   breaksGuard:
                     ENEMY_ATTACK.breaksGuardByDefault ||
                     outgoingHit.breaksGuard,
                   staggerSeconds: arcStagger,
                 })
+                emitEnemyHitCue(
+                  result.damage,
+                  result.blocked,
+                  result.guardBroken,
+                  false,
+                )
                 hitCount += 1
               }
             }
@@ -612,6 +721,7 @@ export function CordWeapon() {
             multipliers.castPullForce,
           )
         ) {
+          addFeelTrauma(FEEL.shake.trauma.snagPull)
           updateCord(step(cord.current, { type: 'hit' }))
           hitTarget = true
         }
@@ -620,7 +730,7 @@ export function CordWeapon() {
         for (const enemy of enemyRuntime.records) {
           if (enemy.phase !== 'Alive') continue
           if (bladeOverlapsEnemy(enemy)) {
-            damageEnemy(enemy.id, castDamage, {
+            const result = damageEnemy(enemy.id, castDamage, {
               kind: 'cast',
               angleFromFacingDegrees: angleFromEnemyFacing(
                 enemy,
@@ -631,6 +741,12 @@ export function CordWeapon() {
                 ENEMY_ATTACK.breaksGuardByDefault || outgoingHit.breaksGuard,
               staggerSeconds: castStagger,
             })
+            emitEnemyHitCue(
+              result.damage,
+              result.blocked,
+              result.guardBroken,
+              false,
+            )
             updateCord(step(cord.current, { type: 'hit' }))
             hitTarget = true
             break
@@ -641,6 +757,7 @@ export function CordWeapon() {
         blade
           .copy(hand)
           .addScaledVector(castDirection, REACHBLADE.maxCordLength)
+        emitAudioEvent(audioBus, 'cord-snap')
         updateCord(step(cord.current, { type: 'maxRange' }))
       }
     }
@@ -688,7 +805,7 @@ export function CordWeapon() {
     } else if (cord.current.mode === 'Cut') {
       // Re-tie is an elapsed-time rule, not a motion integration. Keeping the
       // unclamped render delta prevents the 2 s timer from stretching at low FPS.
-      updateCord(step(cord.current, { type: 'tick' }, rawDelta))
+      updateCord(step(cord.current, { type: 'tick' }, rawGameplayDelta))
       if (cord.current.retieRemaining <= 0) {
         updateCord(step(cord.current, { type: 'retieDone' }))
         blade.copy(hand)
@@ -767,6 +884,24 @@ export function CordWeapon() {
       const attribute = aimGeometry.getAttribute('position') as BufferAttribute
       attribute.needsUpdate = true
     }
+    const pendingAction = pending.current
+    const strikePhase =
+      pendingAction?.kind === 'close'
+        ? 'windup'
+        : closeActiveRemaining.current > 0
+          ? 'active'
+          : closeAnimationRemaining.current > 0
+            ? 'recovery'
+            : 'idle'
+    setHeroWeaponAnimationState(
+      strikePhase,
+      animationComboIndex.current,
+      pendingAction?.kind === 'cast' ||
+        pendingAction?.kind === 'arc' ||
+        cord.current.mode === 'Out',
+      aiming,
+      cord.current.mode === 'Returning',
+    )
   })
 
   return (
@@ -786,20 +921,26 @@ export function CordWeapon() {
             roughness={0.4}
           />
         </mesh>
-        <mesh ref={tasselMesh} position={TASSEL_REWARD.offset} visible={false}>
-          {/* PLACEHOLDER: dyed cloth tassel cosmetic. */}
-          <boxGeometry
-            args={[
-              TASSEL_REWARD.width,
-              TASSEL_REWARD.length,
-              TASSEL_REWARD.depth,
-            ]}
+        <group ref={tasselMesh} position={TASSEL_REWARD.offset} visible={false}>
+          <ModelSlot
+            model="tassel"
+            fallback={
+              <mesh>
+                <boxGeometry
+                  args={[
+                    TASSEL_REWARD.width,
+                    TASSEL_REWARD.length,
+                    TASSEL_REWARD.depth,
+                  ]}
+                />
+                <meshStandardMaterial
+                  color={TASSEL_REWARD.color}
+                  roughness={TASSEL_REWARD.roughness}
+                />
+              </mesh>
+            }
           />
-          <meshStandardMaterial
-            color={TASSEL_REWARD.color}
-            roughness={TASSEL_REWARD.roughness}
-          />
-        </mesh>
+        </group>
       </mesh>
       <primitive object={ropeObject} />
       <primitive object={aimObject} />

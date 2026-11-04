@@ -3,8 +3,10 @@ import { ENEMY_ARROW, ENEMY_TYPES } from '../data/enemies'
 import {
   countActiveArrows,
   createArrowPool,
+  createArrowStepResult,
   launchArrow,
   stepArrows,
+  stepArrowsWithResult,
 } from '../game/enemies/projectiles'
 
 const lowGround = () => -1_000
@@ -86,8 +88,60 @@ describe('enemy arrow projectiles', () => {
   it('despawns when an arrow reaches terrain', () => {
     const pool = createArrowPool()
     const arrow = launchArrow(pool, 0, 1, 0, 10, 1, 0)
-    stepArrows(pool, 0.5, 100, 100, 100, 0.36, false, () => 0)
+    const output = createArrowStepResult()
+    expect(
+      stepArrowsWithResult(
+        pool,
+        0.5,
+        100,
+        100,
+        100,
+        0.36,
+        false,
+        () => 0,
+        output,
+      ),
+    ).toBe(output)
     expect(pool.active[arrow]).toBe(0)
+    expect(output).toEqual({ damage: 0, terrainHitCount: 1 })
+  })
+
+  it('does not report terrain audio hits for range or lifetime expiry', () => {
+    const rangePool = createArrowPool()
+    launchArrow(rangePool, 0, 100, 0, 100, 100, 0)
+    const output = createArrowStepResult()
+    stepArrowsWithResult(
+      rangePool,
+      1,
+      -100,
+      -100,
+      -100,
+      0.36,
+      false,
+      lowGround,
+      output,
+    )
+    expect(countActiveArrows(rangePool)).toBe(0)
+    expect(output.terrainHitCount).toBe(0)
+
+    const lifetimePool = createArrowPool()
+    const arrow = launchArrow(lifetimePool, 0, 100, 0, 0, 100, 0)
+    lifetimePool.velocityX[arrow] = 0
+    lifetimePool.velocityY[arrow] = 0
+    lifetimePool.velocityZ[arrow] = 0
+    stepArrowsWithResult(
+      lifetimePool,
+      ENEMY_ARROW.lifetimeSeconds,
+      -100,
+      -100,
+      -100,
+      0.36,
+      false,
+      lowGround,
+      output,
+    )
+    expect(countActiveArrows(lifetimePool)).toBe(0)
+    expect(output.terrainHitCount).toBe(0)
   })
 
   it('does not produce NaN when start and target match', () => {

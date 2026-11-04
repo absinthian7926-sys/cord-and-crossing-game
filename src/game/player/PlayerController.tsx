@@ -6,17 +6,50 @@ import {
   type RapierCollider,
   type RapierRigidBody,
 } from '@react-three/rapier'
-import { useEffect, useRef } from 'react'
-import { Group, Vector3 } from 'three'
+import { useCallback, useEffect, useRef } from 'react'
+import { Group, Vector3, type AnimationClip, type Object3D } from 'three'
+import { AUDIO } from '../../data/audio'
+import { ENEMY_AI } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
 import { ZONE } from '../../data/zone'
 import {
+  createAnimationController,
+  destroyAnimationController,
+  getHeroWeaponAnimationState,
+  recordHeroAnimation,
+  stepAnimationController,
+  type AnimationController,
+} from '../animation/animationRuntime'
+import {
+  createHeroAnimationSelection,
+  selectHeroAnimation,
+  type HeroAnimationInput,
+} from '../animation/heroAnimation'
+import { audioBus, emitAudioEvent } from '../audio/audioBus'
+import {
   cancelHeelstonePassByDodge,
   clearEffectsOnDeath,
+  effectRuntime,
   isHeelstonePassRunning,
 } from '../effects/effectRuntime'
 import { resetEnemiesNearDeathToReturn } from '../enemies/enemyRuntime'
-import { getWorldConfiguration } from '../scenes/sceneRuntime'
+import { resolveCampDeathRespawn } from '../enemies/campProgress'
+import {
+  createFootstepOutput,
+  createFootstepState,
+  stepFootsteps,
+  type FootstepInput,
+} from '../feel/footsteps'
+import { getPausableDelta } from '../pause/pauseRuntime'
+import { ModelSlot } from '../models/ModelSlot'
+import {
+  getSceneRuntimeSnapshot,
+  getWorldConfiguration,
+} from '../scenes/sceneRuntime'
+import {
+  getQuestRuntimeSnapshot,
+  trySetCampCheckpoint,
+} from '../quest/questRuntime'
 import { resetWeaponToInHand } from '../weapons/weaponRuntime'
 import {
   beginPlayerDeath,
@@ -42,6 +75,16 @@ const input = new Vector3(),
   move = new Vector3(),
   dodge = new Vector3(),
   translation = { x: 0, y: 0, z: 0 }
+const deathRespawn = { x: 0, z: 0 }
+const safeZoneRadiusSquared = ENEMY_AI.safeZoneRadius * ENEMY_AI.safeZoneRadius
+
+function isInsideWaystationSafeZone(
+  enabled: boolean,
+  x: number,
+  z: number,
+): boolean {
+  return enabled && x * x + z * z <= safeZoneRadiusSquared
+}
 
 export function PlayerController() {
   const body = useRef<RapierRigidBody>(null),
@@ -52,12 +95,97 @@ export function PlayerController() {
     cooldown = useRef(0),
     invulnerableLeft = useRef(0),
     unsafeSeconds = useRef(0)
-  const { world } = useRapier()
+  const animation = useRef<AnimationController | null>(null)
+  const animationInput = useRef<HeroAnimationInput>({
+    dead: false,
+    dodging: false,
+    heelstonePassMode: 'Idle',
+    heelstonePassRemainingSeconds: 0,
+    strikePhase: 'idle',
+    comboHitIndex: 1,
+    casting: false,
+    aiming: false,
+    recalling: false,
+    grounded: true,
+    speedMetersPerSecond: 0,
+    running: false,
+  })
+  const animationSelection = useRef(createHeroAnimationSelection())
+  const footstepState = useRef(createFootstepState(true))
+  const footstepInput = useRef<FootstepInput>({
+    deltaSeconds: 0,
+    grounded: true,
+    dodging: false,
+    paused: false,
+    dead: false,
+    speedMetersPerSecond: 0,
+    scene: 'zone',
+    x: 0,
+    z: 0,
+  })
+  const footstepOutput = useRef(createFootstepOutput())
+  const { world, rapier } = useRapier()
   const character = useRef<ReturnType<
     typeof world.createCharacterController
   > | null>(null)
   const { camera } = useThree()
   const initialPosition = playerStore.getState().position
+
+  const modelReady = useCallback(
+    (object: Object3D, clips: readonly AnimationClip[]) => {
+      destroyAnimationController(animation.current)
+      animation.current = createAnimationController(object, clips)
+      const modelBlade = object.getObjectByName('reachblade')
+      if (modelBlade) modelBlade.visible = false
+    },
+    [],
+  )
+
+  const stepHeroAnimation = useCallback(
+    (
+      deltaSeconds: number,
+      dead: boolean,
+      dodging: boolean,
+      grounded: boolean,
+      speedMetersPerSecond: number,
+      running: boolean,
+    ) => {
+      const weapon = getHeroWeaponAnimationState()
+      const inputState = animationInput.current
+      inputState.dead = dead
+      inputState.dodging = dodging
+      inputState.heelstonePassMode = effectRuntime.pass.mode
+      inputState.heelstonePassRemainingSeconds =
+        effectRuntime.pass.remainingSeconds
+      inputState.strikePhase = weapon.strikePhase
+      inputState.comboHitIndex = weapon.comboHitIndex
+      inputState.casting = weapon.casting
+      inputState.aiming = weapon.aiming
+      inputState.recalling = weapon.recalling
+      inputState.grounded = grounded
+      inputState.speedMetersPerSecond = speedMetersPerSecond
+      inputState.running = running
+      const selection = selectHeroAnimation(
+        inputState,
+        animationSelection.current,
+      )
+      stepAnimationController(
+        animation.current,
+        selection.clipId,
+        deltaSeconds,
+        selection.timeScale,
+        selection.crossfadeSeconds,
+        selection.normalizedTime,
+        selection.holdLastPose,
+      )
+      recordHeroAnimation(
+        animation.current,
+        selection.clipId,
+        selection.timeScale,
+      )
+    },
+    [],
+  )
 
   useEffect(() => {
     const controller = world.createCharacterController(0.01)
@@ -71,14 +199,19 @@ export function PlayerController() {
       playerStore.getState().collider = null
       world.removeCharacterController(controller)
       character.current = null
+      destroyAnimationController(animation.current)
+      animation.current = null
     }
   }, [world])
 
   useFrame((_, rawDelta) => {
     const controller = character.current
     if (!body.current || !collider.current || !controller) return
-    const delta = Math.min(rawDelta, 1 / 30)
+    const delta = getPausableDelta(rawDelta)
+    if (delta === 0) return
     const store = playerStore.getState()
+    if (getSceneRuntimeSnapshot().currentScene === 'zone')
+      trySetCampCheckpoint(store.position.x, store.position.z)
     if (beginPlayerDeath(store.death, store.vitals.health)) {
       clearInput()
       dodgeLeft.current = 0
@@ -97,28 +230,61 @@ export function PlayerController() {
     if (respawned) {
       const position = store.position
       const worldConfiguration = getWorldConfiguration()
+      const checkpointActive =
+        worldConfiguration.scene === 'zone' &&
+        getQuestRuntimeSnapshot().campCheckpointActive
+      resolveCampDeathRespawn(
+        deathRespawn,
+        checkpointActive,
+        worldConfiguration.respawn.x,
+        worldConfiguration.respawn.z,
+      )
+      const respawnGroundY = checkpointActive
+        ? worldConfiguration.sampleHeight(deathRespawn.x, deathRespawn.z)
+        : worldConfiguration.respawn.y
       resetVitalsForRespawn(store.vitals)
-      position.x = worldConfiguration.respawn.x
+      position.x = deathRespawn.x
       position.y =
-        worldConfiguration.respawn.y +
-        PLAYER.collider.halfHeight +
-        PLAYER.collider.radius
-      position.z = worldConfiguration.respawn.z
+        respawnGroundY + PLAYER.collider.halfHeight + PLAYER.collider.radius
+      position.z = deathRespawn.z
       body.current.setTranslation(position, true)
       body.current.setNextKinematicTranslation(position)
       store.teleportTarget = null
       vertical.current = 0
       unsafeSeconds.current = 0
+      footstepState.current.elapsedSeconds = 0
+      footstepState.current.wasGrounded = true
       clearInput()
       resetWeaponToInHand()
+      stepHeroAnimation(delta, false, false, true, 0, false)
       return
     }
     if (isPlayerInputLocked(store.death)) {
       clearInput()
+      stepHeroAnimation(delta, true, false, false, 0, false)
       return
     }
     if (isGameplayInputLocked()) {
       clearInput()
+      const worldConfiguration = getWorldConfiguration()
+      updateVitals(
+        store.vitals,
+        delta,
+        false,
+        isInsideWaystationSafeZone(
+          worldConfiguration.safeZoneEnabled,
+          store.position.x,
+          store.position.z,
+        ),
+      )
+      stepHeroAnimation(
+        delta,
+        false,
+        false,
+        controller.computedGrounded(),
+        0,
+        false,
+      )
       return
     }
     const teleportTarget = store.teleportTarget
@@ -130,13 +296,40 @@ export function PlayerController() {
       body.current.setNextKinematicTranslation(store.position)
       store.teleportTarget = null
       vertical.current = 0
+      dodgeLeft.current = 0
+      invulnerableLeft.current = 0
       unsafeSeconds.current = 0
+      footstepState.current.elapsedSeconds = 0
+      footstepState.current.wasGrounded = true
+      stepHeroAnimation(delta, false, false, true, 0, false)
       return
     }
+    let dodgeCancelledPass = false
     if (isHeelstonePassRunning()) {
-      if (consumeInput('dodge')) cancelHeelstonePassByDodge()
+      dodgeCancelledPass = consumeInput('dodge')
+      if (dodgeCancelledPass) cancelHeelstonePassByDodge()
+    }
+    if (isHeelstonePassRunning()) {
       vertical.current = 0
-      updateVitals(store.vitals, delta, false)
+      const worldConfiguration = getWorldConfiguration()
+      updateVitals(
+        store.vitals,
+        delta,
+        false,
+        isInsideWaystationSafeZone(
+          worldConfiguration.safeZoneEnabled,
+          store.position.x,
+          store.position.z,
+        ),
+      )
+      stepHeroAnimation(
+        delta,
+        false,
+        false,
+        controller.computedGrounded(),
+        0,
+        false,
+      )
       return
     }
     dodgeLeft.current = Math.max(0, dodgeLeft.current - delta)
@@ -154,7 +347,10 @@ export function PlayerController() {
     move.copy(right).multiplyScalar(input.x).addScaledVector(forward, -input.z)
     if (move.lengthSq() > 1) move.normalize()
 
-    if (consumeInput('dodge') && cooldown.current <= 0) {
+    if (
+      (dodgeCancelledPass || consumeInput('dodge')) &&
+      cooldown.current <= 0
+    ) {
       if (spendDodgeStamina(store.vitals)) {
         if (move.lengthSq() > 0) {
           dodge.copy(move).normalize()
@@ -185,7 +381,11 @@ export function PlayerController() {
     translation.x = direction.x * speed * delta
     translation.y = vertical.current * delta
     translation.z = direction.z * speed * delta
-    controller.computeColliderMovement(collider.current, translation)
+    controller.computeColliderMovement(
+      collider.current,
+      translation,
+      rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+    )
     const corrected = controller.computedMovement(),
       current = body.current.translation()
     const position = store.position
@@ -224,13 +424,55 @@ export function PlayerController() {
     } else {
       unsafeSeconds.current = 0
     }
-    if (controller.computedGrounded() && vertical.current < 0)
-      vertical.current = 0
+    const grounded = controller.computedGrounded()
+    if (grounded && vertical.current < 0) vertical.current = 0
     if (direction.lengthSq() > 0.001 && visual.current)
       visual.current.rotation.y = Math.atan2(direction.x, direction.z)
-    updateVitals(store.vitals, delta, running)
+    updateVitals(
+      store.vitals,
+      delta,
+      running,
+      isInsideWaystationSafeZone(
+        worldConfiguration.safeZoneEnabled,
+        position.x,
+        position.z,
+      ),
+    )
     store.invulnerable =
       invulnerableLeft.current > 0 || isPlayerSpawnInvulnerable(store.death)
+    const movementSpeed = direction.lengthSq() > 0.001 ? speed : 0
+    const stepInput = footstepInput.current
+    stepInput.deltaSeconds = delta
+    stepInput.grounded = grounded
+    stepInput.dodging = dodging
+    stepInput.paused = false
+    stepInput.dead = false
+    stepInput.speedMetersPerSecond = movementSpeed
+    stepInput.scene = getSceneRuntimeSnapshot().currentScene
+    stepInput.x = position.x
+    stepInput.z = position.z
+    const audioStep = stepFootsteps(
+      footstepState.current,
+      stepInput,
+      footstepOutput.current,
+    )
+    if (audioStep.step) {
+      const surface =
+        audioStep.surface === 'stone'
+          ? AUDIO.footsteps.surfaces.stone
+          : audioStep.surface === 'wood'
+            ? AUDIO.footsteps.surfaces.wood
+            : AUDIO.footsteps.surfaces.dirt
+      emitAudioEvent(
+        audioBus,
+        'footstep',
+        surface,
+        AUDIO.footsteps.gain,
+        audioStep.pitch,
+      )
+    }
+    if (audioStep.landing) emitAudioEvent(audioBus, 'landing')
+    stepHeroAnimation(delta, false, dodging, grounded, movementSpeed, running)
   })
 
   return (
@@ -246,21 +488,29 @@ export function PlayerController() {
         args={[PLAYER.collider.halfHeight, PLAYER.collider.radius]}
       />
       <group ref={visual}>
-        <mesh castShadow position={[0, 0.2, 0]}>
-          <capsuleGeometry
-            args={[
-              PLAYER.collider.radius,
-              PLAYER.collider.halfHeight * 2,
-              8,
-              16,
-            ]}
-          />
-          <meshStandardMaterial color="#61747a" roughness={0.85} />
-        </mesh>
-        <mesh castShadow position={[0, 0.65, 0.24]}>
-          <boxGeometry args={[0.12, 0.18, 0.08]} />
-          <meshStandardMaterial color="#b66d45" />
-        </mesh>
+        <ModelSlot
+          model="hero"
+          onReady={modelReady}
+          fallback={
+            <>
+              <mesh castShadow position={[0, 0.2, 0]}>
+                <capsuleGeometry
+                  args={[
+                    PLAYER.collider.radius,
+                    PLAYER.collider.halfHeight * 2,
+                    8,
+                    16,
+                  ]}
+                />
+                <meshStandardMaterial color="#61747a" roughness={0.85} />
+              </mesh>
+              <mesh castShadow position={[0, 0.65, 0.24]}>
+                <boxGeometry args={[0.12, 0.18, 0.08]} />
+                <meshStandardMaterial color="#b66d45" />
+              </mesh>
+            </>
+          }
+        />
       </group>
     </RigidBody>
   )

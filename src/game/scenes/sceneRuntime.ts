@@ -1,5 +1,6 @@
 import { PLAYER } from '../../data/player'
 import { ZONE } from '../../data/zone'
+import { audioBus, emitAudioEvent } from '../audio/audioBus'
 import { activateEnemyScene } from '../enemies/enemyRuntime'
 import { playerStore } from '../player/playerStore'
 import { heightAt } from '../world/terrain'
@@ -133,7 +134,9 @@ export function requestSceneTransition(
   return true
 }
 
-export function beginPendingSceneLoad(): boolean {
+export function beginPendingSceneLoad(
+  nowMilliseconds = performance.now(),
+): boolean {
   if (snapshot.pendingScene === null || snapshot.phase !== 'flashing')
     return false
   const nextScene = snapshot.pendingScene
@@ -145,7 +148,9 @@ export function beginPendingSceneLoad(): boolean {
     pendingScene: null,
     phase: 'loading',
     revision: snapshot.revision + 1,
+    transitionStartedMilliseconds: nowMilliseconds,
   })
+  emitAudioEvent(audioBus, 'scene-change')
   return true
 }
 
@@ -168,6 +173,7 @@ export function loadSceneImmediately(
   y?: number,
   z?: number,
 ): void {
+  const sceneChanged = snapshot.currentScene !== scene
   const world = getWorldConfiguration(scene)
   activateEnemyScene(scene)
   placePlayer(x ?? world.respawn.x, y ?? world.respawn.y, z ?? world.respawn.z)
@@ -179,6 +185,7 @@ export function loadSceneImmediately(
     transitionStartedMilliseconds: null,
     lastLoadMilliseconds: snapshot.lastLoadMilliseconds,
   })
+  if (sceneChanged) emitAudioEvent(audioBus, 'scene-change')
 }
 
 export function resetSceneRuntime(): void {

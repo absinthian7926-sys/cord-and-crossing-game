@@ -74,6 +74,7 @@ M3 implementation defaults (all GAME (NEW), revisable):
 - Falling or leaving the 1000 m bounds resets after 1 s when 5 m below terrain or 1.5 m into the sea. Boundary walls are 80 m high and 2 m thick.
 - The M3 inert portico pillars were 2.4 m apart and 3.2 m high. M6 replaces those forms with the active portico described in section 9. The waystation shelter is 8 x 3.2 x 5 m centered at (-7, 3), uses 0.16 m posts, and has a 0.5 m radius by 1.2 m barrel at offset (4, 2). Its PLACEHOLDER NPC marker is a flat 0.6 m disc at offset (2, 2), with no person, interaction or gameplay.
 - Placeholder carts use a 3.2 x 0.7 x 1.6 m body with 0.48 m radius by 0.22 m wheels. Camp tents use 6 x 3.2 x 4 m forms at offsets (-10, 0), (8, -5) and (2, 10). The static fire radius is 0.8 m with glow range 12 m. The lookout is 3 x 6 x 3 m at offset (14, -12).
+- M7 key pickup fix, GAME (NEW), PLACEHOLDER, decided by Ryan on 2026-11-03: camp tents and the lookout remain physical world blockers, but their render mesh hides when a camera hit would pull the rendered camera closer than 1.2 m. The camera ray then continues past the hidden blocker. Fire props and small camp decor have no camera collider. The existing 0.3 m collision minimum and every other player camera number stay unchanged.
 - Ruin frame posts use 1.4 x 4 x 1.4 m forms at offsets (-6, 0), (6, 0) and (0, 5), with a 13 x 0.8 x 1.4 m lintel. The inert portico center is (600, -80) and its pillar forms are 0.7 x 3.2 x 0.7 m.
 - The dev performance overlay samples every 0.25 s and toggles with F3. Palette values are terrain #6f735f, road #725f45, sea #557981, rocks #686b66 / #77766d / #595f5d, scrub #6d7657 / #7c7657, wood #8b7658, rope #a48a5e, stone #777873, tent #82745f, fire #d98245 and NPC marker #b8aa82.
 
@@ -90,7 +91,7 @@ Time of day: fixed late afternoon in Slice 1 (warm sun low over the sea). Day-ni
 
 - Camera: third-person orbit, shoulder offset 0.6 m right, distance 4.5 m (2.5 to 7 m on scroll), collision-aware with 0.2 m clearance and recovery damping 12 after obstruction. GAME (NEW): collision may pull in to 0.3 m when geometry is closer than the scroll minimum.
 - Movement: walk 2.2 m/s, run 5.5 m/s (Shift), dodge roll 4 m over 0.45 s with 0.3 s of invulnerability, 0.8 s cooldown. Jump 1.1 m. No climbing in Slice 1.
-- Health: 100. Regenerates 4 per second after 6 s without damage.
+- Health: 100. Regenerates 4 per second after 4 s without damage. Inside the 25 m waystation safe zone, health regenerates at 20 per second with no delay. The prior 6 s delay changed to 4 s, and the safe-zone rate and no-delay rule are GAME, decided by Ryan on 2026-11-03.
 - Stamina: 100. Run costs 8/s, dodge 25, cord cast 15. Regenerates 20/s after 1 s. After run drains stamina to 0, running re-engages at 10 stamina.
 - Death: respawn at waystation or last rested portico area, keep quest state.
 - Controls (default): WASD move, mouse look, LMB close strike, RMB hold to aim then release to cast, Q recall line early, Space jump, Ctrl or C dodge, E interact, F clear the line (heelstone pass), Tab quest log, Esc pause.
@@ -117,7 +118,7 @@ The reachblade (SITE): a forearm-length leaf-shaped single-edged blade with an i
 
 ### 6.3 Utility (Slice 1)
 
-- Snag: casting at marked rope posts or loose crates pulls them 2 m (one physics puzzle in Crossing Hollow). GAME (NEW): the M6 marked post moves at a base 2 m/s; Strength doubles only that speed, not the 2 m distance.
+- Snag: casting at marked rope posts or loose crates pulls them 2 m (one physics puzzle in Crossing Hollow). GAME (NEW): the M6 marked post moves at a base 2 m/s; Strength doubles only that speed, not the 2 m distance. Ryan confirmed this rule on 2026-11-02.
 - Stop: tapping Q twice within 0.3 s instantly drops the cord tension and cancels the cast with zero recovery delay, but the blade lands at the current point and must be picked up (walk over it). Teaches "stopping and recovery".
 - A dropped blade remains in the scene where it landed and does not cross a portico with the player. The player stays unarmed in the other scene until returning to pick it up.
 - GAME (NEW): dropped blade pickup radius is 0.8 m and the moving blade hit radius is 0.6 m. The M2 rope simulation uses 16 points, 12 constraint iterations, damping 0.985, gravity 9.81 m/s2, a 0.04 m ground offset and a 0.12 m rope hit radius. The visible cut-line stub uses 5 points. Training dummies stand about 3 m, 5.2 m and 5.95 m from spawn; the 5.95 m dummy is the cord-cutter test target with a 0.38 m cutter volume.
@@ -125,15 +126,15 @@ The reachblade (SITE): a forearm-length leaf-shaped single-edged blade with an i
 ### 6.4 Effects and heelstones
 
 - Crossing (CANON): stepping fully through an active portico screen (both feet past the screen plane, tracked by a trigger volume pair) grants the effect. Partial entry grants nothing. A fresh effect needs another full crossing.
-- Slice 1 effect: Strength (CANON, matched obsidian). On the player: close damage x1.35, cast pull force x2, stagger duration x1.5. Duration 180 s (GAME, PLACEHOLDER pending Ryan; GDD 18 question 2 remains open).
+- Slice 1 effect: Strength (CANON, matched obsidian). On the player: close damage x1.35, cast pull force x2, stagger duration x1.5. Duration 180 s (GAME, decided by Ryan on 2026-11-02, GDD 18 question 2).
 - Heelstones (SITE, Ryan decided Oct 28, 2026): a small matched pair in the reachblade's ring. They never create an effect. Pressing F while holding an effect plays a 1.2 s "clear the line" animation drawing the cord through the ring. If uninterrupted, the line carries the effect: cast damage x1.35 and casts can break enemy guard. If hit during the pass, nothing carries ("a pass that stops halfway carries nothing").
 - The line holds the effect only while the bearer holds the hand end. Cut or dropped cord (Stop) makes the line plain at once.
 - Effect cap: maximum 2 active effects (SITE, proposed two-effect cap). Slice 1 only has one, but the code enforces the cap.
 
 M6 implementation defaults (all GAME (NEW), revisable unless marked otherwise):
 
-- Re-adding Strength refreshes its timer to the full configured duration and does not stack. Effects and the carried line are not saved. Reload and death clear both.
-- The heelstone pass requires the blade In Hand. During its 1.2 s the player may turn but cannot move, strike, cast or dodge. Damage interrupts it. Dodge input cancels it with nothing carried. It has no stamina cost.
+- Re-adding Strength refreshes its timer to the full configured duration and does not stack. Effects and the carried line are not saved. Reload and death clear both (Ryan confirmed 2026-11-02).
+- The heelstone pass requires the blade In Hand. During its 1.2 s the player may turn but cannot move, strike, cast or dodge. Damage interrupts it. Dodge input cancels it with nothing carried. It has no stamina cost. Ryan confirmed the 1.2 s duration and dodge-cancel rule on 2026-11-02.
 - A carried line remains carried through normal cast and recall while Strength remains active. Cut, Stop, Strength expiry or removal, and player death make it plain at once.
 
 ### 6.5 Other arms
@@ -159,6 +160,10 @@ M4 implementation defaults (all GAME (NEW), revisable):
 - A Cliff hound in Attack within its 1.4 m bite reach checks all 15 segments of the simulated 16-point Verlet rope on its 0.8 s bite cadence. Its cutter volume radius is 0.38 m and is centered at the top of the low hound capsule. The overlap includes the rope's 0.12 m hit radius. A bite overlapping the simulated cord while it is Out produces one cut through the existing cut and re-tie path.
 - Patrol movement is 50% of chase speed. Each patrol uses 3 or 4 points within 15 m of its anchor. The mixed road patrol has 2 Road brigands and 1 Brigand archer between road distances 150 m and 350 m. Its 40 m leash is measured from the nearest point on that route corridor so the patrol can traverse both endpoints.
 - The camp spawn anchor is (380, -240) with enemies spread within 30 m. Cliff hound pack anchors are (25, -160) with 3 hounds and (-20, -225) with 2 hounds.
+- M7 camp fix default, GAME, decided by Ryan on 2026-11-03: the prior spiral camp layout is replaced by three PLACEHOLDER groups. The west tent group is centered at offset (-24, 0), the south tent group at (8, -22), and the leader group at the fire at (0, 4). Each group has 2 Road brigands within 3 m and 1 Brigand archer at its 5 m outer edge. Group centers are at least 24 m apart. The west center uses -24 m instead of the suggested -22 m so its separation from the leader group is 24.33 m and satisfies the approved 24 m minimum.
+- M7 camp fix default, GAME, decided by Ryan on 2026-11-03: at most 2 melee enemies may be in attack windup or active attack against the player at once. Other melee enemies hold at 3.5 m and circle at 50 percent speed until a token is free. At most 2 Brigand archers may draw at once. The melee and archer token pools are independent.
+- M7 camp fix default, GAME, decided by Ryan on 2026-11-03: while quest step 2 is active, standard camp enemies killed by the player do not respawn until the frame shelter key is taken. Taking the key restarts the normal 300 s respawn timer for each dead standard camp enemy. The camp leader returns to its anchor after player death without restoring its current HP. Once the player enters 45 m of the camp anchor during step 2, health death respawns the player at the PLACEHOLDER south-road checkpoint (330, -200), outside the 40 m leash. The existing 2 s spawn invulnerability is unchanged. The checkpoint clears when the key is taken. Save schema 2 stores the checkpoint flag and stable dead camp enemy ids as optional fields, with false and an empty list as defaults for older v2 saves.
+- M7 key pickup fix, GAME (NEW), PLACEHOLDER, decided by Ryan on 2026-11-03: when the camp leader dies, all living standard camp enemies release their attack tokens, enter Return and preserve their current HP. They cannot attack or re-aggro until the key is taken or 20 s passes. Road patrols, cliff hounds and every non-camp enemy are unchanged.
 - Alert lasts 0.6 s before Chase. Return restores full health when an enemy is within 1 m of its anchor. Line of sight uses one physics ray against terrain and large rocks.
 - Enemies ignore a player inside the 25 m waystation safe zone and Return if the player is there. Enemy bodies, arrows and all sensors are excluded from the camera ray. Terrain, large rocks and buildings remain camera blockers.
 - Player death uses a 1.5 s placeholder fade, then respawns at (0, 8, 0) with full health and stamina, 2 s spawn invulnerability and the cord In Hand. On death, living enemies within 40 m of the death position reset to Return, inclusive at exactly 40 m. Enemies farther away keep their current state and follow their normal no-target behavior without a forced Return or heal. The 40 m reset radius is GAME (NEW) and matches the leash.
@@ -177,7 +182,7 @@ Quest (GAME): "The Line at the Rise."
 3. Return to Hollen. He teaches the heelstone pass in dialogue (tutorial prompt for F).
 4. Go to the Ruin Shelf, use the key, and cross the portico screen. Load Crossing Hollow. Strength is granted.
 5. In the Hollow: clear the line through the heelstones, snag the rope post to open the path, defeat the final encounter.
-6. Return through the screen (no effect from a return crossing in Slice 1; GAME, PLACEHOLDER pending Ryan; GDD 18 question 2 remains open) and report to Hollen. Reward: a dyed cloth tassel cosmetic on the cord (SITE nod to dyed cloth streamers).
+6. Return through the screen (no effect from a return crossing in Slice 1; GAME, decided by Ryan on 2026-11-02) and report to Hollen. Reward: a dyed cloth tassel cosmetic on the cord (SITE nod to dyed cloth streamers).
 
 Dialogue: short, plain, under 40 words per line, no manuscript prose.
 
@@ -186,20 +191,23 @@ M5 implementation defaults (all GAME (NEW), revisable):
 - Hollen uses a PLACEHOLDER capsule with radius 0.4 m, height 1.8 m and muted linen color #b8aa82. He stands at (-5, 5), faces the road toward (0, 0), turns toward the player while talking and has a 2.5 m interaction radius.
 - The exact interaction prompts are PLACEHOLDER text: "E Talk" for Hollen and "E Take key" for the dropped key. M5 adds no key-use action and no working heelstone-pass action.
 - The camp leader is a Road brigand variant with 120 HP and the Road brigand's existing damage, cadence, 0.5 s windup, speed, buckler, stagger and no-flee rules. Its PLACEHOLDER capsule and collider are 1.15x Road brigand scale, it stands at offset (0, 4) from the camp center, and a dyed sash in #9f493e is its only bright color. It spawns from quest step 2 until defeated, drops the key at its death position and does not respawn while the key is waiting or after it is looted. The optional PLACEHOLDER label is "Camp leader".
-- The frame shelter key is a plain iron ring. Its PLACEHOLDER pickup uses a 1.5 m interaction radius, 0.18 m ring radius, 0.035 m tube radius, 6 radial and 16 tubular segments, iron color #5d5a50, metalness 0.65, roughness 0.5, and a soft #c9a46a glow with intensity 0.4 and range 2 m. It cannot be dropped or lost. Step 2 completes when the key is picked up, without requiring every camp enemy to be defeated.
+- The frame shelter key is a plain iron ring. Its PLACEHOLDER pickup uses a 2.5 m interaction radius, changed from 1.5 m by Ryan on 2026-11-03. The ring keeps its 0.18 m radius, 0.035 m tube radius, 6 radial and 16 tubular segments, iron color #5d5a50, metalness 0.65 and roughness 0.5. The #c9a46a glow changes from intensity 0.4 and range 2 m to intensity 1.25 and range 6 m. It cannot be dropped or lost. Step 2 completes when the key is picked up, without requiring every camp enemy to be defeated.
+- M7 key pickup fix, GAME (NEW), PLACEHOLDER, decided by Ryan on 2026-11-03: a leader death point must have 1.5 m clearance from the camp fire edge, every tent footprint, the lookout and any large-rock collider. If blocked, the resolver checks 12 directions in 1 m rings out to 6 m and chooses the nearest clear walkable point. Its last resort is 6 m from the fire toward the camp checkpoint. The same resolution applies to legacy and restored saved drops.
+- M7 key pickup fix, GAME (NEW), PLACEHOLDER, decided by Ryan on 2026-11-03: the key marker adds a 6 m high, 0.35 m radius light shaft at opacity 0.28 and a bright 0.32 m ring with a 0.045 m tube. The marker does not pulse and has no collider. While a key waits, the tracker text is "Take the key (N m)." and the compass label is "Key N m" at the real drop position.
 - The dialogue panel is at most 640 px wide with parchment #e8dcc0 and ink #2b2620. It shows 2 to 4 numbered choices. The quest tracker uses 14 px text and highlights a changed step for 3 s. The quest log has one key slot, shows all six steps, marks completed steps and highlights the current step.
 - M5 used save key `cord-and-crossing.save.v1` with schema version 1. M6 migrates a valid v1 record to the v2 rules below.
 - Steps 4 to 6 are defined in the quest data and may advance through the dev hook for tests, but M5 gameplay emits events only for steps 1 to 3. No portico, crossing, Hollow, effect or reward behavior exists in M5.
 - The exact PLACEHOLDER tracker text is GAME (NEW): "Talk to Hollen."; "Clear the brigand camp and take the frame shelter key."; "Return to Hollen."; "Go to the Ruin Shelf, use the key, and cross the portico screen."; "Clear the line, snag the rope post, and defeat the final encounter."; and "Return through the screen and report to Hollen."
+- The exact step 2 PLACEHOLDER tracker hint is GAME (NEW): "Approach from the south road to avoid the cliff path."
 - The exact PLACEHOLDER Hollen dialogue lines are GAME (NEW): "Brigands took the iron ring keys for the old frame shelter at the rise."; "The frame shelter key is at the brigand camp."; "Once you carry an effect, press F to clear the line through the heelstones."; "Take the key to the Ruin Shelf and cross the portico screen."; "Clear the line, snag the rope post, and defeat the final encounter in the Hollow."; and "Report when you return through the screen."
 - The exact PLACEHOLDER dialogue choices are GAME (NEW): "I will bring one back."; "Leave"; "I am looking for it."; "I understand."; "Say that again."; "I will go to the shelf."; "I know the work."; and "The work is finished."
 
 M6 quest and save defaults (all GAME (NEW), revisable):
 
 - The save key is `cord-and-crossing.save.v2` with schema version 2. A valid v1 save from `cord-and-crossing.save.v1` migrates on load. The v2 record adds the exact pending key-drop position or null, permanent portico-unlocked state, current scene, Hollow pass / snag / encounter progress, and tassel-earned state. Clearing a save removes both keys.
-- A migrated v1 save that defeated the camp leader before taking the key uses the prior camp-leader anchor as its legacy key-drop fallback because v1 did not store the exact death point. Every new v2 key drop stores and restores the exact point.
+- A migrated v1 save that defeated the camp leader before taking the key uses the prior camp-leader anchor as its legacy key-drop fallback because v1 did not store the exact death point. Every new v2 key drop stores and restores the exact point (Ryan approved 2026-11-02).
 - Autosave still runs on every quest revision, every persistent portico, scene or Hollow-progress change, every 30 s while alive, and page hide. A living player restores a valid position in the saved scene. Zone fallback is (0, 8, 0); Hollow fallback is (0, 0, -3). Effects and the carried line load empty, and the cord loads In Hand.
-- The key is kept after use and the portico stays unlocked. Quest step 5 completes only after one heelstone pass has completed in the Hollow, the marked post has been pulled and all three final enemies have been defeated. The two Road brigands and one Brigand archer do not respawn after defeat.
+- The key is kept after use and the portico stays unlocked (Ryan confirmed 2026-11-02). Quest step 5 completes only after one heelstone pass has completed in the Hollow, the marked post has been pulled and all three final enemies have been defeated. The two Road brigands and one Brigand archer do not respawn after defeat.
 - Reporting at step 6 completes the quest, grants the tassel once and autosaves. Reporting at steps 1 to 5 or after completion changes nothing. The PLACEHOLDER completion line is "The work at the rise is done." The added PLACEHOLDER choice is "Say that again."; "Leave" is reused.
 - The PLACEHOLDER tassel is a 0.25 m by 0.06 m by 0.025 m cloth strip at blade-ring offset (0, -0.56, 0), color #9f493e and roughness 0.9. It has no gameplay effect.
 
@@ -215,7 +223,7 @@ M6 portico defaults (all GAME (NEW), revisable):
 - The zone portico is centered at (600, -80), with its front facing west and screen normal (-1, 0, 0). The key-use radius is 2.5 m on the zone side. "E Use key" appears only at quest step 4 with the key while the screen is locked. The key is not consumed. Returning from the Hollow places the player 3 m west of the screen on the zone side.
 - The screen is 2.4 m wide, 3.2 m high and 0.04 m thick. Trigger centers are 0.3 m from the plane and trigger depth is 0.12 m. Solid pillars remain camera blockers; all key-use and crossing sensors are excluded from camera rays.
 - The PLACEHOLDER shimmer uses pale edge #e9efe6, a 0.25 m soft edge, 0.3 m/s vertical ripple, opacity 0.45 and a 1 s fade on unlock. Its cheap shader uses ripple frequency 34, horizontal phase 5, body alpha 0.12 plus ripple alpha 0.16, and edge contribution 0.78. It is one draw call with no downloaded texture or post-processing. A dev performance sample counts it as in view only when its center is inside the camera frustum and the absolute camera-to-screen normal dot is at least 0.5.
-- The crossing flash lasts 1 s. The loading panel says "Crossing Hollow" and contains no lore text. The return screen is always active. With the PLACEHOLDER pending rule, a Hollow-to-zone return crossing does not add or refresh Strength.
+- The crossing flash lasts 1 s. The loading panel says "Crossing Hollow" and contains no lore text. The return screen is always active. With Ryan's 2026-11-02 rule, a Hollow-to-zone return crossing does not add or refresh Strength.
 
 ## 10. UI
 
@@ -226,6 +234,19 @@ M6 portico defaults (all GAME (NEW), revisable):
 - Font: a readable serif for titles (e.g. Cormorant Garamond) and a sans for HUD (Inter). Palette taken from the guide site.
 
 M6 UI implementation (GAME (NEW), revisable): effect slots sit above the existing vitals and are sampled at 10 Hz with whole-second timers. The exact M6 action prompts are "E Use key" and "F Clear the line". The PLACEHOLDER loading panel uses the existing parchment and ink colors with the text "Crossing Hollow". M6 adds no compass, pause menu, settings UI or downloaded web fonts; those remain M7.
+
+M7 settings defaults (all GAME (NEW), revisable):
+
+- Settings use schema version 1 under `cord-and-crossing.settings.v1`, separate from the game save. Writes are debounced 250 ms. The saved fields are the four volume values, quality, whether quality was chosen by hand, reduce motion, whether reduce motion was chosen by hand, mouse sensitivity and invert Y.
+- Quality defaults to Medium. Mouse sensitivity ranges from 0.5x to 2.0x and defaults to 1.0x. Invert Y defaults off. Reduce motion follows `prefers-reduced-motion` until the player chooses it by hand.
+- Low, Medium and High apply live. Their device pixel ratios are 1, [1, 1.5] and [1, 2]. Restart keeps settings.
+- The compass is 360 px wide, shows a 120 degree span and samples transient heading and marker data at 10 Hz.
+- The PLACEHOLDER title shows "Cord and Crossing", save-aware "Continue", "New game" and "Credits" actions over the rendered world. The pause root contains "Resume", "Controls", "Graphics", "Volume", "Restart" and "Credits". Restart asks: "Restart the quest from the beginning? Your saved progress will be cleared." with "Restart" and "Cancel".
+- Pause freezes fixed-step physics and the shared gameplay clock. Escape closes dialogue or the quest log first, otherwise toggles pause. Pointer-lock loss during active play opens pause. A pause requested during a crossing flash, scene load or death fade opens after that blocker clears.
+- M7 credits are exactly: "Cord and Crossing"; "Co-developed with AI by RJ and Absinthian."; "Design and direction: RJ"; "Models: made for this project with Blender scripts and code (CC0)."; "Audio: generated in code for this project (CC0)."; and "Built with open-source software: Blender, Vite, React, three.js, React Three Fiber, drei, Rapier, zustand, postprocessing. See each project's license."
+- M7 uses system fonts only: Georgia, `Times New Roman`, serif for titles and system-ui, `-apple-system`, `Segoe UI`, sans-serif for HUD and menus. No web font is downloaded.
+- Reduce motion changes the 1 s crossing flash to 35 percent white, uses 0.3 s scene and death crossfades, halves shimmer ripple speed, disables camera shake and halves the player-hit vignette peak.
+- PLACEHOLDER hit feedback: an enemy flashes toward #f4ead7 at mix 0.6 for 0.08 s, then returns over 0.06 s. Telegraph tint takes priority and queues the hit flash. A blocked buckler flashes #c9a46a for 0.08 s. Player damage shows a #9f493e edge vignette for 0.18 s at peak opacity 0.35.
 
 ## 11. Art direction
 
@@ -239,7 +260,18 @@ M6 UI implementation (GAME (NEW), revisable): effect slots sit above the existin
   - Trade routes: https://cord-and-crossing.vercel.app/images/trade-routes.jpg
   - Island dawn (light and palette): https://cord-and-crossing.vercel.app/images/island-dawn.jpg
   - Guide home: https://cord-and-crossing.vercel.app
-- Asset pipeline: placeholder primitives first (capsule hero, boxes, cylinders). Then Tripo or Meshy generated GLB models, rigged and animated with Mixamo, compressed with gltf-transform (Draco or Meshopt, KTX2 textures).
+- Slice 1 asset pipeline, decided by Ryan on 2026-11-02: self-authored Blender scripts are the primary free pipeline, with deterministic code-built GLBs as the fallback when Blender is unavailable. M7 used the authorized code-built fallback because Blender was not present in the development environment. Source lives in `scripts/models`, compression uses weld, dedup, prune, quantize and Meshopt, and the flat-color assets use no textures. The existing primitives remain runtime fallbacks.
+
+M7 model defaults (all GAME (NEW), PLACEHOLDER art and revisable):
+
+- Each model has at most 4 materials and no downloaded textures. Hero is at most 3000 triangles. Road brigand, Brigand archer and Hollen are at most 2500 each. Cliff hound is at most 1500. Each static prop is at most 1500.
+- Hero clips are idle 2 s, run 0.7 s, dodge 0.45 s, strike 1 and 2 at 0.5 s, strike 3 at 0.64 s, cast 0.5 s, recall 0.55 s and heelstone pass 1.2 s. Walk uses run at 0.4x. The animation crossfade is 0.12 s.
+- Road brigand clips are idle 2 s, walk 0.8 s, attack 1.1 s, stagger 0.4 s and death 1 s. Brigand archer clips are idle 2 s, walk 0.8 s, draw 0.6 s and death 1 s. Cliff hound clips are idle 1.6 s, run 0.55 s, bite 0.8 s and death 1 s. Hollen clips are idle 2 s and talk 1.5 s.
+- Static model ids are waystation shelter, water barrel, cart, tent, camp fire, lookout, ruin frame post, ruin lintel, portico pillar, rope rail post, frame shelter key, practice rail, target post, snag post, Hollow gate and tassel. Rope rail post GLB meshes render as shared instanced geometry to preserve the draw-call budget.
+- The M7 code-built outputs total 114096 bytes. The largest file is `hero.glb` at 18388 bytes. All outputs are dedicated CC0 by the project and recorded in `public/models/CREDITS.md`.
+- PLACEHOLDER camera shake uses seed 17, 11 Hz smooth noise, trauma squared, decay 1.6 per second, maximum translation 0.12 m and maximum roll 1.2 degrees. Trauma additions are 0.35 for player damage, 0.15 for close strike 3, 0.3 for carried guard break, 0.2 for cord cut, 0.25 for snag pull and 0.2 for valid crossing.
+- PLACEHOLDER post-processing has a 2 ms Medium target. Low mounts nothing. Medium uses SMAA only. The Medium color grade and then the vignette were removed in the required order after each software-renderer cost check still exceeded 2 ms. High keeps vignette offset 0.3 and darkness 0.35, brightness 0.02, contrast 0.05 and saturation 0.04, and adds bloom intensity 0.35, luminance threshold 0.85 and mipmap blur. (GAME (NEW), M7 measured fallback)
+- PLACEHOLDER footstep selection uses movement epsilon 0.05 m/s, seed 37 and the 42 m Ruin Shelf stone radius. Animation selection uses movement epsilon 0.05 m/s, walk time scale 0.4 and crossfade 0.12 s.
 
 ## 12. Audio notes
 
@@ -248,6 +280,20 @@ M6 UI implementation (GAME (NEW), revisable): effect slots sit above the existin
 - Portico: a low sustained chord near an active screen, rising as the player approaches; bright bell on a valid crossing; nothing on a partial one.
 - Heelstone pass: a dry hiss of cord through the ring ending in a small chime when the working end clears.
 - Music: sparse strings and wooden flute, combat layer adds drums. Use CC0 or licensed sources only; record source in /public/audio/CREDITS.md.
+
+M7 procedural audio defaults (all GAME (NEW), PLACEHOLDER and revisable):
+
+- All Slice 1 audio is synthesized at runtime. The lazy engine has 24 voices. Master, music, SFX and ambient sliders default to 80, 50, 80 and 60 and use the squared gain curve `(value / 100)^2`. The master compressor threshold is -12 dB with ratio 3.
+- A crossing bell ducks music 6 dB for 1.5 s. Pause filters music and ambience at 800 Hz and reduces both 9 dB over 0.3 s. The open filter is 20 kHz.
+- Zone wind uses a 0.07 Hz gain LFO. Surf swells every 6 to 9 s, is full at X = -150, falls to 25 percent at X = 300 and stays there farther east. Gulls occur every 8 to 20 s within 250 m of the west coast. Rope creaks occur every 5 to 12 s within 15 m of the rail or shelter. Waystation fire and wood are heard within 25 m. Hollow wind is 40 percent, surf is 15 percent and gulls are absent.
+- Cord whistle pitch maps blade speed 0 to 22 m/s onto 0.8x to 1.2x. The maximum-length snap is at 6.5 m. Portico sound is silent beyond 20 m and full at 2 m, with pitch rising 2 semitones and the low-pass opening from 400 Hz to 2000 Hz across that range.
+- Heelstone hiss follows the 1.2 s pass and chimes only on completion. Music uses seed 7, 72 bpm and D dorian, with phrases of 2 to 4 notes, rests of 4 to 12 beats, 5 Hz flute vibrato, 2 s combat entry, 6 s combat exit and 2 s crossfades.
+- Footsteps are 0.5 s apart at walk speed and 0.32 s apart at run speed, gain 0.35, with seeded pitch variation within 4 percent. Dirt is filtered at 1200 Hz. Stone uses a 2500 Hz band and 180 Hz body. The Ruin Shelf stone radius is 42 m.
+- Flesh hits use a 220 Hz body for 0.12 s. Buckler blocks use 880 Hz and 1320 Hz partials for 0.2 s. Player hurt uses a 140 Hz body for 0.15 s. Strike 3 gain is 1.15x. Guard-break block pitch is 3 semitones lower and is followed by the flesh hit.
+- Engine synthesis uses 12 semitones per octave, a 64-event bus, 20-cue history, a 2 s generated noise buffer, maximum update delta 0.25 s and 0.03 s bus ramps. General envelopes use silence gain 0.0001, 0.08 s target ramps, 0.015 s attacks at 20 percent of the envelope, heelstone hiss gain 0.16 and hiss ramp 0.02 s.
+- Ambient synthesis filters wind, surf, rope, waystation and pass noise at 1400, 420, 900, 700 and 1900 Hz. Wind uses base 0.82, amplitude 0.18 and gain 0.12. Surf uses base 0.55, amplitude 0.2, a seeded 6 to 9 s period and gain 0.16. Rope and waystation gains are 0.018 and 0.045. Gull frequency moves 900 to 1450 to 780 Hz over 0.18 s and 0.42 s, with 0.04 s attack, 0.03 s tail and gain 0.025. Creak frequency moves 120 to 230 Hz over 0.42 s, peaks at 70 percent, attacks for 0.08 s and uses gain 0.025. Wood uses 105 Hz, gain 0.025, duration 0.09 s and intervals 3 to 8 s. Explore phrases use a 1.0 phrase gain with 0.08 s attack and 0.12 s release, followed by the seeded silent rest. (GAME (NEW), M7)
+- The portico chord uses 110, 164.81 and 220 Hz at gain 0.1. Music uses crossfade time-constant divisor 3, title multiplier 0.35, explore gain 0.12, combat gain 0.14, D dorian frequencies 146.83, 164.81, 174.61, 196, 220, 246.94 and 261.63 Hz, string detune 7 cents, string filter 900 Hz, string octave 0.5x, flute octave 2x, breath filter 3000 Hz, breath gain 0.008, flute base 293.66 Hz, vibrato depth 4 Hz, string ramp 0.12 s and flute ramp 0.08 s. Drums move 90 to 40 Hz over 0.16 s with noise gain 0.05 for 0.12 s.
+- Cue synthesis values are: cast whistle 0.25 s, 740 to 1480 Hz, gain 0.3; cord snap 0.08 s, 2400 Hz filter, playback 1.3x, gain 0.4; recall rattle 0.28 s, 1800 Hz filter, playback 1.7x, gain 0.18; cord cut 0.18 s, 130 to 65 Hz, playback 0.65x, gain 0.45; portico bell 1.2 s, 880 and 1320 Hz ending at 876 and 1316 Hz, gain 0.42; heelstone chime 0.55 s, 988 to 986 Hz, gain 0.28; footstep duration 0.09 s, stone end 110 Hz and wood filter 900 Hz; landing 0.18 s, 120 to 55 Hz, noise 0.08 s, playback 0.7x, gain 0.4; block end frequencies 760 and 1100 Hz at gain 0.22; hurt end 65 Hz, playback 0.75x, gain 0.38; arrow 0.06 s, filter 2900 Hz, playback 1.8x, gain 0.22; flesh end 90 Hz, noise 0.07 s, playback 0.8x, gain 0.35.
 
 ## 13. Tech architecture
 
@@ -305,6 +351,16 @@ Core systems: Input, CameraRig, PlayerController, CordWeapon (state machine plus
 - JS main bundle under 1.5 MB gzip. Physics step fixed 60 Hz.
 - Instancing for rocks, grass and scrub; LOD for terrain chunks; shadows only from sun, 2048 map on High.
 
+M7 explicit build budgets (all GAME (NEW), revisable):
+
+- Main entry JavaScript is at most 1300 kB gzip. The existing 1.5 MB hard cap remains.
+- The lazy audio engine chunk is at most 40 kB gzip, the lazy performance readout chunk is at most 10 kB gzip, and the lazy post-processing chunk is at most 60 kB gzip. None is a static import of the main entry.
+- The Hollow chunk remains at most 5 MB. All GLB files in `public/models` total at most 1.5 MB on disk, with no single GLB over 400 kB.
+- Initial download is at most 4 MB gzip for `index.html`, entry JavaScript and CSS, static imports, and zone GLBs loaded before first playable. The existing 15 MB cap remains.
+- `npm run build` reads the Vite manifest, prints the measured budget table and fails when any limit is exceeded.
+- M7 quality profiles apply live: Low, Medium and High use scatter density 0.5x, 1x and 1.5x; draw distance 450 m, 650 m and 850 m; device pixel ratio 1, [1, 1.5] and [1, 2]; and shadow maps 1024, 1024 and 2048.
+- While active play remains below 45 fps for 8 continuous seconds, automatic quality fallback drops one tier and shows a 4 s notice. It drops at most once from each tier in a page session. A player-selected tier disables the fallback.
+
 ## 16. Milestones and acceptance criteria
 
 Build one milestone at a time. Each ends with a runnable build, passing tests and a Vercel preview.
@@ -351,5 +407,5 @@ M7 Polish and slice complete
 ## 18. Open questions for Ryan
 
 1. Is a mainland coast starting zone right, or should the first slice be the island (which has no combat tradition in canon)?
-2. Strength duration of 180 s and the "no effect on return crossing" rule are game-only numbers. Keep?
+2. Strength duration of 180 s and the "no effect on return crossing" rule are game-only numbers. Keep? Answered by Ryan on 2026-11-02: keep 180 s and no effect on a return crossing for Slice 1.
 3. Hero: original route runner, or a choice of peoples at character creation later?

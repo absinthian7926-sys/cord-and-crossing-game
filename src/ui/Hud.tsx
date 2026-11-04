@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react'
 import { PLAYER_DEATH } from '../data/enemies'
+import { FEEL } from '../data/feel'
 import { PLAYER } from '../data/player'
 import { QUEST_UI } from '../data/quests'
 import { ZONE } from '../data/zone'
 import { effectRuntime, hasStrength } from '../game/effects/effectRuntime'
 import { playerStore } from '../game/player/playerStore'
 import { getQuestRuntimeSnapshot } from '../game/quest/questRuntime'
+import { formatPendingKeyTrackerText } from '../game/quest/keyDrop'
 import {
   getPorticoRuntimeSnapshot,
   isKeyUseNearby,
@@ -13,9 +15,11 @@ import {
   shouldShowUseKeyPrompt,
 } from '../game/portico/porticoRuntime'
 import { weaponRuntime } from '../game/weapons/weaponRuntime'
+import { getSettingsRuntimeSnapshot } from '../game/settings/settingsRuntime'
 
 export type QuestTrackerHud = {
   readonly text: string
+  readonly hint?: string
   readonly revision: number
 }
 
@@ -33,6 +37,7 @@ export function Hud({ questTracker = null }: HudProps) {
   const cordState = useRef<HTMLDivElement>(null)
   const deathFade = useRef<HTMLDivElement>(null)
   const questTrackerElement = useRef<HTMLDivElement>(null)
+  const questTrackerObjective = useRef<HTMLDivElement>(null)
   const effectSlotOne = useRef<HTMLDivElement>(null)
   const effectSlotTwo = useRef<HTMLDivElement>(null)
   const useKeyPrompt = useRef<HTMLDivElement>(null)
@@ -44,10 +49,12 @@ export function Hud({ questTracker = null }: HudProps) {
     cord: '',
     retie: -1,
     deathOpacity: -1,
+    deathPhase: '',
     effectOne: '',
     effectTwo: '',
     showUseKey: false,
     showClearLine: false,
+    pendingKeyTrackerText: '',
   })
 
   useEffect(() => {
@@ -99,16 +106,33 @@ export function Hud({ questTracker = null }: HudProps) {
         lastDisplayed.current.cord = cord.mode
         lastDisplayed.current.retie = retie
       }
-      const deathOpacity =
-        state.death.phase === 'Fading'
+      const reduceMotion = getSettingsRuntimeSnapshot().reduceMotion
+      const deathFadeSeconds = reduceMotion
+        ? FEEL.reduceMotion.transitionFadeSeconds
+        : PLAYER_DEATH.fadeSeconds
+      const deathOpacity = reduceMotion
+        ? state.death.phase === 'Fading'
+          ? 1
+          : 0
+        : state.death.phase === 'Fading'
           ? Math.max(
               0,
               Math.min(
                 1,
-                1 - state.death.fadeRemainingSeconds / PLAYER_DEATH.fadeSeconds,
+                (PLAYER_DEATH.fadeSeconds - state.death.fadeRemainingSeconds) /
+                  deathFadeSeconds,
               ),
             )
           : 0
+      if (
+        deathFade.current &&
+        state.death.phase !== lastDisplayed.current.deathPhase
+      ) {
+        deathFade.current.style.transition = reduceMotion
+          ? `opacity ${FEEL.reduceMotion.transitionFadeSeconds}s ease-out`
+          : 'none'
+        lastDisplayed.current.deathPhase = state.death.phase
+      }
       if (deathOpacity !== lastDisplayed.current.deathOpacity) {
         if (deathFade.current)
           deathFade.current.style.opacity = deathOpacity.toFixed(3)
@@ -141,7 +165,23 @@ export function Hud({ questTracker = null }: HudProps) {
         }
         lastDisplayed.current.effectTwo = effectLabels[1]
       }
-      const quest = getQuestRuntimeSnapshot().quest
+      const questSnapshot = getQuestRuntimeSnapshot()
+      const quest = questSnapshot.quest
+      if (quest.currentStep === 2 && questSnapshot.keyDrop !== null) {
+        const pendingKeyTrackerText = formatPendingKeyTrackerText(
+          Math.hypot(
+            state.position.x - questSnapshot.keyDrop.x,
+            state.position.z - questSnapshot.keyDrop.z,
+          ),
+        )
+        if (
+          pendingKeyTrackerText !== lastDisplayed.current.pendingKeyTrackerText
+        ) {
+          if (questTrackerObjective.current)
+            questTrackerObjective.current.textContent = pendingKeyTrackerText
+          lastDisplayed.current.pendingKeyTrackerText = pendingKeyTrackerText
+        }
+      }
       const portico = getPorticoRuntimeSnapshot()
       const showUseKey = shouldShowUseKeyPrompt({
         nearby: isKeyUseNearby(),
@@ -233,10 +273,19 @@ export function Hud({ questTracker = null }: HudProps) {
           aria-live="polite"
           style={{ fontSize: QUEST_UI.tracker.fontSizePixels }}
         >
-          {questTracker.text}
+          <div ref={questTrackerObjective} className="quest-tracker-objective">
+            {questTracker.text}
+          </div>
+          {questTracker.hint && (
+            <div className="quest-tracker-hint">{questTracker.hint}</div>
+          )}
         </div>
       )}
-      <div ref={deathFade} className="death-fade" aria-hidden="true" />
+      <div
+        ref={deathFade}
+        className="death-fade player-death-fade"
+        aria-hidden="true"
+      />
     </div>
   )
 }

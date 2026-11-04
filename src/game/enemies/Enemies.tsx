@@ -3,13 +3,17 @@ import { useEffect, useMemo, useReducer, useRef } from 'react'
 import { Frustum, InstancedMesh, Matrix4, Object3D, Vector3 } from 'three'
 import { ENEMY_ARROW, ENEMY_PRESENTATION } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
+import { audioBus, emitAudioEvent } from '../audio/audioBus'
 import { applyCombatDamage } from '../combat/combat'
+import { triggerPlayerHitFeedback } from '../feel/feelRuntime'
+import { getPausableDelta } from '../pause/pauseRuntime'
 import { playerStore } from '../player/playerStore'
 import { isUnarmed } from '../weapons/cordState'
 import { weaponRuntime } from '../weapons/weaponRuntime'
 import { getWorldConfiguration } from '../scenes/sceneRuntime'
 import { Enemy } from './Enemy'
 import {
+  advanceCampEnemyBreakoff,
   enemyRuntime,
   initializeEnemyRoster,
   isEnemySceneInitialized,
@@ -17,7 +21,7 @@ import {
   subscribeEnemyRoster,
   type EnemySpawnLike,
 } from './enemyRuntime'
-import { stepArrows } from './projectiles'
+import { createArrowStepResult, stepArrowsWithResult } from './projectiles'
 import { createSpawnPlan } from './spawns'
 
 function initializeDefaultRoster(): void {
@@ -42,27 +46,43 @@ function initializeDefaultRoster(): void {
 function EnemyProjectiles() {
   const mesh = useRef<InstancedMesh>(null)
   const transform = useMemo(() => new Object3D(), [])
+  const stepResult = useMemo(() => createArrowStepResult(), [])
 
   useFrame((_, rawDelta) => {
     const arrows = enemyRuntime.arrows
     const player = playerStore.getState()
-    const damage = stepArrows(
-      arrows,
-      Math.min(rawDelta, 1 / 30),
-      player.position.x,
-      player.position.y,
-      player.position.z,
-      PLAYER.collider.radius,
-      player.invulnerable,
-      getWorldConfiguration().sampleHeight,
-    )
-    if (damage > 0)
-      applyCombatDamage(
+    const delta = getPausableDelta(rawDelta)
+    if (delta > 0) {
+      advanceCampEnemyBreakoff(delta)
+      stepArrowsWithResult(
+        arrows,
+        delta,
+        player.position.x,
+        player.position.y,
+        player.position.z,
+        PLAYER.collider.radius,
+        player.invulnerable,
+        getWorldConfiguration().sampleHeight,
+        stepResult,
+      )
+    } else {
+      stepResult.damage = 0
+      stepResult.terrainHitCount = 0
+    }
+    for (let index = 0; index < stepResult.terrainHitCount; index += 1)
+      emitAudioEvent(audioBus, 'arrow-terrain')
+    if (stepResult.damage > 0) {
+      const appliedDamage = applyCombatDamage(
         player.vitals,
-        damage,
+        stepResult.damage,
         isUnarmed(weaponRuntime.cord),
         player.invulnerable,
       )
+      if (appliedDamage > 0) {
+        emitAudioEvent(audioBus, 'player-hurt')
+        triggerPlayerHitFeedback()
+      }
+    }
 
     const arrowsMesh = mesh.current
     if (!arrowsMesh) return

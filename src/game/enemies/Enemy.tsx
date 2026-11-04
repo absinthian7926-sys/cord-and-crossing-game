@@ -6,11 +6,19 @@ import {
   type RapierCollider,
   type RapierRigidBody,
 } from '@react-three/rapier'
-import { useEffect, useMemo, useRef } from 'react'
-import { Color, type Group, type Mesh, type MeshStandardMaterial } from 'three'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import {
+  Color,
+  Mesh,
+  MeshStandardMaterial,
+  type AnimationClip,
+  type Group,
+  type Object3D,
+} from 'three'
 import {
   CAMP_LEADER,
   ENEMY_AI,
+  ENEMY_ATTACK_TOKENS,
   ENEMY_DEATH,
   ENEMY_PRESENTATION,
   ENEMY_ARROW,
@@ -19,6 +27,15 @@ import {
   type EnemyType,
 } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
+import { FEEL } from '../../data/feel'
+import {
+  createAnimationController,
+  destroyAnimationController,
+  recordEnemyAnimation,
+  stepAnimationController,
+  type AnimationController,
+} from '../animation/animationRuntime'
+import { audioBus, emitAudioEvent } from '../audio/audioBus'
 import { applyCombatDamage } from '../combat/combat'
 import { distanceSquaredPointToSegment } from '../combat/hitboxes'
 import {
@@ -28,6 +45,21 @@ import {
 } from '../player/cameraCollisionRegistry'
 import { playerStore } from '../player/playerStore'
 import { getWorldConfiguration } from '../scenes/sceneRuntime'
+import { getPausableDelta } from '../pause/pauseRuntime'
+import { ModelSlot } from '../models/ModelSlot'
+import {
+  createEnemyFlashState,
+  createTimedFlashState,
+  stepBlockFlash,
+  stepEnemyHitFlash,
+  triggerBlockFlash,
+  triggerEnemyHitFlash,
+} from '../feel/hitFlash'
+import {
+  recordBlockFlash,
+  recordEnemyHitFlash,
+  triggerPlayerHitFeedback,
+} from '../feel/feelRuntime'
 import { isUnarmed } from '../weapons/cordState'
 import { weaponRuntime } from '../weapons/weaponRuntime'
 import {
@@ -37,8 +69,18 @@ import {
   type AiMoveTarget,
 } from './ai'
 import {
+  applyAttackTokenEvent,
+  ownsAttackToken,
+  releaseAttackToken,
+  resolveWaitingTarget,
+  tokenKindForEnemy,
+} from './attackTokens'
+import {
   canEnemyRespawn,
+  completeEnemyReturn,
+  enemyRuntime,
   fireEnemyArrow,
+  isCampEnemyBreakoffActiveFor,
   requestHoundCordBite,
   resetEnemyAtAnchor,
   sampleEnemyGroundHeight,
@@ -49,6 +91,7 @@ import { advanceRespawnElapsed, canRespawnFromElapsed } from './spawns'
 type EnemyProps = { enemy: EnemyRecord }
 
 const movement = { x: 0, y: 0, z: 0 }
+const waitingTarget = { x: 0, z: 0 }
 
 function colliderRadius(enemy: EnemyRecord): number {
   return ENEMY_TYPES[enemy.type].collider.radius * enemy.scale
@@ -68,9 +111,21 @@ function colliderHalfHeight(enemy: EnemyRecord): number {
 
 function moveSpeedFor(type: EnemyType, intent: AiMoveTarget): number {
   const speed = ENEMY_TYPES[type].moveSpeed
-  return intent === 'PatrolPoint'
-    ? speed * ENEMY_AI.patrolSpeedMultiplier
-    : speed
+  if (intent === 'PatrolPoint') return speed * ENEMY_AI.patrolSpeedMultiplier
+  if (intent === 'CirclePlayer')
+    return speed * ENEMY_ATTACK_TOKENS.waitingSpeedMultiplier
+  return speed
+}
+
+function attackRangeFor(type: EnemyType): number {
+  return type === 'brigandArcher'
+    ? ENEMY_TYPES.brigandArcher.keepAway.maximumDistance
+    : ENEMY_TYPES[type].attackRange
+}
+
+function attackWindupFor(type: EnemyType): number {
+  if (type === 'brigandArcher') return ENEMY_TYPES.brigandArcher.drawSeconds
+  return ENEMY_TYPES[type].attackWindupSeconds
 }
 
 function canDrawBow(enemy: EnemyRecord): boolean {
@@ -82,11 +137,41 @@ function canDrawBow(enemy: EnemyRecord): boolean {
   )
 }
 
+function firstStandardMesh(root: Object3D, nodeName: string): Mesh | null {
+  const named = root.getObjectByName(nodeName)
+  if (!named) return null
+  let result: Mesh | null = null
+  named.traverse((child) => {
+    if (result !== null || !(child instanceof Mesh)) return
+    const material = Array.isArray(child.material)
+      ? child.material[0]
+      : child.material
+    if (material instanceof MeshStandardMaterial) result = child
+  })
+  return result
+}
+
+function standardMaterial(mesh: Mesh): MeshStandardMaterial {
+  const material = Array.isArray(mesh.material)
+    ? mesh.material[0]
+    : mesh.material
+  return material as MeshStandardMaterial
+}
+
 export function Enemy({ enemy }: EnemyProps) {
   const color = ENEMY_TYPES[enemy.type].color
   const baseBodyColor = useMemo(() => new Color(color), [color])
   const windupBodyColor = useMemo(
     () => new Color(ENEMY_PRESENTATION.meleeWindup.tintColor),
+    [],
+  )
+  const hitBodyColor = useMemo(() => new Color(FEEL.hitFlash.enemy.color), [])
+  const baseShieldColor = useMemo(
+    () => new Color(ENEMY_PRESENTATION.roadBrigand.shieldColor),
+    [],
+  )
+  const blockShieldColor = useMemo(
+    () => new Color(FEEL.hitFlash.block.color),
     [],
   )
   const body = useRef<RapierRigidBody>(null)
@@ -96,7 +181,17 @@ export function Enemy({ enemy }: EnemyProps) {
   const healthFill = useRef<Mesh>(null)
   const drawBar = useRef<Mesh>(null)
   const bodyMaterial = useRef<MeshStandardMaterial>(null)
-  const sword = useRef<Mesh>(null)
+  const shieldMaterial = useRef<MeshStandardMaterial>(null)
+  const bodyRenderColor = useRef(new Color(color))
+  const shieldRenderColor = useRef(
+    new Color(ENEMY_PRESENTATION.roadBrigand.shieldColor),
+  )
+  const sword = useRef<Object3D>(null)
+  const animation = useRef<AnimationController | null>(null)
+  const hitFlash = useRef(createEnemyFlashState())
+  const blockFlash = useRef(createTimedFlashState())
+  const seenHitFlash = useRef(enemy.hitFlashSequence)
+  const seenBlockFlash = useRef(enemy.blockFlashSequence)
   const { world, rapier } = useRapier()
   const character = useRef<ReturnType<
     typeof world.createCharacterController
@@ -115,8 +210,52 @@ export function Enemy({ enemy }: EnemyProps) {
     stateElapsedSeconds: 0,
     attackCooldownSeconds: 0,
     attackWindupSeconds: 0,
+    attackTokenGranted: false,
   })
   const nextTranslation = useRef({ x: enemy.x, y: enemy.y, z: enemy.z })
+
+  const modelReady = useCallback(
+    (object: Object3D, clips: readonly AnimationClip[]) => {
+      destroyAnimationController(animation.current)
+      animation.current = createAnimationController(object, clips)
+      const loadedBodyMesh =
+        firstStandardMesh(object, 'optimized-body') ??
+        firstStandardMesh(
+          object,
+          enemy.type === 'cliffHound' ? 'body' : 'pelvis',
+        )
+      if (loadedBodyMesh) {
+        const loadedBodyMaterial = standardMaterial(loadedBodyMesh)
+        bodyMaterial.current = null
+        baseBodyColor.copy(loadedBodyMaterial.color)
+        bodyRenderColor.current.copy(baseBodyColor)
+        loadedBodyMesh.onBeforeRender = () => {
+          loadedBodyMaterial.color.copy(bodyRenderColor.current)
+        }
+        loadedBodyMesh.onAfterRender = () => {
+          loadedBodyMaterial.color.copy(baseBodyColor)
+        }
+      }
+      const swordNode = object.getObjectByName('sword')
+      if (swordNode) sword.current = swordNode
+      const loadedShieldMesh = firstStandardMesh(object, 'buckler')
+      if (loadedShieldMesh) {
+        const loadedShieldMaterial = standardMaterial(loadedShieldMesh)
+        shieldMaterial.current = null
+        baseShieldColor.copy(loadedShieldMaterial.color)
+        shieldRenderColor.current.copy(baseShieldColor)
+        loadedShieldMesh.onBeforeRender = () => {
+          loadedShieldMaterial.color.copy(shieldRenderColor.current)
+        }
+        loadedShieldMesh.onAfterRender = () => {
+          loadedShieldMaterial.color.copy(baseShieldColor)
+        }
+      }
+      const sash = object.getObjectByName('leaderSash')
+      if (sash) sash.visible = enemy.variant === ENEMY_VARIANTS.campLeader
+    },
+    [baseBodyColor, baseShieldColor, enemy.type, enemy.variant],
+  )
 
   useEffect(() => {
     const controller = world.createCharacterController(0.01)
@@ -128,11 +267,14 @@ export function Enemy({ enemy }: EnemyProps) {
     controller.setMinSlopeSlideAngle((50 * Math.PI) / 180)
     if (enemyCollider) registerCameraExcludedCollider(enemyCollider.handle)
     return () => {
+      releaseAttackToken(enemyRuntime.attackTokens, enemy.id, false)
       if (enemyCollider) unregisterCameraExcludedCollider(enemyCollider.handle)
       world.removeCharacterController(controller)
       character.current = null
+      destroyAnimationController(animation.current)
+      animation.current = null
     }
-  }, [world])
+  }, [enemy.id, world])
 
   useFrame((_, rawDelta) => {
     const enemyBody = body.current
@@ -140,7 +282,8 @@ export function Enemy({ enemy }: EnemyProps) {
     const enemyVisual = visual.current
     const controller = character.current
     if (!enemyBody || !enemyCollider || !enemyVisual || !controller) return
-    const delta = Math.min(rawDelta, 1 / 30)
+    const delta = getPausableDelta(rawDelta)
+    if (delta === 0) return
     const player = playerStore.getState()
 
     if (enemy.teleportRequested) {
@@ -172,6 +315,14 @@ export function Enemy({ enemy }: EnemyProps) {
       enemyVisual.rotation.z =
         Math.min(1, enemy.deathElapsed / ENEMY_DEATH.fallSeconds) *
         (Math.PI * 0.5)
+      stepAnimationController(
+        animation.current,
+        'death',
+        delta,
+        1,
+        FEEL.animation.crossfadeSeconds,
+      )
+      recordEnemyAnimation('death')
       if (enemy.deathElapsed >= ENEMY_DEATH.fallSeconds) {
         enemy.phase = 'Dead'
         enemyVisual.visible = false
@@ -181,6 +332,9 @@ export function Enemy({ enemy }: EnemyProps) {
     }
 
     if (enemy.phase === 'Dead') {
+      enemyVisual.visible = false
+      enemyCollider.setEnabled(false)
+      enemyBody.setEnabled(false)
       enemy.respawnElapsed = advanceRespawnElapsed(enemy.respawnElapsed, delta)
       const playerAnchorX = player.position.x - enemy.anchorX
       const playerAnchorZ = player.position.z - enemy.anchorZ
@@ -270,8 +424,9 @@ export function Enemy({ enemy }: EnemyProps) {
     inputs.distanceFromAnchor = distanceFromAnchor
     inputs.distanceToAnchor = Math.hypot(fromAnchorX, fromAnchorZ)
     inputs.healthFraction = enemy.hp / enemy.maxHp
-    inputs.lineOfSight = lineOfSight
-    inputs.playerAlive = player.vitals.health > 0
+    const campBreakoffActive = isCampEnemyBreakoffActiveFor(enemy.id)
+    inputs.lineOfSight = campBreakoffActive ? false : lineOfSight
+    inputs.playerAlive = !campBreakoffActive && player.vitals.health > 0
     inputs.playerInSafeZone =
       getWorldConfiguration().safeZoneEnabled &&
       (playerSafeDistance <= ENEMY_AI.safeZoneRadius ||
@@ -281,12 +436,55 @@ export function Enemy({ enemy }: EnemyProps) {
     inputs.attackWindupSeconds = enemy.drawRemaining
     inputs.staggered = wasStaggered
 
+    const attackTokenKind = tokenKindForEnemy(enemy.type)
+    const attackCycleReady =
+      !campBreakoffActive &&
+      enemy.state === 'Attack' &&
+      lineOfSight &&
+      distanceToPlayer <= attackRangeFor(enemy.type) &&
+      !wasStaggered &&
+      enemy.attackCooldown <= attackWindupFor(enemy.type) + delta
+    let attackTokenGranted = ownsAttackToken(
+      enemyRuntime.attackTokens,
+      enemy.id,
+      attackTokenKind,
+    )
+    if (attackCycleReady)
+      attackTokenGranted = applyAttackTokenEvent(
+        enemyRuntime.attackTokens,
+        enemy.id,
+        attackTokenKind,
+        'request',
+        false,
+      )
+    else if (attackTokenGranted) {
+      releaseAttackToken(enemyRuntime.attackTokens, enemy.id, false)
+      attackTokenGranted = false
+    }
+    inputs.attackTokenGranted = attackTokenGranted
+
     const result = stepAi(enemy.state, inputs, delta, aiResult.current)
     enemy.state = result.state
     enemy.stateElapsed = result.stateElapsedSeconds
     enemy.attackCooldown = result.attackCooldownSeconds
     enemy.drawRemaining = result.attackWindupSeconds
-    if (result.healAtAnchor) enemy.hp = enemy.maxHp
+    if (result.attack)
+      applyAttackTokenEvent(
+        enemyRuntime.attackTokens,
+        enemy.id,
+        attackTokenKind,
+        'impact',
+        false,
+      )
+    else if (result.state !== 'Attack' || enemy.staggerRemaining > 0)
+      applyAttackTokenEvent(
+        enemyRuntime.attackTokens,
+        enemy.id,
+        attackTokenKind,
+        'leftAttack',
+        false,
+      )
+    if (result.healAtAnchor) completeEnemyReturn(enemy)
     if (
       distanceToPlayer > 0 &&
       (enemy.state === 'Alert' || enemy.state === 'Attack')
@@ -304,19 +502,33 @@ export function Enemy({ enemy }: EnemyProps) {
       )
     }
 
+    const attackWindupActive =
+      enemy.drawRemaining > 0 && enemy.staggerRemaining === 0
     const meleeWindupActive =
-      enemy.type !== 'brigandArcher' &&
-      enemy.drawRemaining > 0 &&
-      enemy.staggerRemaining === 0
+      enemy.type !== 'brigandArcher' && attackWindupActive
+    if (enemy.hitFlashSequence !== seenHitFlash.current) {
+      seenHitFlash.current = enemy.hitFlashSequence
+      triggerEnemyHitFlash(hitFlash.current, meleeWindupActive)
+      recordEnemyHitFlash()
+    }
+    if (enemy.blockFlashSequence !== seenBlockFlash.current) {
+      seenBlockFlash.current = enemy.blockFlashSequence
+      triggerBlockFlash(blockFlash.current)
+      recordBlockFlash()
+    }
+    const hitMix = stepEnemyHitFlash(hitFlash.current, delta, meleeWindupActive)
+    bodyRenderColor.current.copy(
+      meleeWindupActive ? windupBodyColor : baseBodyColor,
+    )
+    if (!meleeWindupActive && hitMix > 0)
+      bodyRenderColor.current.lerp(hitBodyColor, hitMix)
     if (bodyMaterial.current)
-      bodyMaterial.current.color.copy(
-        meleeWindupActive ? windupBodyColor : baseBodyColor,
-      )
-    if (sword.current)
-      sword.current.rotation.z =
-        enemy.type === 'roadBrigand' && meleeWindupActive
-          ? ENEMY_PRESENTATION.meleeWindup.brigandSwordRaiseRadians
-          : 0
+      bodyMaterial.current.color.copy(bodyRenderColor.current)
+    const blockMix = stepBlockFlash(blockFlash.current, delta)
+    shieldRenderColor.current.copy(baseShieldColor)
+    if (blockMix > 0) shieldRenderColor.current.lerp(blockShieldColor, blockMix)
+    if (shieldMaterial.current)
+      shieldMaterial.current.color.copy(shieldRenderColor.current)
     enemyVisual.scale.y =
       enemy.type === 'cliffHound' && meleeWindupActive
         ? ENEMY_PRESENTATION.meleeWindup.houndCrouchScaleY
@@ -333,12 +545,16 @@ export function Enemy({ enemy }: EnemyProps) {
           player.position.z,
         )
       } else {
-        applyCombatDamage(
+        const appliedDamage = applyCombatDamage(
           player.vitals,
           ENEMY_TYPES[enemy.type].damage,
           isUnarmed(weaponRuntime.cord),
           player.invulnerable,
         )
+        if (appliedDamage > 0) {
+          emitAudioEvent(audioBus, 'player-hurt')
+          triggerPlayerHitFeedback()
+        }
         if (enemy.type === 'cliffHound')
           requestHoundCordBite(
             enemy.x,
@@ -373,6 +589,18 @@ export function Enemy({ enemy }: EnemyProps) {
     } else if (intent === 'Player') {
       targetX = player.position.x
       targetZ = player.position.z
+      shouldMove = true
+    } else if (intent === 'CirclePlayer') {
+      resolveWaitingTarget(
+        waitingTarget,
+        enemy.id,
+        enemy.x,
+        enemy.z,
+        player.position.x,
+        player.position.z,
+      )
+      targetX = waitingTarget.x
+      targetZ = waitingTarget.z
       shouldMove = true
     } else if (intent === 'FlankPlayer') {
       const inverseDistance = distanceToPlayer > 0 ? 1 / distanceToPlayer : 0
@@ -437,6 +665,33 @@ export function Enemy({ enemy }: EnemyProps) {
         enemyVisual.rotation.y = Math.atan2(directionX, directionZ)
       }
     }
+    const animationClip =
+      enemy.staggerRemaining > 0 && enemy.type === 'roadBrigand'
+        ? 'stagger'
+        : attackWindupActive
+          ? enemy.type === 'brigandArcher'
+            ? 'draw'
+            : enemy.type === 'cliffHound'
+              ? 'bite'
+              : 'attack'
+          : shouldMove
+            ? enemy.type === 'cliffHound'
+              ? 'run'
+              : 'walk'
+            : 'idle'
+    stepAnimationController(
+      animation.current,
+      animationClip,
+      delta,
+      1,
+      FEEL.animation.crossfadeSeconds,
+    )
+    recordEnemyAnimation(animationClip)
+    if (sword.current)
+      sword.current.rotation.z =
+        enemy.type === 'roadBrigand' && meleeWindupActive
+          ? ENEMY_PRESENTATION.meleeWindup.brigandSwordRaiseRadians
+          : 0
   })
 
   const radius = colliderRadius(enemy)
@@ -455,182 +710,206 @@ export function Enemy({ enemy }: EnemyProps) {
     >
       <CapsuleCollider ref={collider} args={[halfHeight, radius]} />
       <group ref={visual}>
-        {enemy.type === 'cliffHound' ? (
-          <>
-            <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
-              <capsuleGeometry
-                args={[
-                  radius,
-                  halfHeight * 2,
-                  ENEMY_PRESENTATION.hound.bodyCapSegments,
-                  ENEMY_PRESENTATION.hound.bodyRadialSegments,
-                ]}
-              />
-              <meshStandardMaterial
-                ref={bodyMaterial}
-                color={color}
-                roughness={ENEMY_PRESENTATION.hound.bodyRoughness}
-              />
-            </mesh>
-            <mesh
-              castShadow
-              position={[
-                ENEMY_PRESENTATION.hound.headPosition[0],
-                ENEMY_PRESENTATION.hound.headPosition[1],
-                ENEMY_PRESENTATION.hound.headPosition[2],
-              ]}
-            >
-              <coneGeometry
-                args={[
-                  ENEMY_PRESENTATION.hound.headRadius,
-                  ENEMY_PRESENTATION.hound.headLength,
-                  ENEMY_PRESENTATION.hound.headSegments,
-                ]}
-              />
-              <meshStandardMaterial
-                color={color}
-                roughness={ENEMY_PRESENTATION.hound.bodyRoughness}
-              />
-            </mesh>
-          </>
-        ) : (
-          <>
-            <mesh castShadow>
-              <capsuleGeometry
-                args={[
-                  radius,
-                  halfHeight * 2,
-                  ENEMY_PRESENTATION.humanoid.bodyCapSegments,
-                  ENEMY_PRESENTATION.humanoid.bodyRadialSegments,
-                ]}
-              />
-              <meshStandardMaterial
-                ref={bodyMaterial}
-                color={color}
-                roughness={ENEMY_PRESENTATION.humanoid.bodyRoughness}
-              />
-            </mesh>
-            {enemy.type === 'roadBrigand' ? (
+        <ModelSlot
+          model={
+            enemy.type === 'cliffHound'
+              ? 'cliffHound'
+              : enemy.type === 'brigandArcher'
+                ? 'brigandArcher'
+                : 'roadBrigand'
+          }
+          loadedScale={enemy.scale}
+          onReady={modelReady}
+          fallback={
+            enemy.type === 'cliffHound' ? (
               <>
-                <mesh
-                  ref={sword}
-                  castShadow
-                  position={[
-                    ENEMY_PRESENTATION.roadBrigand.swordPosition[0] *
-                      enemy.scale,
-                    ENEMY_PRESENTATION.roadBrigand.swordPosition[1] *
-                      enemy.scale,
-                    ENEMY_PRESENTATION.roadBrigand.swordPosition[2] *
-                      enemy.scale,
-                  ]}
-                >
-                  <boxGeometry
+                <mesh castShadow rotation={[0, 0, Math.PI / 2]}>
+                  <capsuleGeometry
                     args={[
-                      ENEMY_PRESENTATION.roadBrigand.swordSize[0] * enemy.scale,
-                      ENEMY_PRESENTATION.roadBrigand.swordSize[1] * enemy.scale,
-                      ENEMY_PRESENTATION.roadBrigand.swordSize[2] * enemy.scale,
+                      radius,
+                      halfHeight * 2,
+                      ENEMY_PRESENTATION.hound.bodyCapSegments,
+                      ENEMY_PRESENTATION.hound.bodyRadialSegments,
                     ]}
                   />
                   <meshStandardMaterial
-                    color={ENEMY_PRESENTATION.roadBrigand.swordColor}
-                    metalness={ENEMY_PRESENTATION.roadBrigand.swordMetalness}
+                    ref={bodyMaterial}
+                    color={color}
+                    roughness={ENEMY_PRESENTATION.hound.bodyRoughness}
                   />
                 </mesh>
-                {enemy.variant === ENEMY_VARIANTS.campLeader ? (
-                  <mesh
-                    castShadow
-                    rotation={[
-                      0,
-                      0,
-                      ENEMY_PRESENTATION.meleeWindup.brigandSwordRaiseRadians /
-                        2,
-                    ]}
-                  >
-                    <boxGeometry
-                      args={[
-                        radius * 2,
-                        ENEMY_PRESENTATION.healthBar.backgroundHeight *
-                          enemy.scale,
-                        ENEMY_PRESENTATION.roadBrigand.swordSize[2] *
-                          enemy.scale,
-                      ]}
-                    />
-                    <meshStandardMaterial color={CAMP_LEADER.sashColor} />
-                  </mesh>
-                ) : null}
                 <mesh
                   castShadow
                   position={[
-                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[0] *
-                      enemy.scale,
-                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[1] *
-                      enemy.scale,
-                    ENEMY_PRESENTATION.roadBrigand.shieldPosition[2] *
-                      enemy.scale,
+                    ENEMY_PRESENTATION.hound.headPosition[0],
+                    ENEMY_PRESENTATION.hound.headPosition[1],
+                    ENEMY_PRESENTATION.hound.headPosition[2],
                   ]}
-                  rotation={[Math.PI / 2, 0, 0]}
                 >
-                  <cylinderGeometry
+                  <coneGeometry
                     args={[
-                      ENEMY_PRESENTATION.roadBrigand.shieldRadius * enemy.scale,
-                      ENEMY_PRESENTATION.roadBrigand.shieldRadius * enemy.scale,
-                      ENEMY_PRESENTATION.roadBrigand.shieldDepth * enemy.scale,
-                      ENEMY_PRESENTATION.roadBrigand.shieldSegments,
+                      ENEMY_PRESENTATION.hound.headRadius,
+                      ENEMY_PRESENTATION.hound.headLength,
+                      ENEMY_PRESENTATION.hound.headSegments,
                     ]}
                   />
                   <meshStandardMaterial
-                    color={ENEMY_PRESENTATION.roadBrigand.shieldColor}
-                    metalness={ENEMY_PRESENTATION.roadBrigand.shieldMetalness}
+                    color={color}
+                    roughness={ENEMY_PRESENTATION.hound.bodyRoughness}
                   />
                 </mesh>
               </>
             ) : (
               <>
-                <mesh
-                  castShadow
-                  position={[
-                    ENEMY_PRESENTATION.brigandArcher.bowPosition[0],
-                    ENEMY_PRESENTATION.brigandArcher.bowPosition[1],
-                    ENEMY_PRESENTATION.brigandArcher.bowPosition[2],
-                  ]}
-                >
-                  <torusGeometry
+                <mesh castShadow>
+                  <capsuleGeometry
                     args={[
-                      ENEMY_PRESENTATION.brigandArcher.bowRadius,
-                      ENEMY_PRESENTATION.brigandArcher.bowTubeRadius,
-                      ENEMY_PRESENTATION.brigandArcher.bowRadialSegments,
-                      ENEMY_PRESENTATION.brigandArcher.bowTubularSegments,
-                      Math.PI,
+                      radius,
+                      halfHeight * 2,
+                      ENEMY_PRESENTATION.humanoid.bodyCapSegments,
+                      ENEMY_PRESENTATION.humanoid.bodyRadialSegments,
                     ]}
                   />
                   <meshStandardMaterial
-                    color={ENEMY_PRESENTATION.brigandArcher.bowColor}
-                    roughness={ENEMY_PRESENTATION.brigandArcher.bowRoughness}
+                    ref={bodyMaterial}
+                    color={color}
+                    roughness={ENEMY_PRESENTATION.humanoid.bodyRoughness}
                   />
                 </mesh>
-                <mesh
-                  ref={drawBar}
-                  position={[
-                    0,
-                    ENEMY_PRESENTATION.brigandArcher.drawBarPositionY,
-                    0,
-                  ]}
-                  visible={false}
-                >
-                  <boxGeometry
-                    args={[
-                      ENEMY_PRESENTATION.brigandArcher.drawBarWidth,
-                      ENEMY_PRESENTATION.brigandArcher.drawBarHeight,
-                      ENEMY_PRESENTATION.brigandArcher.drawBarDepth,
-                    ]}
-                  />
-                  <meshBasicMaterial
-                    color={ENEMY_PRESENTATION.brigandArcher.drawBarColor}
-                  />
-                </mesh>
+                {enemy.type === 'roadBrigand' ? (
+                  <>
+                    <mesh
+                      ref={sword}
+                      castShadow
+                      position={[
+                        ENEMY_PRESENTATION.roadBrigand.swordPosition[0] *
+                          enemy.scale,
+                        ENEMY_PRESENTATION.roadBrigand.swordPosition[1] *
+                          enemy.scale,
+                        ENEMY_PRESENTATION.roadBrigand.swordPosition[2] *
+                          enemy.scale,
+                      ]}
+                    >
+                      <boxGeometry
+                        args={[
+                          ENEMY_PRESENTATION.roadBrigand.swordSize[0] *
+                            enemy.scale,
+                          ENEMY_PRESENTATION.roadBrigand.swordSize[1] *
+                            enemy.scale,
+                          ENEMY_PRESENTATION.roadBrigand.swordSize[2] *
+                            enemy.scale,
+                        ]}
+                      />
+                      <meshStandardMaterial
+                        color={ENEMY_PRESENTATION.roadBrigand.swordColor}
+                        metalness={
+                          ENEMY_PRESENTATION.roadBrigand.swordMetalness
+                        }
+                      />
+                    </mesh>
+                    {enemy.variant === ENEMY_VARIANTS.campLeader ? (
+                      <mesh
+                        castShadow
+                        rotation={[
+                          0,
+                          0,
+                          ENEMY_PRESENTATION.meleeWindup
+                            .brigandSwordRaiseRadians / 2,
+                        ]}
+                      >
+                        <boxGeometry
+                          args={[
+                            radius * 2,
+                            ENEMY_PRESENTATION.healthBar.backgroundHeight *
+                              enemy.scale,
+                            ENEMY_PRESENTATION.roadBrigand.swordSize[2] *
+                              enemy.scale,
+                          ]}
+                        />
+                        <meshStandardMaterial color={CAMP_LEADER.sashColor} />
+                      </mesh>
+                    ) : null}
+                    <mesh
+                      castShadow
+                      position={[
+                        ENEMY_PRESENTATION.roadBrigand.shieldPosition[0] *
+                          enemy.scale,
+                        ENEMY_PRESENTATION.roadBrigand.shieldPosition[1] *
+                          enemy.scale,
+                        ENEMY_PRESENTATION.roadBrigand.shieldPosition[2] *
+                          enemy.scale,
+                      ]}
+                      rotation={[Math.PI / 2, 0, 0]}
+                    >
+                      <cylinderGeometry
+                        args={[
+                          ENEMY_PRESENTATION.roadBrigand.shieldRadius *
+                            enemy.scale,
+                          ENEMY_PRESENTATION.roadBrigand.shieldRadius *
+                            enemy.scale,
+                          ENEMY_PRESENTATION.roadBrigand.shieldDepth *
+                            enemy.scale,
+                          ENEMY_PRESENTATION.roadBrigand.shieldSegments,
+                        ]}
+                      />
+                      <meshStandardMaterial
+                        ref={shieldMaterial}
+                        color={ENEMY_PRESENTATION.roadBrigand.shieldColor}
+                        metalness={
+                          ENEMY_PRESENTATION.roadBrigand.shieldMetalness
+                        }
+                      />
+                    </mesh>
+                  </>
+                ) : (
+                  <>
+                    <mesh
+                      castShadow
+                      position={[
+                        ENEMY_PRESENTATION.brigandArcher.bowPosition[0],
+                        ENEMY_PRESENTATION.brigandArcher.bowPosition[1],
+                        ENEMY_PRESENTATION.brigandArcher.bowPosition[2],
+                      ]}
+                    >
+                      <torusGeometry
+                        args={[
+                          ENEMY_PRESENTATION.brigandArcher.bowRadius,
+                          ENEMY_PRESENTATION.brigandArcher.bowTubeRadius,
+                          ENEMY_PRESENTATION.brigandArcher.bowRadialSegments,
+                          ENEMY_PRESENTATION.brigandArcher.bowTubularSegments,
+                          Math.PI,
+                        ]}
+                      />
+                      <meshStandardMaterial
+                        color={ENEMY_PRESENTATION.brigandArcher.bowColor}
+                        roughness={
+                          ENEMY_PRESENTATION.brigandArcher.bowRoughness
+                        }
+                      />
+                    </mesh>
+                  </>
+                )}
               </>
-            )}
-          </>
+            )
+          }
+        />
+        {enemy.type === 'brigandArcher' && (
+          <mesh
+            ref={drawBar}
+            position={[0, ENEMY_PRESENTATION.brigandArcher.drawBarPositionY, 0]}
+            visible={false}
+          >
+            <boxGeometry
+              args={[
+                ENEMY_PRESENTATION.brigandArcher.drawBarWidth,
+                ENEMY_PRESENTATION.brigandArcher.drawBarHeight,
+                ENEMY_PRESENTATION.brigandArcher.drawBarDepth,
+              ]}
+            />
+            <meshBasicMaterial
+              color={ENEMY_PRESENTATION.brigandArcher.drawBarColor}
+            />
+          </mesh>
         )}
         <group ref={healthBar} position={[0, healthY, 0]} visible={false}>
           <mesh position={[0, 0, ENEMY_PRESENTATION.healthBar.backgroundDepth]}>

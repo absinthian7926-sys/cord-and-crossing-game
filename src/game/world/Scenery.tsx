@@ -1,5 +1,5 @@
 import { BallCollider, RigidBody } from '@react-three/rapier'
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useSyncExternalStore } from 'react'
 import {
   ConeGeometry,
   DodecahedronGeometry,
@@ -12,8 +12,12 @@ import {
   Vector3,
   type BufferGeometry,
 } from 'three'
-import { ZONE } from '../../data/zone'
-import { distanceToCliffPath, distanceToRoad } from './road'
+import { ZONE, type QualityLevel } from '../../data/zone'
+import {
+  getSettingsRuntimeSnapshot,
+  subscribeSettingsRuntime,
+} from '../settings/settingsRuntime'
+import { collectLargeRockColliders } from './rockColliders'
 import {
   generateScatter,
   type ScatterBuffer,
@@ -37,8 +41,9 @@ function buildScatterMeshes(
   kind: ScatterKind,
   variantCount: number,
   colors: readonly string[],
+  quality: QualityLevel,
 ): ScatterMeshes {
-  const buffer = generateScatter(kind)
+  const buffer = generateScatter(kind, quality)
   const counts = new Uint32Array(variantCount)
   for (let index = 0; index < buffer.count; index += 1)
     counts[buffer.variants[index]] += 1
@@ -95,14 +100,20 @@ function buildScatterMeshes(
 }
 
 export function Scenery() {
+  const quality = useSyncExternalStore(
+    subscribeSettingsRuntime,
+    getSettingsRuntimeSnapshot,
+    getSettingsRuntimeSnapshot,
+  ).quality
   const rocks = useMemo(
     () =>
       buildScatterMeshes(
         'rocks',
         ZONE.scatter.variants.rocks,
         ZONE.palette.rock,
+        quality,
       ),
-    [],
+    [quality],
   )
   const scrub = useMemo(
     () =>
@@ -110,27 +121,14 @@ export function Scenery() {
         'scrub',
         ZONE.scatter.variants.scrub,
         ZONE.palette.scrub,
+        quality,
       ),
-    [],
+    [quality],
   )
-  const largeRockColliders = useMemo(() => {
-    const colliders: { x: number; y: number; z: number; radius: number }[] = []
-    for (let index = 0; index < rocks.buffer.count; index += 1) {
-      const radius = rocks.buffer.scales[index]
-      if (radius < ZONE.scatter.largeRockMinimumScale) continue
-      const offset = index * 3
-      const x = rocks.buffer.positions[offset]
-      const y = rocks.buffer.positions[offset + 1]
-      const z = rocks.buffer.positions[offset + 2]
-      if (
-        distanceToRoad(x, z) <= ZONE.scatter.colliderPathDistance ||
-        distanceToCliffPath(x, z) <= ZONE.scatter.colliderPathDistance
-      ) {
-        colliders.push({ x, y: y + radius, z, radius })
-      }
-    }
-    return colliders
-  }, [rocks])
+  const largeRockColliders = useMemo(
+    () => collectLargeRockColliders(rocks.buffer),
+    [rocks],
+  )
 
   useEffect(
     () => () => {

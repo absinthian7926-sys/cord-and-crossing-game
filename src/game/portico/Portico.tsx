@@ -17,12 +17,16 @@ import {
   Vector3,
   type Group,
 } from 'three'
+import { FEEL } from '../../data/feel'
 import { PLAYER } from '../../data/player'
 import { ZONE } from '../../data/zone'
+import { ModelSlot } from '../models/ModelSlot'
 import {
   registerCameraExcludedCollider,
   unregisterCameraExcludedCollider,
 } from '../player/cameraCollisionRegistry'
+import { getPausableDelta } from '../pause/pauseRuntime'
+import { getSettingsRuntimeSnapshot } from '../settings/settingsRuntime'
 import { playerStore } from '../player/playerStore'
 import {
   createCrossingResult,
@@ -225,9 +229,18 @@ export function Portico({
     else dispatchPorticoCrossing(direction)
   })
 
-  useFrame(({ camera }, delta) => {
+  useFrame(({ camera }, rawDelta) => {
+    const delta = getPausableDelta(rawDelta)
     const shader = material.current
     if (shader) {
+      shader.uniforms.uRippleSpeed.value =
+        toRippleUvPerSecond(
+          ZONE.portico.shimmer.rippleSpeed,
+          ZONE.portico.screenHeight,
+        ) *
+        (getSettingsRuntimeSnapshot().reduceMotion
+          ? FEEL.reduceMotion.shimmerSpeedMultiplier
+          : 1)
       shader.uniforms.uTime.value += delta
       const target = active ? 1 : 0
       const step = delta / ZONE.portico.shimmer.fadeSeconds
@@ -311,20 +324,29 @@ export function Portico({
       {[-1, 1].map((side) => {
         const offset = (side * ZONE.portico.pillarSpacing) / 2
         return (
-          <mesh
+          <ModelSlot
             key={side}
-            castShadow
-            receiveShadow
+            model="porticoPillar"
             position={[
               center[0] + lateralX * offset,
-              center[1] + pillarHalfHeight,
+              center[1],
               center[2] + lateralZ * offset,
             ]}
             rotation={[0, yaw, 0]}
-          >
-            <boxGeometry args={ZONE.placeholders.ruin.pillarSize} />
-            <meshStandardMaterial color={ZONE.palette.stone} roughness={1} />
-          </mesh>
+            fallback={
+              <mesh
+                castShadow
+                receiveShadow
+                position={[0, pillarHalfHeight, 0]}
+              >
+                <boxGeometry args={ZONE.placeholders.ruin.pillarSize} />
+                <meshStandardMaterial
+                  color={ZONE.palette.stone}
+                  roughness={1}
+                />
+              </mesh>
+            }
+          />
         )
       })}
 

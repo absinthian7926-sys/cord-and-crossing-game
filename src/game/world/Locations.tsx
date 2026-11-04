@@ -1,5 +1,17 @@
-import { CuboidCollider, RigidBody } from '@react-three/rapier'
-import { useEffect, useMemo } from 'react'
+import {
+  CuboidCollider,
+  RigidBody,
+  type RapierCollider,
+} from '@react-three/rapier'
+import { useGLTF } from '@react-three/drei'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -12,8 +24,16 @@ import {
   MeshStandardMaterial,
   Quaternion,
   Vector3,
+  type Group,
 } from 'three'
+import { MODEL_ASSETS } from '../../data/models'
 import { ZONE } from '../../data/zone'
+import { useModelAvailability } from '../models/modelAvailability'
+import { ModelSlot } from '../models/ModelSlot'
+import {
+  registerCameraFadeCollider,
+  unregisterCameraFadeCollider,
+} from '../player/cameraCollisionRegistry'
 import { ROAD_LENGTH, roadPointAt, sampleRoad } from './road'
 import { heightAt } from './terrain'
 
@@ -23,6 +43,42 @@ const rotation = new Quaternion()
 const scale = new Vector3()
 
 type Point = { x: number; y: number; z: number }
+
+type CameraFadingCampBlockerProps = {
+  readonly halfExtents: readonly [number, number, number]
+  readonly position: readonly [number, number, number]
+  readonly children: ReactNode
+}
+
+function CameraFadingCampBlocker({
+  halfExtents,
+  position: blockerPosition,
+  children,
+}: CameraFadingCampBlockerProps) {
+  const collider = useRef<RapierCollider>(null)
+  const visual = useRef<Group>(null)
+  const setFaded = useCallback((faded: boolean) => {
+    if (visual.current) visual.current.visible = !faded
+  }, [])
+
+  useEffect(() => {
+    const handle = collider.current?.handle
+    if (handle === undefined) return
+    registerCameraFadeCollider(handle, setFaded)
+    return () => unregisterCameraFadeCollider(handle)
+  }, [setFaded])
+
+  return (
+    <RigidBody type="fixed" colliders={false}>
+      <CuboidCollider
+        ref={collider}
+        args={[halfExtents[0], halfExtents[1], halfExtents[2]]}
+        position={[blockerPosition[0], blockerPosition[1], blockerPosition[2]]}
+      />
+      <group ref={visual}>{children}</group>
+    </RigidBody>
+  )
+}
 
 function buildRoad(): Mesh {
   const sampleCount = Math.ceil(ROAD_LENGTH / ZONE.road.sampleSpacing) + 1
@@ -150,6 +206,61 @@ function buildRail(samples: Point[]): {
   return { posts, rope }
 }
 
+function LoadedRopeRailPosts({ samples }: { readonly samples: Point[] }) {
+  const definition = MODEL_ASSETS.ropeRailPost
+  const { scene } = useGLTF(definition.path, false, true)
+  const parts = useMemo(() => {
+    scene.updateMatrixWorld(true)
+    const instances: InstancedMesh[] = []
+    scene.traverse((child) => {
+      if (!(child instanceof Mesh)) return
+      const instance = new InstancedMesh(
+        child.geometry,
+        child.material,
+        samples.length,
+      )
+      for (let index = 0; index < samples.length; index += 1) {
+        const sample = samples[index]
+        matrix
+          .makeTranslation(sample.x, sample.y, sample.z)
+          .multiply(child.matrixWorld)
+        instance.setMatrixAt(index, matrix)
+      }
+      instance.instanceMatrix.needsUpdate = true
+      instance.computeBoundingBox()
+      instance.computeBoundingSphere()
+      instance.castShadow = true
+      instance.receiveShadow = true
+      instances.push(instance)
+    })
+    return instances
+  }, [samples, scene])
+
+  return (
+    <>
+      {parts.map((part, index) => (
+        <primitive key={`${part.uuid}-${index}`} object={part} />
+      ))}
+    </>
+  )
+}
+
+function RopeRailPosts({
+  samples,
+  fallback,
+}: {
+  readonly samples: Point[]
+  readonly fallback: ReactNode
+}) {
+  const availability = useModelAvailability('ropeRailPost')
+  if (availability !== 'ready') return fallback
+  return (
+    <Suspense fallback={fallback}>
+      <LoadedRopeRailPosts samples={samples} />
+    </Suspense>
+  )
+}
+
 function Waystation() {
   const data = ZONE.placeholders.waystation
   const centerX = ZONE.locations.A.center[0] + data.shelterCenter[0]
@@ -182,47 +293,67 @@ function Waystation() {
           )),
         )}
       </RigidBody>
-      <mesh
-        castShadow
-        receiveShadow
-        position={[centerX, ground + data.shelterSize[1], centerZ]}
-      >
-        <boxGeometry
-          args={[data.shelterSize[0], data.postRadius * 2, data.shelterSize[2]]}
-        />
-        <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-      </mesh>
-      {[-1, 1].flatMap((xSign) =>
-        [-1, 1].map((zSign) => (
-          <mesh
-            key={`${xSign}-${zSign}`}
-            castShadow
-            position={[
-              centerX + xSign * halfX,
-              ground + halfY,
-              centerZ + zSign * halfZ,
-            ]}
-          >
+      <ModelSlot
+        model="waystationShelter"
+        position={[centerX, ground, centerZ]}
+        fallback={
+          <>
+            <mesh
+              castShadow
+              receiveShadow
+              position={[0, data.shelterSize[1], 0]}
+            >
+              <boxGeometry
+                args={[
+                  data.shelterSize[0],
+                  data.postRadius * 2,
+                  data.shelterSize[2],
+                ]}
+              />
+              <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
+            </mesh>
+            {[-1, 1].flatMap((xSign) =>
+              [-1, 1].map((zSign) => (
+                <mesh
+                  key={`${xSign}-${zSign}`}
+                  castShadow
+                  position={[xSign * halfX, halfY, zSign * halfZ]}
+                >
+                  <cylinderGeometry
+                    args={[
+                      data.postRadius,
+                      data.postRadius,
+                      data.shelterSize[1],
+                      6,
+                    ]}
+                  />
+                  <meshStandardMaterial
+                    color={ZONE.palette.wood}
+                    roughness={1}
+                  />
+                </mesh>
+              )),
+            )}
+          </>
+        }
+      />
+      <ModelSlot
+        model="waterBarrel"
+        position={[barrelX, heightAt(barrelX, barrelZ), barrelZ]}
+        fallback={
+          <mesh castShadow position={[0, data.barrelHeight / 2, 0]}>
             <cylinderGeometry
-              args={[data.postRadius, data.postRadius, data.shelterSize[1], 6]}
+              args={[
+                data.barrelRadius,
+                data.barrelRadius,
+                data.barrelHeight,
+                10,
+              ]}
             />
             <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
           </mesh>
-        )),
-      )}
-      <mesh
-        castShadow
-        position={[
-          barrelX,
-          heightAt(barrelX, barrelZ) + data.barrelHeight / 2,
-          barrelZ,
-        ]}
-      >
-        <cylinderGeometry
-          args={[data.barrelRadius, data.barrelRadius, data.barrelHeight, 10]}
-        />
-        <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-      </mesh>
+        }
+      />
     </group>
   )
 }
@@ -252,25 +383,40 @@ function WreckedCart({ distance }: { distance: number }) {
       <RigidBody type="fixed" colliders={false}>
         <CuboidCollider args={half} position={[0, half[1], 0]} />
       </RigidBody>
-      <mesh castShadow receiveShadow position={[0, half[1], 0]}>
-        <boxGeometry args={cart.bodySize} />
-        <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-      </mesh>
-      {[-1, 1].flatMap((xSign) =>
-        [-1, 1].map((zSign) => (
-          <mesh
-            key={`${xSign}-${zSign}`}
-            castShadow
-            position={[xSign * wheelX, cart.wheelRadius, zSign * half[2]]}
-            rotation={[Math.PI / 2, 0, 0]}
-          >
-            <cylinderGeometry
-              args={[cart.wheelRadius, cart.wheelRadius, cart.wheelWidth, 10]}
-            />
-            <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-          </mesh>
-        )),
-      )}
+      <ModelSlot
+        model="cart"
+        fallback={
+          <>
+            <mesh castShadow receiveShadow position={[0, half[1], 0]}>
+              <boxGeometry args={cart.bodySize} />
+              <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
+            </mesh>
+            {[-1, 1].flatMap((xSign) =>
+              [-1, 1].map((zSign) => (
+                <mesh
+                  key={`${xSign}-${zSign}`}
+                  castShadow
+                  position={[xSign * wheelX, cart.wheelRadius, zSign * half[2]]}
+                  rotation={[Math.PI / 2, 0, 0]}
+                >
+                  <cylinderGeometry
+                    args={[
+                      cart.wheelRadius,
+                      cart.wheelRadius,
+                      cart.wheelWidth,
+                      10,
+                    ]}
+                  />
+                  <meshStandardMaterial
+                    color={ZONE.palette.wood}
+                    roughness={1}
+                  />
+                </mesh>
+              )),
+            )}
+          </>
+        }
+      />
     </group>
   )
 }
@@ -294,19 +440,49 @@ function BrigandCamp() {
         const z = center[1] + offset[1]
         const y = heightAt(x, z)
         return (
-          <RigidBody key={index} type="fixed" colliders={false}>
-            <CuboidCollider
-              args={halfTent}
-              position={[x, y + halfTent[1], z]}
+          <CameraFadingCampBlocker
+            key={index}
+            halfExtents={halfTent}
+            position={[x, y + halfTent[1], z]}
+          >
+            <ModelSlot
+              model="tent"
+              position={[x, y, z]}
+              fallback={
+                <mesh castShadow position={[0, halfTent[1], 0]}>
+                  <boxGeometry args={camp.tentSize} />
+                  <meshStandardMaterial
+                    color={ZONE.palette.tent}
+                    roughness={1}
+                  />
+                </mesh>
+              }
             />
-            <mesh castShadow position={[x, y + halfTent[1], z]}>
-              <boxGeometry args={camp.tentSize} />
-              <meshStandardMaterial color={ZONE.palette.tent} roughness={1} />
-            </mesh>
-          </RigidBody>
+          </CameraFadingCampBlocker>
         )
       })}
-      <mesh
+      <ModelSlot
+        model="campFire"
+        position={[
+          center[0] + camp.fireOffset[0],
+          heightAt(
+            center[0] + camp.fireOffset[0],
+            center[1] + camp.fireOffset[1],
+          ),
+          center[1] + camp.fireOffset[1],
+        ]}
+        fallback={
+          <mesh position={[0, camp.fireRadius, 0]}>
+            <coneGeometry args={[camp.fireRadius, camp.fireRadius * 2, 6]} />
+            <meshStandardMaterial
+              color={ZONE.palette.fire}
+              emissive={ZONE.palette.fire}
+              emissiveIntensity={1}
+            />
+          </mesh>
+        }
+      />
+      <pointLight
         position={[
           center[0] + camp.fireOffset[0],
           heightAt(
@@ -315,44 +491,29 @@ function BrigandCamp() {
           ) + camp.fireRadius,
           center[1] + camp.fireOffset[1],
         ]}
+        color={ZONE.palette.fire}
+        intensity={1}
+        distance={camp.glowRange}
+      />
+      <CameraFadingCampBlocker
+        halfExtents={[
+          camp.lookoutSize[0] / 2,
+          camp.lookoutSize[1] / 2,
+          camp.lookoutSize[2] / 2,
+        ]}
+        position={[lookoutX, lookoutGround + camp.lookoutSize[1] / 2, lookoutZ]}
       >
-        <coneGeometry args={[camp.fireRadius, camp.fireRadius * 2, 6]} />
-        <meshStandardMaterial
-          color={ZONE.palette.fire}
-          emissive={ZONE.palette.fire}
-          emissiveIntensity={1}
+        <ModelSlot
+          model="lookout"
+          position={[lookoutX, lookoutGround, lookoutZ]}
+          fallback={
+            <mesh castShadow position={[0, camp.lookoutSize[1] / 2, 0]}>
+              <boxGeometry args={camp.lookoutSize} />
+              <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
+            </mesh>
+          }
         />
-        <pointLight
-          color={ZONE.palette.fire}
-          intensity={1}
-          distance={camp.glowRange}
-        />
-      </mesh>
-      <RigidBody type="fixed" colliders={false}>
-        <CuboidCollider
-          args={[
-            camp.lookoutSize[0] / 2,
-            camp.lookoutSize[1] / 2,
-            camp.lookoutSize[2] / 2,
-          ]}
-          position={[
-            lookoutX,
-            lookoutGround + camp.lookoutSize[1] / 2,
-            lookoutZ,
-          ]}
-        />
-        <mesh
-          castShadow
-          position={[
-            lookoutX,
-            lookoutGround + camp.lookoutSize[1] / 2,
-            lookoutZ,
-          ]}
-        >
-          <boxGeometry args={camp.lookoutSize} />
-          <meshStandardMaterial color={ZONE.palette.wood} roughness={1} />
-        </mesh>
-      </RigidBody>
+      </CameraFadingCampBlocker>
     </group>
   )
 }
@@ -380,10 +541,23 @@ function RuinShelf() {
               ]}
               position={framePosition}
             />
-            <mesh castShadow position={framePosition}>
-              <boxGeometry args={ruin.frameSize} />
-              <meshStandardMaterial color={ZONE.palette.stone} roughness={1} />
-            </mesh>
+            <ModelSlot
+              model="ruinFramePost"
+              position={[
+                framePosition[0],
+                framePosition[1] - ruin.frameSize[1] / 2,
+                framePosition[2],
+              ]}
+              fallback={
+                <mesh castShadow position={[0, ruin.frameSize[1] / 2, 0]}>
+                  <boxGeometry args={ruin.frameSize} />
+                  <meshStandardMaterial
+                    color={ZONE.palette.stone}
+                    roughness={1}
+                  />
+                </mesh>
+              }
+            />
           </RigidBody>
         )
       })}
@@ -400,17 +574,20 @@ function RuinShelf() {
             center[1] + ruin.frameOffsets[2][1],
           ]}
         />
-        <mesh
-          castShadow
+        <ModelSlot
+          model="ruinLintel"
           position={[
             center[0],
             ground + ruin.frameSize[1],
             center[1] + ruin.frameOffsets[2][1],
           ]}
-        >
-          <boxGeometry args={ruin.lintelSize} />
-          <meshStandardMaterial color={ZONE.palette.stone} roughness={1} />
-        </mesh>
+          fallback={
+            <mesh castShadow>
+              <boxGeometry args={ruin.lintelSize} />
+              <meshStandardMaterial color={ZONE.palette.stone} roughness={1} />
+            </mesh>
+          }
+        />
       </RigidBody>
     </group>
   )
@@ -441,7 +618,10 @@ export function Locations() {
         <WreckedCart key={distance} distance={distance} />
       ))}
       <group name="location-c-cliff-path-rail">
-        <primitive object={rail.posts} />
+        <RopeRailPosts
+          samples={railSamples}
+          fallback={<primitive object={rail.posts} />}
+        />
         <primitive object={rail.rope} />
         <RigidBody type="fixed" colliders={false}>
           {railSamples.map((sample, index) => (

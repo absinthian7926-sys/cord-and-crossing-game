@@ -41,6 +41,14 @@ export function resolveCameraDistance(
   )
 }
 
+export function shouldFadeCameraBlocker(
+  collisionDistance: number,
+  fadeMinimumDistance: number,
+  fadeable: boolean,
+): boolean {
+  return fadeable && collisionDistance < fadeMinimumDistance
+}
+
 export function shouldCameraRayHitCollider(
   colliderHandle: number,
   isSensor: boolean,

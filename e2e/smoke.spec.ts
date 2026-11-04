@@ -4,6 +4,7 @@ import { PLAYER } from '../src/data/player'
 import { HOLLEN, QUEST } from '../src/data/quests'
 import { REACHBLADE } from '../src/data/weapons'
 import { ZONE } from '../src/data/zone'
+import { resumeGameAfterReload, startGame } from './helpers'
 
 test.setTimeout(180_000)
 
@@ -13,11 +14,7 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     if (message.type() === 'error') browserErrors.push(message.text())
   })
   page.on('pageerror', (error) => browserErrors.push(error.message))
-  await page.goto('/')
-  await expect(page.locator('canvas')).toBeVisible()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await startGame(page)
   const start = await page.evaluate(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition(),
   )
@@ -48,6 +45,37 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition(),
   )
   expect(afterBackwardDodge.z - end.z).toBeGreaterThan(3)
+
+  const hollenApproach = {
+    x: HOLLEN.position[0],
+    z:
+      HOLLEN.position[1] +
+      HOLLEN.interactionRadius +
+      PLAYER.collider.radius +
+      0.5,
+  }
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    hollenApproach,
+  )
+  await page.waitForFunction(
+    ({ x, z }) => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - x, position.z - z) < 0.1
+    },
+    hollenApproach,
+    { timeout: 5_000 },
+  )
+  await page.keyboard.down('KeyW')
+  await expect(page.getByText(HOLLEN.prompt, { exact: true })).toBeVisible({
+    timeout: 5_000,
+  })
+  await page.keyboard.up('KeyW')
+  const hollenDistance = await page.evaluate(([x, z]) => {
+    const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+    return Math.hypot(position.x - x, position.z - z)
+  }, HOLLEN.position)
+  expect(hollenDistance).toBeLessThanOrEqual(HOLLEN.interactionRadius)
 
   await page.evaluate(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.teleport(0, -1.7),
@@ -372,8 +400,11 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     () =>
       window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep === 2,
   )
-  await expect(page.locator('.quest-tracker')).toHaveText(
+  await expect(page.locator('.quest-tracker-objective')).toHaveText(
     QUEST.steps[1].trackerText,
+  )
+  await expect(page.locator('.quest-tracker-hint')).toHaveText(
+    'Approach from the south road to avoid the cliff path.',
   )
 
   await page.keyboard.press('Tab')
@@ -433,10 +464,26 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
     () =>
       window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep === 4,
   )
-  await expect(page.locator('.quest-tracker')).toHaveText(
+  await expect(page.locator('.quest-tracker-objective')).toHaveText(
     QUEST.steps[3].trackerText,
   )
 
+  const saveTestPosition = {
+    x: ZONE.locations.A.radius + 5,
+    z: ZONE.locations.A.center[1],
+  }
+  await page.evaluate(
+    ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
+    saveTestPosition,
+  )
+  await page.waitForFunction(
+    ({ x, z }) => {
+      const position = window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition()
+      return Math.hypot(position.x - x, position.z - z) < 0.5
+    },
+    saveTestPosition,
+    { timeout: 5_000 },
+  )
   await page.evaluate(() => {
     const debug = window.__CORD_AND_CROSSING_DEBUG__!
     debug.setPlayerVitals(73, 41)
@@ -445,11 +492,7 @@ test('loads the game canvas and moves the player forward', async ({ page }) => {
   const savedPosition = await page.evaluate(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.getPlayerPosition(),
   )
-  await page.reload()
-  await expect(page.locator('canvas')).toBeVisible()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await resumeGameAfterReload(page)
   await page.waitForFunction(
     ({ x, z }) => {
       const debug = window.__CORD_AND_CROSSING_DEBUG__!
@@ -650,11 +693,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
       hollowChunkRequests.push(request.url())
   })
 
-  await page.goto('/')
-  await expect(page.locator('canvas')).toBeVisible()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await startGame(page)
 
   expect(
     await page.evaluate(() =>
@@ -713,10 +752,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
   ).toBe(true)
 
-  await page.reload()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await resumeGameAfterReload(page)
   await page.waitForFunction((expected) => {
     const drop = window.__CORD_AND_CROSSING_DEBUG__!.getQuest().keyDrop
     return (
@@ -766,6 +802,15 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   await page.waitForFunction(
     () => window.__CORD_AND_CROSSING_DEBUG__!.getPortico().phase === 'active',
   )
+  await page.keyboard.press('Tab')
+  await expect(page.getByRole('dialog', { name: QUEST.name })).toBeVisible()
+  await expect(page.locator('.quest-key-slot')).toContainText('Used')
+  await page.keyboard.press('Tab')
+  expect(
+    await page.evaluate(() =>
+      window.__CORD_AND_CROSSING_DEBUG__!.setSetting('reduceMotion', true),
+    ),
+  ).toBe(true)
   await page.locator('canvas').dispatchEvent('pointerdown', { button: 1 })
   await page.evaluate(() =>
     window.dispatchEvent(
@@ -793,6 +838,14 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   expect(porticoPerf.drawCalls).toBeLessThan(250)
   expect(porticoPerf.triangles).toBeLessThan(500_000)
 
+  const audioBeforePartial = await page.evaluate(() => {
+    const audio = window.__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+    return {
+      bells: audio.lastCueIds.filter((cue) => cue === 'portico-bell').length,
+      musicGain: audio.musicGain,
+    }
+  })
+
   await page.evaluate(
     ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
     { x: ZONE.portico.center[0], z: ZONE.portico.center[1] },
@@ -809,6 +862,57 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
       step: window.__CORD_AND_CROSSING_DEBUG__!.getQuest().quest.currentStep,
     })),
   ).toEqual({ effects: 0, step: 4 })
+  expect(
+    await page.evaluate(
+      () =>
+        window
+          .__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+          .lastCueIds.filter((cue) => cue === 'portico-bell').length,
+    ),
+  ).toBe(audioBeforePartial.bells)
+
+  await page.evaluate(() => {
+    type FlashObservationWindow = Window & {
+      __CORD_CROSSING_FLASH_OBSERVATION__?: {
+        opacity: number
+        peak: number
+      }
+    }
+
+    const observedWindow = window as FlashObservationWindow
+    delete observedWindow.__CORD_CROSSING_FLASH_OBSERVATION__
+
+    const recordFlash = (element: Element) => {
+      if (!(element instanceof HTMLElement)) return
+      const styles = getComputedStyle(element)
+      const peak = Number.parseFloat(
+        element.style.getPropertyValue('--crossing-flash-peak') ||
+          styles.getPropertyValue('--crossing-flash-peak'),
+      )
+      const opacity = Number.parseFloat(styles.opacity)
+      if (!Number.isFinite(peak) || !Number.isFinite(opacity)) return
+
+      const previous = observedWindow.__CORD_CROSSING_FLASH_OBSERVATION__
+      observedWindow.__CORD_CROSSING_FLASH_OBSERVATION__ = {
+        opacity: Math.max(previous?.opacity ?? 0, opacity),
+        peak,
+      }
+    }
+
+    const observer = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (!(node instanceof Element)) continue
+          if (node.matches('.crossing-flash')) recordFlash(node)
+          for (const flash of node.querySelectorAll('.crossing-flash')) {
+            recordFlash(flash)
+          }
+        }
+      }
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+    window.setTimeout(() => observer.disconnect(), 2_000)
+  })
 
   await page.evaluate(
     ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
@@ -819,6 +923,34 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     ({ x, z }) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z),
     { x: ZONE.portico.center[0] + 1, z: ZONE.portico.center[1] },
   )
+  await page.waitForFunction(
+    () =>
+      (
+        window as Window & {
+          __CORD_CROSSING_FLASH_OBSERVATION__?: unknown
+        }
+      ).__CORD_CROSSING_FLASH_OBSERVATION__ !== undefined,
+  )
+  const reducedFlash = await page.evaluate(
+    () =>
+      (
+        window as Window & {
+          __CORD_CROSSING_FLASH_OBSERVATION__: {
+            opacity: number
+            peak: number
+          }
+        }
+      ).__CORD_CROSSING_FLASH_OBSERVATION__,
+  )
+  expect(reducedFlash.peak).toBeCloseTo(0.35, 4)
+  expect(reducedFlash.opacity).toBeCloseTo(0.35, 4)
+  await page.waitForFunction(({ bells, musicGain }) => {
+    const audio = window.__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+    return (
+      audio.lastCueIds.filter((cue) => cue === 'portico-bell').length > bells &&
+      audio.musicGain < musicGain
+    )
+  }, audioBeforePartial)
   await page.waitForFunction(() =>
     window.__CORD_AND_CROSSING_DEBUG__!.getInputLocked(),
   )
@@ -834,6 +966,11 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     undefined,
     { timeout: 2_000 },
   )
+  expect(
+    await page
+      .locator('.scene-loading')
+      .evaluate((element) => getComputedStyle(element).transitionDuration),
+  ).toContain('0.3s')
   expect(hollowChunkRequests.length).toBeGreaterThan(0)
   await page.waitForFunction(
     () =>
@@ -868,14 +1005,40 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   expect(hollowArrivalPerf.drawCalls).toBeLessThan(250)
   expect(hollowArrivalPerf.triangles).toBeLessThan(500_000)
 
-  await page.keyboard.press('KeyF')
+  const hollowStepSequence = await page.evaluate(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getAudioState().lastFootstepSequence,
+  )
+  await page.keyboard.down('KeyW')
+  await page.waitForFunction((before) => {
+    const audio = window.__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+    return (
+      audio.lastFootstepSequence > before &&
+      audio.lastFootstepSurface === 'stone'
+    )
+  }, hollowStepSequence)
+  await page.keyboard.up('KeyW')
+
+  const chimesBeforePass = await page.evaluate(
+    () =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+        .lastCueIds.filter((cue) => cue === 'heelstone-chime').length,
+  )
+  await page.keyboard.down('KeyF')
+  await page.waitForFunction(
+    () =>
+      window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().passMode ===
+      'Passing',
+  )
+  await page.keyboard.up('KeyF')
   await page.waitForFunction(
     () =>
       window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().passMode ===
         'Carried' &&
       window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().lineCarrying,
     undefined,
-    { timeout: 3_000 },
+    { timeout: 5_000 },
   )
   expect(
     await page.evaluate(
@@ -884,6 +1047,13 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
           .heelstonePassDone,
     ),
   ).toBe(true)
+  await page.waitForFunction(
+    (before) =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+        .lastCueIds.filter((cue) => cue === 'heelstone-chime').length > before,
+    chimesBeforePass,
+  )
 
   await page.evaluate(() =>
     window.dispatchEvent(
@@ -936,10 +1106,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   expect(
     await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
   ).toBe(true)
-  await page.reload()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await resumeGameAfterReload(page)
   await page.waitForFunction(
     () =>
       window.__CORD_AND_CROSSING_DEBUG__!.getScene() === 'hollow' &&
@@ -965,7 +1132,13 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     timeout: 5_000,
   })
   await page.waitForTimeout(500)
-  await page.keyboard.press('KeyF')
+  const chimesBeforeInterrupt = await page.evaluate(
+    () =>
+      window
+        .__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+        .lastCueIds.filter((cue) => cue === 'heelstone-chime').length,
+  )
+  await page.keyboard.down('KeyF')
   await page.waitForFunction(
     () =>
       window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().passMode ===
@@ -973,6 +1146,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
     undefined,
     { timeout: 3_000 },
   )
+  await page.keyboard.up('KeyF')
   await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.damagePlayer(1))
   await page.waitForFunction(
     () =>
@@ -980,6 +1154,15 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
         'Idle' &&
       !window.__CORD_AND_CROSSING_DEBUG__!.getHeelstonePass().lineCarrying,
   )
+  await page.waitForTimeout(250)
+  expect(
+    await page.evaluate(
+      () =>
+        window
+          .__CORD_AND_CROSSING_DEBUG__!.getAudioState()
+          .lastCueIds.filter((cue) => cue === 'heelstone-chime').length,
+    ),
+  ).toBe(chimesBeforeInterrupt)
 
   await page.evaluate(
     ([x, z]) => window.__CORD_AND_CROSSING_DEBUG__!.teleport(x, z + 6),
@@ -1011,7 +1194,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   expect(
     await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
   ).toBe(true)
-  await page.reload()
+  await resumeGameAfterReload(page)
   await page.waitForFunction(
     () =>
       window.__CORD_AND_CROSSING_DEBUG__ !== undefined &&
@@ -1114,10 +1297,7 @@ test('completes the portico and heelstone milestone flow', async ({ page }) => {
   expect(
     await page.evaluate(() => window.__CORD_AND_CROSSING_DEBUG__!.saveGame()),
   ).toBe(true)
-  await page.reload()
-  await page.waitForFunction(
-    () => window.__CORD_AND_CROSSING_DEBUG__ !== undefined,
-  )
+  await resumeGameAfterReload(page)
   await page.waitForFunction(() => {
     const debug = window.__CORD_AND_CROSSING_DEBUG__!
     return (

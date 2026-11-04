@@ -25,6 +25,7 @@ import {
 } from '../player/cameraCollisionRegistry'
 import { Portico } from '../portico/Portico'
 import type { PorticoDirection } from '../portico/porticoRuntime'
+import { ModelSlot } from '../models/ModelSlot'
 
 export type HollowProps = {
   readonly children?: ReactNode
@@ -38,45 +39,51 @@ function PracticeRail() {
   const rail = presentation.practiceRail
   return (
     <group position={[x, ZONE.hollow.groundHeight, z]} name="practice-rail">
-      {/* PLACEHOLDER: practice rail uses low-poly stone and rope forms. */}
-      {[-1, 1].map((side) => (
-        <mesh
-          key={side}
-          castShadow
-          position={[side * rail.postOffsetX, rail.postHeight / 2, 0]}
-        >
-          <cylinderGeometry
-            args={[
-              rail.postTopRadius,
-              rail.postBottomRadius,
-              rail.postHeight,
-              rail.postRadialSegments,
-            ]}
-          />
-          <meshStandardMaterial
-            color={ZONE.palette.wood}
-            roughness={presentation.roughness}
-          />
-        </mesh>
-      ))}
-      <mesh
-        castShadow
-        position={[0, rail.ropeHeight, 0]}
-        rotation={[0, 0, Math.PI / 2]}
-      >
-        <cylinderGeometry
-          args={[
-            rail.ropeRadius,
-            rail.ropeRadius,
-            rail.ropeLength,
-            rail.ropeRadialSegments,
-          ]}
-        />
-        <meshStandardMaterial
-          color={ZONE.palette.rope}
-          roughness={presentation.roughness}
-        />
-      </mesh>
+      <ModelSlot
+        model="practiceRail"
+        fallback={
+          <>
+            {[-1, 1].map((side) => (
+              <mesh
+                key={side}
+                castShadow
+                position={[side * rail.postOffsetX, rail.postHeight / 2, 0]}
+              >
+                <cylinderGeometry
+                  args={[
+                    rail.postTopRadius,
+                    rail.postBottomRadius,
+                    rail.postHeight,
+                    rail.postRadialSegments,
+                  ]}
+                />
+                <meshStandardMaterial
+                  color={ZONE.palette.wood}
+                  roughness={presentation.roughness}
+                />
+              </mesh>
+            ))}
+            <mesh
+              castShadow
+              position={[0, rail.ropeHeight, 0]}
+              rotation={[0, 0, Math.PI / 2]}
+            >
+              <cylinderGeometry
+                args={[
+                  rail.ropeRadius,
+                  rail.ropeRadius,
+                  rail.ropeLength,
+                  rail.ropeRadialSegments,
+                ]}
+              />
+              <meshStandardMaterial
+                color={ZONE.palette.rope}
+                roughness={presentation.roughness}
+              />
+            </mesh>
+          </>
+        }
+      />
     </group>
   )
 }
@@ -86,39 +93,45 @@ function TargetPost() {
   const target = presentation.targetPost
   return (
     <group position={[x, ZONE.hollow.groundHeight, z]} name="target-post">
-      {/* PLACEHOLDER: target post uses simple wood primitives. */}
-      <mesh castShadow position={[0, target.postHeight / 2, 0]}>
-        <cylinderGeometry
-          args={[
-            target.postTopRadius,
-            target.postBottomRadius,
-            target.postHeight,
-            target.postRadialSegments,
-          ]}
-        />
-        <meshStandardMaterial
-          color={ZONE.palette.wood}
-          roughness={presentation.roughness}
-        />
-      </mesh>
-      <mesh
-        castShadow
-        position={[0, target.targetHeight, 0]}
-        rotation={[Math.PI / 2, 0, 0]}
-      >
-        <cylinderGeometry
-          args={[
-            target.targetRadius,
-            target.targetRadius,
-            target.targetDepth,
-            target.targetRadialSegments,
-          ]}
-        />
-        <meshStandardMaterial
-          color={ZONE.palette.stone}
-          roughness={presentation.roughness}
-        />
-      </mesh>
+      <ModelSlot
+        model="targetPost"
+        fallback={
+          <>
+            <mesh castShadow position={[0, target.postHeight / 2, 0]}>
+              <cylinderGeometry
+                args={[
+                  target.postTopRadius,
+                  target.postBottomRadius,
+                  target.postHeight,
+                  target.postRadialSegments,
+                ]}
+              />
+              <meshStandardMaterial
+                color={ZONE.palette.wood}
+                roughness={presentation.roughness}
+              />
+            </mesh>
+            <mesh
+              castShadow
+              position={[0, target.targetHeight, 0]}
+              rotation={[Math.PI / 2, 0, 0]}
+            >
+              <cylinderGeometry
+                args={[
+                  target.targetRadius,
+                  target.targetRadius,
+                  target.targetDepth,
+                  target.targetRadialSegments,
+                ]}
+              />
+              <meshStandardMaterial
+                color={ZONE.palette.stone}
+                roughness={presentation.roughness}
+              />
+            </mesh>
+          </>
+        }
+      />
     </group>
   )
 }
@@ -159,39 +172,45 @@ function SnagPost() {
         />
       </RigidBody>
       <group ref={visual} name="marked-snag-post">
-        {/* PLACEHOLDER: marked loose post uses stone and hemp primitives. */}
-        <mesh castShadow position={[0, postPresentation.centerHeight, 0]}>
-          <cylinderGeometry
-            args={[
-              postPresentation.topRadius,
-              postPresentation.bottomRadius,
-              postPresentation.height,
-              postPresentation.radialSegments,
-            ]}
-          />
-          <meshStandardMaterial
-            color={ZONE.palette.stone}
-            roughness={presentation.roughness}
-          />
-        </mesh>
-        <mesh
-          castShadow
-          position={[0, postPresentation.ringHeight, 0]}
-          rotation={[0, 0, Math.PI / 2]}
-        >
-          <torusGeometry
-            args={[
-              postPresentation.ringRadius,
-              postPresentation.ringTubeRadius,
-              postPresentation.ringRadialSegments,
-              postPresentation.ringTubularSegments,
-            ]}
-          />
-          <meshStandardMaterial
-            color={ZONE.palette.rope}
-            roughness={presentation.roughness}
-          />
-        </mesh>
+        <ModelSlot
+          model="snagPost"
+          fallback={
+            <>
+              <mesh castShadow position={[0, postPresentation.centerHeight, 0]}>
+                <cylinderGeometry
+                  args={[
+                    postPresentation.topRadius,
+                    postPresentation.bottomRadius,
+                    postPresentation.height,
+                    postPresentation.radialSegments,
+                  ]}
+                />
+                <meshStandardMaterial
+                  color={ZONE.palette.stone}
+                  roughness={presentation.roughness}
+                />
+              </mesh>
+              <mesh
+                castShadow
+                position={[0, postPresentation.ringHeight, 0]}
+                rotation={[0, 0, Math.PI / 2]}
+              >
+                <torusGeometry
+                  args={[
+                    postPresentation.ringRadius,
+                    postPresentation.ringTubeRadius,
+                    postPresentation.ringRadialSegments,
+                    postPresentation.ringTubularSegments,
+                  ]}
+                />
+                <meshStandardMaterial
+                  color={ZONE.palette.rope}
+                  roughness={presentation.roughness}
+                />
+              </mesh>
+            </>
+          }
+        />
       </group>
     </>
   )
@@ -212,16 +231,21 @@ function SnagGate() {
         args={[halfWidth, halfHeight, halfThickness]}
         position={[x, halfHeight, z]}
       />
-      {/* PLACEHOLDER: a simple stone gate marks the blocked path. */}
-      <mesh castShadow receiveShadow position={[x, halfHeight, z]}>
-        <boxGeometry
-          args={[halfWidth * 2, halfHeight * 2, halfThickness * 2]}
-        />
-        <meshStandardMaterial
-          color={ZONE.palette.stone}
-          roughness={presentation.roughness}
-        />
-      </mesh>
+      <ModelSlot
+        model="hollowGate"
+        position={[x, 0, z]}
+        fallback={
+          <mesh castShadow receiveShadow position={[0, halfHeight, 0]}>
+            <boxGeometry
+              args={[halfWidth * 2, halfHeight * 2, halfThickness * 2]}
+            />
+            <meshStandardMaterial
+              color={ZONE.palette.stone}
+              roughness={presentation.roughness}
+            />
+          </mesh>
+        }
+      />
     </RigidBody>
   )
 }

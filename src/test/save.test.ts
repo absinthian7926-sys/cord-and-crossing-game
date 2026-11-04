@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { PLAYER } from '../data/player'
 import { SAVE_CONFIG } from '../data/quests'
+import { ZONE } from '../data/zone'
 import { applyQuestEvent, createQuestState } from '../game/quest/quest'
+import {
+  getCampKeyDropBlockers,
+  isKeyDropPointClear,
+} from '../game/quest/keyDrop'
 import {
   SAVE_LOAD_WARNING,
   clearSave,
@@ -93,6 +98,8 @@ describe('save v2 serialization and migration', () => {
         complete: false,
         campLeaderDefeated: false,
         keyDrop: null,
+        campCheckpointActive: false,
+        deadCampEnemyIds: [],
       },
       world: {
         porticoUnlocked: false,
@@ -109,6 +116,11 @@ describe('save v2 serialization and migration', () => {
 
   it('round-trips all v2 fields, exact key drop coordinates, and resets cord state', () => {
     const pendingDrop = validStepTwoWithDrop()
+    pendingDrop.quest.campCheckpointActive = true
+    pendingDrop.quest.deadCampEnemyIds = [
+      'camp-roadBrigand-1',
+      'camp-brigandArcher-2',
+    ]
     const serialized = JSON.parse(serializeSave(pendingDrop)) as unknown as {
       player: { cordState: string }
     }
@@ -121,6 +133,11 @@ describe('save v2 serialization and migration', () => {
       y: 38.5,
       z: -235.75,
     })
+    expect(loaded.data.quest.campCheckpointActive).toBe(true)
+    expect(loaded.data.quest.deadCampEnemyIds).toEqual([
+      'camp-roadBrigand-1',
+      'camp-brigandArcher-2',
+    ])
 
     const hollow = createSaveData({
       player: { health: 64, stamina: 35, position: { x: 4, y: 0, z: 5 } },
@@ -143,6 +160,25 @@ describe('save v2 serialization and migration', () => {
       usedFallback: false,
       reason: null,
     })
+  })
+
+  it('moves a restored pending key out of a camp blocker', () => {
+    const save = createNewSaveData()
+    save.quest.currentStep = 2
+    save.quest.completedSteps = [1]
+    save.quest.campLeaderDefeated = true
+    const fireX =
+      ZONE.locations.D.center[0] + ZONE.placeholders.camp.fireOffset[0]
+    const fireZ =
+      ZONE.locations.D.center[1] + ZONE.placeholders.camp.fireOffset[1]
+    save.quest.keyDrop = { x: fireX, y: 0, z: fireZ }
+
+    const loaded = deserializeSave(serializeSave(save)).data.quest.keyDrop
+    expect(loaded).not.toBeNull()
+    expect(loaded?.x === fireX && loaded.z === fireZ).toBe(false)
+    expect(
+      isKeyDropPointClear(loaded!.x, loaded!.z, getCampKeyDropBlockers()),
+    ).toBe(true)
   })
 
   it('uses the default name and accepts an explicit name and null drop', () => {
@@ -180,6 +216,8 @@ describe('save v2 serialization and migration', () => {
         tasselEarned: false,
       },
     })
+    expect(migrated?.quest.campCheckpointActive).toBe(false)
+    expect(migrated?.quest.deadCampEnemyIds).toEqual([])
 
     const completedV1 = v1Save()
     completedV1.quest = {
@@ -208,6 +246,20 @@ describe('save v2 serialization and migration', () => {
     const migratedPendingKey = migrateSaveData(pendingKeyV1)
     expect(migratedPendingKey?.quest.keyDrop).not.toBeNull()
     expect(validateSaveData(migratedPendingKey)).toBe(true)
+  })
+
+  it('loads old v2 saves without camp progress fields using defaults', () => {
+    const oldV2 = validStepTwoWithDrop() as unknown as {
+      quest: Record<string, unknown>
+    }
+    delete oldV2.quest.campCheckpointActive
+    delete oldV2.quest.deadCampEnemyIds
+
+    const loaded = deserializeSave(JSON.stringify(oldV2))
+
+    expect(loaded.usedFallback).toBe(false)
+    expect(loaded.data.quest.campCheckpointActive).toBe(false)
+    expect(loaded.data.quest.deadCampEnemyIds).toEqual([])
   })
 
   it('classifies missing, corrupt, invalid, and newer data', () => {
@@ -392,6 +444,34 @@ describe('save v2 validation branches', () => {
           keyLooted: false,
           keyDrop: null,
         })
+      },
+      (value) => {
+        ;(value.quest as Record<string, unknown>).campCheckpointActive = 'yes'
+      },
+      (value) => {
+        ;(value.quest as Record<string, unknown>).campCheckpointActive = true
+      },
+      (value) => {
+        ;(value.quest as Record<string, unknown>).deadCampEnemyIds = 'none'
+      },
+      (value) => {
+        ;(value.quest as Record<string, unknown>).deadCampEnemyIds = [
+          'camp-leader',
+        ]
+      },
+      (value) => {
+        ;(value.quest as Record<string, unknown>).deadCampEnemyIds = [7]
+      },
+      (value) => {
+        ;(value.quest as Record<string, unknown>).deadCampEnemyIds = [
+          'camp-roadBrigand-1',
+          'camp-roadBrigand-1',
+        ]
+      },
+      (value) => {
+        ;(value.quest as Record<string, unknown>).deadCampEnemyIds = [
+          'camp-roadBrigand-1',
+        ]
       },
     ]
     const base = createNewSaveData() as unknown as Record<string, unknown>

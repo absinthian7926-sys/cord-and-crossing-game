@@ -96,6 +96,10 @@ export function QuestOverlay() {
       <Hud
         questTracker={{
           text: snapshot.quest.complete ? QUEST.name : currentStep.trackerText,
+          hint:
+            !snapshot.quest.complete && 'trackerHint' in currentStep
+              ? currentStep.trackerHint
+              : undefined,
           revision: snapshot.questRevision,
         }}
       />
