@@ -17,7 +17,7 @@ import {
   getSettingsRuntimeSnapshot,
   subscribeSettingsRuntime,
 } from '../settings/settingsRuntime'
-import { distanceToCliffPath, distanceToRoad } from './road'
+import { collectLargeRockColliders } from './rockColliders'
 import {
   generateScatter,
   type ScatterBuffer,
@@ -125,24 +125,10 @@ export function Scenery() {
       ),
     [quality],
   )
-  const largeRockColliders = useMemo(() => {
-    const colliders: { x: number; y: number; z: number; radius: number }[] = []
-    for (let index = 0; index < rocks.buffer.count; index += 1) {
-      const radius = rocks.buffer.scales[index]
-      if (radius < ZONE.scatter.largeRockMinimumScale) continue
-      const offset = index * 3
-      const x = rocks.buffer.positions[offset]
-      const y = rocks.buffer.positions[offset + 1]
-      const z = rocks.buffer.positions[offset + 2]
-      if (
-        distanceToRoad(x, z) <= ZONE.scatter.colliderPathDistance ||
-        distanceToCliffPath(x, z) <= ZONE.scatter.colliderPathDistance
-      ) {
-        colliders.push({ x, y: y + radius, z, radius })
-      }
-    }
-    return colliders
-  }, [rocks])
+  const largeRockColliders = useMemo(
+    () => collectLargeRockColliders(rocks.buffer),
+    [rocks],
+  )
 
   useEffect(
     () => () => {

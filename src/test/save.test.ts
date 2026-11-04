@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 import { PLAYER } from '../data/player'
 import { SAVE_CONFIG } from '../data/quests'
+import { ZONE } from '../data/zone'
 import { applyQuestEvent, createQuestState } from '../game/quest/quest'
+import {
+  getCampKeyDropBlockers,
+  isKeyDropPointClear,
+} from '../game/quest/keyDrop'
 import {
   SAVE_LOAD_WARNING,
   clearSave,
@@ -155,6 +160,25 @@ describe('save v2 serialization and migration', () => {
       usedFallback: false,
       reason: null,
     })
+  })
+
+  it('moves a restored pending key out of a camp blocker', () => {
+    const save = createNewSaveData()
+    save.quest.currentStep = 2
+    save.quest.completedSteps = [1]
+    save.quest.campLeaderDefeated = true
+    const fireX =
+      ZONE.locations.D.center[0] + ZONE.placeholders.camp.fireOffset[0]
+    const fireZ =
+      ZONE.locations.D.center[1] + ZONE.placeholders.camp.fireOffset[1]
+    save.quest.keyDrop = { x: fireX, y: 0, z: fireZ }
+
+    const loaded = deserializeSave(serializeSave(save)).data.quest.keyDrop
+    expect(loaded).not.toBeNull()
+    expect(loaded?.x === fireX && loaded.z === fireZ).toBe(false)
+    expect(
+      isKeyDropPointClear(loaded!.x, loaded!.z, getCampKeyDropBlockers()),
+    ).toBe(true)
   })
 
   it('uses the default name and accepts an explicit name and null drop', () => {

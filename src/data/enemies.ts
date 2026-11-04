@@ -241,4 +241,6 @@ export const CAMP_PROGRESS = {
   // GAME, decided by Ryan on 2026-11-03.
   checkpointRadius: 45,
   respawn: [330, -200],
+  // GAME (NEW), PLACEHOLDER, decided by Ryan on 2026-11-03.
+  leaderDefeatBreakoffSeconds: 20,
 } as const

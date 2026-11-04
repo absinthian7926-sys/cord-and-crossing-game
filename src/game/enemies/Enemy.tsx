@@ -80,6 +80,7 @@ import {
   completeEnemyReturn,
   enemyRuntime,
   fireEnemyArrow,
+  isCampEnemyBreakoffActiveFor,
   requestHoundCordBite,
   resetEnemyAtAnchor,
   sampleEnemyGroundHeight,
@@ -423,8 +424,9 @@ export function Enemy({ enemy }: EnemyProps) {
     inputs.distanceFromAnchor = distanceFromAnchor
     inputs.distanceToAnchor = Math.hypot(fromAnchorX, fromAnchorZ)
     inputs.healthFraction = enemy.hp / enemy.maxHp
-    inputs.lineOfSight = lineOfSight
-    inputs.playerAlive = player.vitals.health > 0
+    const campBreakoffActive = isCampEnemyBreakoffActiveFor(enemy.id)
+    inputs.lineOfSight = campBreakoffActive ? false : lineOfSight
+    inputs.playerAlive = !campBreakoffActive && player.vitals.health > 0
     inputs.playerInSafeZone =
       getWorldConfiguration().safeZoneEnabled &&
       (playerSafeDistance <= ENEMY_AI.safeZoneRadius ||
@@ -436,6 +438,7 @@ export function Enemy({ enemy }: EnemyProps) {
 
     const attackTokenKind = tokenKindForEnemy(enemy.type)
     const attackCycleReady =
+      !campBreakoffActive &&
       enemy.state === 'Attack' &&
       lineOfSight &&
       distanceToPlayer <= attackRangeFor(enemy.type) &&

@@ -1,6 +1,17 @@
-import { CuboidCollider, RigidBody } from '@react-three/rapier'
+import {
+  CuboidCollider,
+  RigidBody,
+  type RapierCollider,
+} from '@react-three/rapier'
 import { useGLTF } from '@react-three/drei'
-import { Suspense, useEffect, useMemo, type ReactNode } from 'react'
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  type ReactNode,
+} from 'react'
 import {
   BufferAttribute,
   BufferGeometry,
@@ -13,11 +24,16 @@ import {
   MeshStandardMaterial,
   Quaternion,
   Vector3,
+  type Group,
 } from 'three'
 import { MODEL_ASSETS } from '../../data/models'
 import { ZONE } from '../../data/zone'
 import { useModelAvailability } from '../models/modelAvailability'
 import { ModelSlot } from '../models/ModelSlot'
+import {
+  registerCameraFadeCollider,
+  unregisterCameraFadeCollider,
+} from '../player/cameraCollisionRegistry'
 import { ROAD_LENGTH, roadPointAt, sampleRoad } from './road'
 import { heightAt } from './terrain'
 
@@ -27,6 +43,42 @@ const rotation = new Quaternion()
 const scale = new Vector3()
 
 type Point = { x: number; y: number; z: number }
+
+type CameraFadingCampBlockerProps = {
+  readonly halfExtents: readonly [number, number, number]
+  readonly position: readonly [number, number, number]
+  readonly children: ReactNode
+}
+
+function CameraFadingCampBlocker({
+  halfExtents,
+  position: blockerPosition,
+  children,
+}: CameraFadingCampBlockerProps) {
+  const collider = useRef<RapierCollider>(null)
+  const visual = useRef<Group>(null)
+  const setFaded = useCallback((faded: boolean) => {
+    if (visual.current) visual.current.visible = !faded
+  }, [])
+
+  useEffect(() => {
+    const handle = collider.current?.handle
+    if (handle === undefined) return
+    registerCameraFadeCollider(handle, setFaded)
+    return () => unregisterCameraFadeCollider(handle)
+  }, [setFaded])
+
+  return (
+    <RigidBody type="fixed" colliders={false}>
+      <CuboidCollider
+        ref={collider}
+        args={[halfExtents[0], halfExtents[1], halfExtents[2]]}
+        position={[blockerPosition[0], blockerPosition[1], blockerPosition[2]]}
+      />
+      <group ref={visual}>{children}</group>
+    </RigidBody>
+  )
+}
 
 function buildRoad(): Mesh {
   const sampleCount = Math.ceil(ROAD_LENGTH / ZONE.road.sampleSpacing) + 1
@@ -388,11 +440,11 @@ function BrigandCamp() {
         const z = center[1] + offset[1]
         const y = heightAt(x, z)
         return (
-          <RigidBody key={index} type="fixed" colliders={false}>
-            <CuboidCollider
-              args={halfTent}
-              position={[x, y + halfTent[1], z]}
-            />
+          <CameraFadingCampBlocker
+            key={index}
+            halfExtents={halfTent}
+            position={[x, y + halfTent[1], z]}
+          >
             <ModelSlot
               model="tent"
               position={[x, y, z]}
@@ -406,7 +458,7 @@ function BrigandCamp() {
                 </mesh>
               }
             />
-          </RigidBody>
+          </CameraFadingCampBlocker>
         )
       })}
       <ModelSlot
@@ -443,19 +495,14 @@ function BrigandCamp() {
         intensity={1}
         distance={camp.glowRange}
       />
-      <RigidBody type="fixed" colliders={false}>
-        <CuboidCollider
-          args={[
-            camp.lookoutSize[0] / 2,
-            camp.lookoutSize[1] / 2,
-            camp.lookoutSize[2] / 2,
-          ]}
-          position={[
-            lookoutX,
-            lookoutGround + camp.lookoutSize[1] / 2,
-            lookoutZ,
-          ]}
-        />
+      <CameraFadingCampBlocker
+        halfExtents={[
+          camp.lookoutSize[0] / 2,
+          camp.lookoutSize[1] / 2,
+          camp.lookoutSize[2] / 2,
+        ]}
+        position={[lookoutX, lookoutGround + camp.lookoutSize[1] / 2, lookoutZ]}
+      >
         <ModelSlot
           model="lookout"
           position={[lookoutX, lookoutGround, lookoutZ]}
@@ -466,7 +513,7 @@ function BrigandCamp() {
             </mesh>
           }
         />
-      </RigidBody>
+      </CameraFadingCampBlocker>
     </group>
   )
 }

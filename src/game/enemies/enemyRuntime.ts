@@ -21,7 +21,16 @@ import {
   releaseAttackToken,
   tokenKindForEnemy,
 } from './attackTokens'
-import { isCampQuestActive, isStandardCampEnemyId } from './campProgress'
+import {
+  advanceCampBreakoff,
+  beginCampBreakoff,
+  clearCampBreakoff,
+  createCampBreakoffState,
+  isCampBreakoffActive,
+  isCampQuestActive,
+  isStandardCampEnemyId,
+  shouldBreakOffCampEnemy,
+} from './campProgress'
 import { createArrowPool, launchArrow } from './projectiles'
 import {
   advanceRespawnElapsed,
@@ -132,6 +141,7 @@ let enemyHeightSampler: (x: number, z: number) => number = heightAt
 const INITIAL_RANDOM_STATE = 0x51_4f_4e_45
 const restoredCampEnemyDeaths: string[] = []
 let restoredCampRespawnsHeld = false
+const campBreakoff = createCampBreakoffState()
 
 type EnemySceneState = {
   readonly records: EnemyRecord[]
@@ -298,6 +308,7 @@ export function resetEnemySceneRosters(): void {
   enemyRuntime.campLeaderDefeated = false
   restoredCampEnemyDeaths.length = 0
   restoredCampRespawnsHeld = false
+  clearCampBreakoff(campBreakoff)
   notifyRoster()
 }
 
@@ -363,6 +374,39 @@ export function registerCampLeaderDefeatedHandler(
 
 export function setCampLeaderDefeated(defeated: boolean): void {
   enemyRuntime.campLeaderDefeated = defeated
+}
+
+export function beginCampEnemyBreakoff(): void {
+  beginCampBreakoff(campBreakoff)
+  clearAttackTokens(enemyRuntime.attackTokens)
+  for (const enemy of enemyRuntime.records) {
+    if (!isStandardCampEnemyId(enemy.id) || enemy.phase !== 'Alive') continue
+    enemy.state = 'Return'
+    enemy.stateElapsed = 0
+    enemy.attackCooldown = 0
+    enemy.drawRemaining = 0
+    enemy.preserveHpOnReturn = true
+  }
+}
+
+export function ensureCampEnemyBreakoff(): void {
+  if (!isCampBreakoffActive(campBreakoff)) beginCampEnemyBreakoff()
+}
+
+export function advanceCampEnemyBreakoff(deltaSeconds: number): void {
+  advanceCampBreakoff(campBreakoff, deltaSeconds)
+}
+
+export function endCampEnemyBreakoff(): void {
+  clearCampBreakoff(campBreakoff)
+}
+
+export function isCampEnemyBreakoffActiveFor(enemyId: string): boolean {
+  return shouldBreakOffCampEnemy(campBreakoff, enemyId)
+}
+
+export function getCampEnemyBreakoffRemainingSeconds(): number {
+  return campBreakoff.remainingSeconds
 }
 
 export function requestHoundCordBite(x: number, y: number, z: number): boolean {
@@ -522,6 +566,7 @@ export function damageEnemy(
       restoredCampEnemyDeaths.push(enemy.id)
     if (enemy.variant === ENEMY_VARIANTS.campLeader) {
       enemyRuntime.campLeaderDefeated = true
+      beginCampEnemyBreakoff()
       campLeaderDefeatedHandler?.(enemy.id, enemy.x, enemy.y, enemy.z)
     }
   }
@@ -551,6 +596,7 @@ export function restoreCampEnemyDeaths(
 }
 
 export function releaseCampEnemyRespawns(): void {
+  endCampEnemyBreakoff()
   restoredCampRespawnsHeld = false
   for (const enemy of enemyRuntime.records) {
     if (!enemy.campRespawnHeld) continue

@@ -3,12 +3,22 @@ import { useRapier } from '@react-three/rapier'
 import { useEffect, useRef } from 'react'
 import { MathUtils, Quaternion, Vector3 } from 'three'
 import { PLAYER } from '../../data/player'
+import { ZONE } from '../../data/zone'
 import { cameraHeadingFromYaw } from '../../ui/compass'
 import { stepFeelShake } from '../feel/feelRuntime'
 import { getPausableDelta, isGameplayTimePaused } from '../pause/pauseRuntime'
 import { getSettingsRuntimeSnapshot } from '../settings/settingsRuntime'
-import { cameraRayFilterPredicate } from './cameraCollisionRegistry'
-import { applyShoulderOffset, resolveCameraDistance } from './cameraMath'
+import {
+  beginCameraFadeFrame,
+  cameraRayFilterPredicate,
+  fadeCameraCollider,
+  isCameraFadeCollider,
+} from './cameraCollisionRegistry'
+import {
+  applyShoulderOffset,
+  resolveCameraDistance,
+  shouldFadeCameraBlocker,
+} from './cameraMath'
 import { playerStore } from './playerStore'
 
 const baseTarget = new Vector3()
@@ -119,7 +129,8 @@ export function CameraRig() {
     ray.current.dir.x = rayDirection.x
     ray.current.dir.y = rayDirection.y
     ray.current.dir.z = rayDirection.z
-    const hit = world.castRay(
+    beginCameraFadeFrame()
+    let hit = world.castRay(
       ray.current,
       distance,
       true,
@@ -129,6 +140,25 @@ export function CameraRig() {
       undefined,
       cameraRayFilterPredicate,
     )
+    while (
+      hit &&
+      shouldFadeCameraBlocker(
+        hit.timeOfImpact - PLAYER.camera.collisionPadding,
+        ZONE.placeholders.camp.cameraFadeMinimumDistance,
+        isCameraFadeCollider(hit.collider.handle),
+      ) &&
+      fadeCameraCollider(hit.collider.handle)
+    )
+      hit = world.castRay(
+        ray.current,
+        distance,
+        true,
+        rapier.QueryFilterFlags.EXCLUDE_SENSORS,
+        undefined,
+        player.collider ?? undefined,
+        undefined,
+        cameraRayFilterPredicate,
+      )
     const collisionLimit = hit
       ? hit.timeOfImpact - PLAYER.camera.collisionPadding
       : null

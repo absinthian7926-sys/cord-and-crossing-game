@@ -16,6 +16,46 @@ export type StandardCampEnemyId = (typeof STANDARD_CAMP_ENEMY_IDS)[number]
 
 export type MutablePoint2 = { x: number; z: number }
 
+export type CampBreakoffState = { remainingSeconds: number }
+
+export function createCampBreakoffState(): CampBreakoffState {
+  return { remainingSeconds: 0 }
+}
+
+export function beginCampBreakoff(state: CampBreakoffState): void {
+  state.remainingSeconds = CAMP_PROGRESS.leaderDefeatBreakoffSeconds
+}
+
+export function advanceCampBreakoff(
+  state: CampBreakoffState,
+  deltaSeconds: number,
+): void {
+  const remainingSeconds = Math.max(
+    0,
+    state.remainingSeconds - Math.max(0, deltaSeconds),
+  )
+  state.remainingSeconds =
+    remainingSeconds <=
+    Number.EPSILON * CAMP_PROGRESS.leaderDefeatBreakoffSeconds
+      ? 0
+      : remainingSeconds
+}
+
+export function clearCampBreakoff(state: CampBreakoffState): void {
+  state.remainingSeconds = 0
+}
+
+export function isCampBreakoffActive(state: CampBreakoffState): boolean {
+  return state.remainingSeconds > 0
+}
+
+export function shouldBreakOffCampEnemy(
+  state: CampBreakoffState,
+  enemyId: string,
+): boolean {
+  return isCampBreakoffActive(state) && isStandardCampEnemyId(enemyId)
+}
+
 export function isCampQuestActive(
   questStep: number,
   keyLooted: boolean,

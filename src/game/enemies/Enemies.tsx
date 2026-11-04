@@ -13,6 +13,7 @@ import { weaponRuntime } from '../weapons/weaponRuntime'
 import { getWorldConfiguration } from '../scenes/sceneRuntime'
 import { Enemy } from './Enemy'
 import {
+  advanceCampEnemyBreakoff,
   enemyRuntime,
   initializeEnemyRoster,
   isEnemySceneInitialized,
@@ -52,6 +53,7 @@ function EnemyProjectiles() {
     const player = playerStore.getState()
     const delta = getPausableDelta(rawDelta)
     if (delta > 0) {
+      advanceCampEnemyBreakoff(delta)
       stepArrowsWithResult(
         arrows,
         delta,

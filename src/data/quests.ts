@@ -72,7 +72,15 @@ export const QUEST = {
 export const FRAME_SHELTER_KEY = {
   id: 'frame-shelter-key',
   name: 'frame shelter key',
-  pickupRadius: 1.5,
+  // GAME (NEW), PLACEHOLDER, decided by Ryan on 2026-11-03.
+  pickupRadius: 2.5,
+  drop: {
+    clearance: 1.5,
+    searchStep: 1,
+    searchRadius: 6,
+    searchDirections: 12,
+    fallbackDistanceFromFire: 6,
+  },
   // PLACEHOLDER: M5 key pickup prompt.
   prompt: 'E Take key',
   // PLACEHOLDER: M5 key mesh and glow.
@@ -85,8 +93,14 @@ export const FRAME_SHELTER_KEY = {
     metalness: 0.65,
     roughness: 0.5,
     glowColor: '#c9a46a',
-    glowIntensity: 0.4,
-    glowRange: 2,
+    // GAME (NEW), PLACEHOLDER, decided by Ryan on 2026-11-03.
+    glowIntensity: 1.25,
+    glowRange: 6,
+    markerRingRadius: 0.32,
+    markerTubeRadius: 0.045,
+    beamHeight: 6,
+    beamRadius: 0.35,
+    beamOpacity: 0.28,
   },
 } as const
 

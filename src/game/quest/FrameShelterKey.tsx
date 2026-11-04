@@ -19,6 +19,7 @@ import {
   setKeyNearbyTransient,
   subscribeQuestRuntime,
 } from './questRuntime'
+import { isWithinKeyPickupRadius } from './keyDrop'
 
 export function FrameShelterKey() {
   const snapshot = useSyncExternalStore(
@@ -45,11 +46,7 @@ export function FrameShelterKey() {
   useFrame(() => {
     if (drop === null) return
     const player = playerStore.getState().position
-    const offsetX = player.x - drop.x
-    const offsetZ = player.z - drop.z
-    const isNearby =
-      offsetX * offsetX + offsetZ * offsetZ <=
-      FRAME_SHELTER_KEY.pickupRadius ** 2
+    const isNearby = isWithinKeyPickupRadius(player.x, player.z, drop.x, drop.z)
     if (nearby.current !== isNearby) {
       nearby.current = isNearby
       setKeyNearbyTransient(isNearby)
@@ -114,6 +111,45 @@ export function FrameShelterKey() {
           </mesh>
         }
       />
+      <mesh rotation={[Math.PI / 2, 0, 0]} renderOrder={3}>
+        <torusGeometry
+          args={[
+            FRAME_SHELTER_KEY.presentation.markerRingRadius,
+            FRAME_SHELTER_KEY.presentation.markerTubeRadius,
+            FRAME_SHELTER_KEY.presentation.radialSegments,
+            FRAME_SHELTER_KEY.presentation.tubularSegments,
+          ]}
+        />
+        <meshStandardMaterial
+          color={FRAME_SHELTER_KEY.presentation.glowColor}
+          emissive={FRAME_SHELTER_KEY.presentation.glowColor}
+          emissiveIntensity={FRAME_SHELTER_KEY.presentation.glowIntensity}
+          roughness={FRAME_SHELTER_KEY.presentation.roughness}
+          metalness={FRAME_SHELTER_KEY.presentation.metalness}
+          depthWrite={false}
+        />
+      </mesh>
+      <mesh
+        position={[0, FRAME_SHELTER_KEY.presentation.beamHeight * 0.5, 0]}
+        renderOrder={2}
+      >
+        <cylinderGeometry
+          args={[
+            FRAME_SHELTER_KEY.presentation.beamRadius,
+            FRAME_SHELTER_KEY.presentation.beamRadius,
+            FRAME_SHELTER_KEY.presentation.beamHeight,
+            FRAME_SHELTER_KEY.presentation.tubularSegments,
+          ]}
+        />
+        <meshBasicMaterial
+          color={FRAME_SHELTER_KEY.presentation.glowColor}
+          transparent
+          opacity={FRAME_SHELTER_KEY.presentation.beamOpacity}
+          depthWrite={false}
+          depthTest={false}
+          toneMapped={false}
+        />
+      </mesh>
       <pointLight
         color={FRAME_SHELTER_KEY.presentation.glowColor}
         intensity={FRAME_SHELTER_KEY.presentation.glowIntensity}

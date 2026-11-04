@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { ZONE } from '../data/zone'
 import { playerStore } from '../game/player/playerStore'
 import { getQuestRuntimeSnapshot } from '../game/quest/questRuntime'
+import { formatPendingKeyCompassLabel } from '../game/quest/keyDrop'
 import { getSceneRuntimeSnapshot } from '../game/scenes/sceneRuntime'
 import {
   COMPASS,
@@ -72,7 +73,8 @@ export function Compass() {
       placeBearing(west.current, headingDegrees, 270)
 
       const scene = getSceneRuntimeSnapshot().currentScene
-      const quest = getQuestRuntimeSnapshot().quest
+      const questSnapshot = getQuestRuntimeSnapshot()
+      const quest = questSnapshot.quest
       if (scene === 'hollow') {
         if (waystation.current) waystation.current.style.display = 'none'
         compassRuntime.waystationVisible = false
@@ -104,9 +106,20 @@ export function Compass() {
       let objectiveZ = 0
       let objectiveLabel = ''
       if (quest.currentStep === 2) {
-        objectiveX = ZONE.locations.D.center[0]
-        objectiveZ = ZONE.locations.D.center[1]
-        objectiveLabel = 'Camp'
+        if (questSnapshot.keyDrop !== null) {
+          objectiveX = questSnapshot.keyDrop.x
+          objectiveZ = questSnapshot.keyDrop.z
+          objectiveLabel = formatPendingKeyCompassLabel(
+            Math.hypot(
+              player.position.x - objectiveX,
+              player.position.z - objectiveZ,
+            ),
+          )
+        } else {
+          objectiveX = ZONE.locations.D.center[0]
+          objectiveZ = ZONE.locations.D.center[1]
+          objectiveLabel = 'Camp'
+        }
       } else if (quest.currentStep === 4) {
         objectiveX = ZONE.locations.E.center[0]
         objectiveZ = ZONE.locations.E.center[1]

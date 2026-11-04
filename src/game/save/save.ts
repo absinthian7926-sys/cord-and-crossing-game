@@ -1,15 +1,13 @@
-import { CAMP_LEADER, ENEMY_SPAWNS } from '../../data/enemies'
 import { PLAYER } from '../../data/player'
-import {
-  FRAME_SHELTER_KEY,
-  SAVE_CONFIG,
-  type QuestStepId,
-} from '../../data/quests'
+import { SAVE_CONFIG, type QuestStepId } from '../../data/quests'
 import { ZONE } from '../../data/zone'
 import type { QuestState } from '../quest/quest'
 import { isValidDeadCampEnemyIds } from '../enemies/campProgress'
+import {
+  defaultCampKeyDropPosition,
+  resolveCampKeyDropPosition,
+} from '../quest/keyDrop'
 import type { CordMode } from '../weapons/cordState'
-import { heightAt } from '../world/terrain'
 
 export type SavedPosition = { x: number; y: number; z: number }
 export type GameScene = 'zone' | 'hollow'
@@ -139,15 +137,7 @@ const NEW_WORLD_STATE: SaveWorldState = {
   hollow: EMPTY_HOLLOW_PROGRESS,
   tasselEarned: false,
 }
-const legacyLeaderX = ENEMY_SPAWNS.camp.anchor[0] + CAMP_LEADER.campOffset[0]
-const legacyLeaderZ = ENEMY_SPAWNS.camp.anchor[1] + CAMP_LEADER.campOffset[1]
-const LEGACY_PENDING_KEY_DROP: SavedPosition = {
-  x: legacyLeaderX,
-  y:
-    heightAt(legacyLeaderX, legacyLeaderZ) +
-    FRAME_SHELTER_KEY.presentation.ringRadius,
-  z: legacyLeaderZ,
-}
+const LEGACY_PENDING_KEY_DROP: SavedPosition = defaultCampKeyDropPosition()
 
 export function createDefaultWorldState(): SaveWorldState {
   return copyWorld(NEW_WORLD_STATE)
@@ -356,7 +346,10 @@ function copySaveDataV2(value: StoredSaveDataV2): SaveDataV2 {
     player: copyPlayer(value.player),
     quest: {
       ...copyQuestV1(value.quest),
-      keyDrop: value.quest.keyDrop === null ? null : { ...value.quest.keyDrop },
+      keyDrop:
+        value.quest.keyDrop === null
+          ? null
+          : resolveCampKeyDropPosition(value.quest.keyDrop),
       campCheckpointActive: value.quest.campCheckpointActive ?? false,
       deadCampEnemyIds: [...(value.quest.deadCampEnemyIds ?? [])],
     },

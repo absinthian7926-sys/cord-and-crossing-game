@@ -4,6 +4,7 @@ import {
   applyShoulderOffset,
   resolveCameraDistance,
   shouldCameraRayHitCollider,
+  shouldFadeCameraBlocker,
 } from '../game/player/cameraMath'
 
 describe('camera math', () => {
@@ -45,5 +46,14 @@ describe('camera math', () => {
     expect(shouldCameraRayHitCollider(2, true, excluded)).toBe(false)
     expect(shouldCameraRayHitCollider(7, false, excluded)).toBe(false)
     expect(shouldCameraRayHitCollider(9, false, excluded)).toBe(false)
+  })
+
+  it('fades a close camp blocker instead of collapsing below 1.2 m', () => {
+    expect(shouldFadeCameraBlocker(1.19, 1.2, true)).toBe(true)
+    expect(shouldFadeCameraBlocker(1.2, 1.2, true)).toBe(false)
+    expect(shouldFadeCameraBlocker(0.3, 1.2, false)).toBe(false)
+
+    const afterFade = resolveCameraDistance(1.2, 4.5, null, 1 / 60, 12, 0.3)
+    expect(afterFade).toBeGreaterThan(1.2)
   })
 })

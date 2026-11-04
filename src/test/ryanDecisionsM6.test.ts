@@ -2,9 +2,8 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { EFFECTS } from '../data/effects'
-import { CAMP_LEADER, ENEMY_SPAWNS } from '../data/enemies'
-import { FRAME_SHELTER_KEY } from '../data/quests'
 import { ZONE } from '../data/zone'
+import { defaultCampKeyDropPosition } from '../game/quest/keyDrop'
 import {
   getActiveEffectCount,
   grantStrengthFromCrossing,
@@ -46,7 +45,6 @@ import {
   createRuntimeSaveData,
 } from '../game/save/saveRuntime'
 import { resetWeaponRuntime } from '../game/weapons/weaponRuntime'
-import { heightAt } from '../game/world/terrain'
 
 function productionSourceFiles(directory: string): string[] {
   const files: string[] = []
@@ -179,7 +177,7 @@ describe('Ryan M6 decisions for Slice 1', () => {
     })
   })
 
-  it('migrates v1 pending keys to the approved camp-leader fallback', () => {
+  it('migrates v1 pending keys to the clear checkpoint-side fallback', () => {
     const migrated = migrateSaveData({
       schemaVersion: 1,
       player: {
@@ -197,12 +195,6 @@ describe('Ryan M6 decisions for Slice 1', () => {
         campLeaderDefeated: true,
       },
     })
-    const x = ENEMY_SPAWNS.camp.anchor[0] + CAMP_LEADER.campOffset[0]
-    const z = ENEMY_SPAWNS.camp.anchor[1] + CAMP_LEADER.campOffset[1]
-    expect(migrated?.quest.keyDrop).toEqual({
-      x,
-      y: heightAt(x, z) + FRAME_SHELTER_KEY.presentation.ringRadius,
-      z,
-    })
+    expect(migrated?.quest.keyDrop).toEqual(defaultCampKeyDropPosition())
   })
 })

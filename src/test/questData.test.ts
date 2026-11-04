@@ -30,7 +30,7 @@ describe('quest data', () => {
     expect(HOLLEN.position).toEqual([-5, 5])
     expect(HOLLEN.interactionRadius).toBe(2.5)
     expect(FRAME_SHELTER_KEY.name).toBe('frame shelter key')
-    expect(FRAME_SHELTER_KEY.pickupRadius).toBe(1.5)
+    expect(FRAME_SHELTER_KEY.pickupRadius).toBe(2.5)
     expect(FRAME_SHELTER_KEY.prompt).toBe('E Take key')
     expect(CAMP_LEADER.maxHealth).toBe(120)
     expect(CAMP_LEADER.scale).toBe(1.15)

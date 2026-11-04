@@ -7,6 +7,7 @@ import { ZONE } from '../data/zone'
 import { effectRuntime, hasStrength } from '../game/effects/effectRuntime'
 import { playerStore } from '../game/player/playerStore'
 import { getQuestRuntimeSnapshot } from '../game/quest/questRuntime'
+import { formatPendingKeyTrackerText } from '../game/quest/keyDrop'
 import {
   getPorticoRuntimeSnapshot,
   isKeyUseNearby,
@@ -36,6 +37,7 @@ export function Hud({ questTracker = null }: HudProps) {
   const cordState = useRef<HTMLDivElement>(null)
   const deathFade = useRef<HTMLDivElement>(null)
   const questTrackerElement = useRef<HTMLDivElement>(null)
+  const questTrackerObjective = useRef<HTMLDivElement>(null)
   const effectSlotOne = useRef<HTMLDivElement>(null)
   const effectSlotTwo = useRef<HTMLDivElement>(null)
   const useKeyPrompt = useRef<HTMLDivElement>(null)
@@ -52,6 +54,7 @@ export function Hud({ questTracker = null }: HudProps) {
     effectTwo: '',
     showUseKey: false,
     showClearLine: false,
+    pendingKeyTrackerText: '',
   })
 
   useEffect(() => {
@@ -162,7 +165,23 @@ export function Hud({ questTracker = null }: HudProps) {
         }
         lastDisplayed.current.effectTwo = effectLabels[1]
       }
-      const quest = getQuestRuntimeSnapshot().quest
+      const questSnapshot = getQuestRuntimeSnapshot()
+      const quest = questSnapshot.quest
+      if (quest.currentStep === 2 && questSnapshot.keyDrop !== null) {
+        const pendingKeyTrackerText = formatPendingKeyTrackerText(
+          Math.hypot(
+            state.position.x - questSnapshot.keyDrop.x,
+            state.position.z - questSnapshot.keyDrop.z,
+          ),
+        )
+        if (
+          pendingKeyTrackerText !== lastDisplayed.current.pendingKeyTrackerText
+        ) {
+          if (questTrackerObjective.current)
+            questTrackerObjective.current.textContent = pendingKeyTrackerText
+          lastDisplayed.current.pendingKeyTrackerText = pendingKeyTrackerText
+        }
+      }
       const portico = getPorticoRuntimeSnapshot()
       const showUseKey = shouldShowUseKeyPrompt({
         nearby: isKeyUseNearby(),
@@ -254,7 +273,9 @@ export function Hud({ questTracker = null }: HudProps) {
           aria-live="polite"
           style={{ fontSize: QUEST_UI.tracker.fontSizePixels }}
         >
-          <div className="quest-tracker-objective">{questTracker.text}</div>
+          <div ref={questTrackerObjective} className="quest-tracker-objective">
+            {questTracker.text}
+          </div>
           {questTracker.hint && (
             <div className="quest-tracker-hint">{questTracker.hint}</div>
           )}
